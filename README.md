@@ -48,4 +48,4 @@ Set this repository secret:
 
 - `DATABASE_URL` — same Postgres connection string used in lo-app-backend
 
-**GitHub Actions note:** if the import step fails with `Network is unreachable` on an IPv6 address, the runner cannot reach Supabase’s direct host. Use the Session pooler URL for CI only, or rely on the scraper’s IPv4 fallback if your host has an A record.
+For GitHub Actions, you can keep the same `db.<project>.supabase.co` URL. If that host is IPv6-only, the scraper automatically rewrites it to the Supabase Session pooler (`aws-0-ap-southeast-1.pooler.supabase.com` by default). Override the pooler host with `SUPABASE_POOLER_HOST` if your project uses a different region.

@@ -63,7 +63,7 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -112,6 +112,8 @@ EVENT_HREF_RE = re.compile(r"-\d+-15\.html$")
 VENUE_HREF_RE = re.compile(r"-\d+-16\.html$")
 
 EVENT_SOURCE_SLUG = "vietnamnightlife"
+SUPABASE_DIRECT_HOST_RE = re.compile(r"^db\.([a-z0-9]+)\.supabase\.co$", re.I)
+DEFAULT_SUPABASE_POOLER_HOST = "aws-0-ap-southeast-1.pooler.supabase.com"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -514,13 +516,60 @@ def get_database_url():
     return os.environ.get("DATABASE_URL")
 
 
+def resolve_ipv4(host, port):
+    try:
+        return [
+            info[4][0]
+            for info in socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        ]
+    except socket.gaierror:
+        return []
+
+
+def to_supabase_pooler_url(db_url):
+    """Rewrite db.<ref>.supabase.co to the IPv4 Session pooler endpoint."""
+    parsed = urlparse(db_url)
+    host = parsed.hostname or ""
+    match = SUPABASE_DIRECT_HOST_RE.match(host)
+    if not match:
+        return db_url
+
+    project_ref = match.group(1)
+    pooler_host = os.environ.get("SUPABASE_POOLER_HOST", DEFAULT_SUPABASE_POOLER_HOST)
+    user = parsed.username or "postgres"
+    if user == "postgres":
+        user = "postgres.{}".format(project_ref)
+
+    port = parsed.port or 5432
+    if parsed.password is not None:
+        netloc = "{}:{}@{}:{}".format(
+            quote(user, safe=""),
+            quote(parsed.password, safe=""),
+            pooler_host,
+            port,
+        )
+    else:
+        netloc = "{}@{}:{}".format(quote(user, safe=""), pooler_host, port)
+
+    return urlunparse(
+        (
+            parsed.scheme or "postgresql",
+            netloc,
+            parsed.path or "/postgres",
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
 def connect_postgres(db_url):
     """
-    Connect to Postgres, preferring IPv4.
+    Connect to Postgres over IPv4.
 
-    Supabase direct hosts (db.<project>.supabase.co) often resolve to IPv6 only.
-    GitHub Actions runners cannot reach IPv6, so use the Session pooler host or
-    force IPv4 via hostaddr when an A record exists.
+    Supabase direct hosts (db.<project>.supabase.co) are often IPv6-only.
+    GitHub Actions cannot use IPv6, so we automatically switch to the Session
+    pooler when no IPv4 address exists for the configured host.
     """
     import psycopg
 
@@ -531,21 +580,25 @@ def connect_postgres(db_url):
     if not host or host in {"localhost", "127.0.0.1"}:
         return psycopg.connect(db_url, prepare_threshold=None)
 
-    ipv4_addrs = [
-        info[4][0]
-        for info in socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-    ]
-    if not ipv4_addrs:
-        raise RuntimeError(
-            "Cannot resolve IPv4 for database host '{}'. GitHub Actions cannot "
-            "use Supabase direct connections over IPv6. Update DATABASE_URL to "
-            "the Supabase Session pooler string "
-            "(aws-0-<region>.pooler.supabase.com:5432), not db.<project>.supabase.co."
-            .format(host)
-        )
+    conn_url = db_url
+    if not resolve_ipv4(host, port):
+        pooler_url = to_supabase_pooler_url(db_url)
+        if pooler_url != db_url:
+            pooler_host = urlparse(pooler_url).hostname
+            log_step(
+                "No IPv4 for {} — using Supabase Session pooler at {}".format(
+                    host, pooler_host
+                )
+            )
+            conn_url = pooler_url
+        else:
+            fail(
+                "Cannot resolve IPv4 for database host '{}'. GitHub Actions cannot "
+                "reach IPv6-only hosts. Set SUPABASE_POOLER_HOST or use a Session "
+                "pooler DATABASE_URL.".format(host)
+            )
 
-    conninfo = db_url if "hostaddr=" in db_url else "{} hostaddr={}".format(db_url, ipv4_addrs[0])
-    return psycopg.connect(conninfo, prepare_threshold=None)
+    return psycopg.connect(conn_url, prepare_threshold=None)
 
 
 def write_db(events, source_slug=EVENT_SOURCE_SLUG):
