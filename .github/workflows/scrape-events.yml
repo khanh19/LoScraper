@@ -16,6 +16,9 @@ on:
           - hcmc
           - hanoi
 
+env:
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -35,20 +38,53 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run scraper and import to database
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Run scraper
         run: |
-          ARGS=(--delay 1.0 --workers 2 --write-db --out events.json)
+          set -euo pipefail
+          echo "::group::Scrape events"
+          ARGS=(--delay 1.0 --workers 2 --out events.json)
           if [ -n "${{ github.event.inputs.city }}" ]; then
             ARGS+=(--city "${{ github.event.inputs.city }}")
+            echo "City filter: ${{ github.event.inputs.city }}"
+          else
+            echo "City filter: all"
           fi
+          echo "Running: python lo_scrape_club_trending_events.py ${ARGS[*]}"
           python lo_scrape_club_trending_events.py "${ARGS[@]}"
+          echo "Scrape finished. events.json size: $(wc -c < events.json) bytes"
+          echo "::endgroup::"
+
+      - name: Import to database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          echo "::group::Import to database"
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error title=Missing DATABASE_URL::Add DATABASE_URL to GitHub repository secrets."
+            exit 1
+          fi
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          parsed = urlparse(os.environ["DATABASE_URL"])
+          print(f"DATABASE_URL is set -> host: {parsed.hostname}, port: {parsed.port or 5432}, db: {(parsed.path or '/').lstrip('/')}")
+          PY
+          if [ ! -f events.json ]; then
+            echo "::error title=Missing events.json::Scrape step did not produce events.json."
+            exit 1
+          fi
+          echo "Running: python lo_scrape_club_trending_events.py --write-db --out events.json --no-scrape"
+          if ! python lo_scrape_club_trending_events.py --write-db --out events.json --no-scrape; then
+            echo "::error title=Database import failed::See the ERROR block above for the full message and traceback."
+            exit 1
+          fi
+          echo "::endgroup::"
 
       - name: Upload scrape artifact
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: events-json
           path: events.json
-          if-no-files-found: error
+          if-no-files-found: warn

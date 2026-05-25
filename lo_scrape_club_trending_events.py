@@ -57,11 +57,13 @@ import csv
 import json
 import os
 import re
+import socket
 import sys
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -114,6 +116,28 @@ EVENT_SOURCE_SLUG = "vietnamnightlife"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def log_step(message):
+    print(message, flush=True)
+
+
+def fail(message, exc=None, exit_code=1):
+    """Print a visible error in CI logs (stdout + stderr) and exit."""
+    lines = ["", "=" * 60, "ERROR: {}".format(message)]
+    if exc is not None:
+        lines.append("DETAIL: {}".format(exc))
+        tb = traceback.format_exc()
+        if tb and tb.strip() != "NoneType: None":
+            lines.append("")
+            lines.append(tb.rstrip())
+    lines.append("=" * 60)
+    lines.append("")
+
+    output = "\n".join(lines)
+    print(output, flush=True)
+    print(output, file=sys.stderr, flush=True)
+    sys.exit(exit_code)
 
 
 class RateLimiter:
@@ -469,6 +493,15 @@ def write_json(events, path):
     print("JSON written -> {}".format(path))
 
 
+def read_json(path):
+    with open(path, encoding="utf-8") as f:
+        events = json.load(f)
+    if not isinstance(events, list):
+        raise ValueError("{} must contain a JSON array".format(path))
+    print("JSON loaded -> {} ({} events)".format(path, len(events)))
+    return events
+
+
 def write_csv(events, path):
     with open(path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUTPUT_FIELDS, extrasaction="ignore")
@@ -478,42 +511,86 @@ def write_csv(events, path):
 
 
 def get_database_url():
-    return os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
+    return os.environ.get("DATABASE_URL")
+
+
+def connect_postgres(db_url):
+    """
+    Connect to Postgres, preferring IPv4.
+
+    Supabase direct hosts (db.<project>.supabase.co) often resolve to IPv6 only.
+    GitHub Actions runners cannot reach IPv6, so use the Session pooler host or
+    force IPv4 via hostaddr when an A record exists.
+    """
+    import psycopg
+
+    parsed = urlparse(db_url)
+    host = parsed.hostname
+    port = parsed.port or 5432
+
+    if not host or host in {"localhost", "127.0.0.1"}:
+        return psycopg.connect(db_url, prepare_threshold=None)
+
+    ipv4_addrs = [
+        info[4][0]
+        for info in socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    ]
+    if not ipv4_addrs:
+        raise RuntimeError(
+            "Cannot resolve IPv4 for database host '{}'. GitHub Actions cannot "
+            "use Supabase direct connections over IPv6. Update DATABASE_URL to "
+            "the Supabase Session pooler string "
+            "(aws-0-<region>.pooler.supabase.com:5432), not db.<project>.supabase.co."
+            .format(host)
+        )
+
+    conninfo = db_url if "hostaddr=" in db_url else "{} hostaddr={}".format(db_url, ipv4_addrs[0])
+    return psycopg.connect(conninfo, prepare_threshold=None)
 
 
 def write_db(events, source_slug=EVENT_SOURCE_SLUG):
     """Replace all scraped events for this source via stored procedure."""
     db_url = get_database_url()
     if not db_url:
-        raise RuntimeError(
-            "DATABASE_URL or SUPABASE_DB_URL is required for --write-db"
-        )
+        fail("DATABASE_URL is required for --write-db")
 
     try:
         import psycopg
     except ImportError as e:
-        raise RuntimeError(
-            "psycopg is required for --write-db. Run: pip install -r requirements.txt"
-        ) from e
+        fail("psycopg is required for --write-db. Run: pip install -r requirements.txt", e)
+
+    parsed = urlparse(db_url)
+    log_step(
+        "DB import starting -> host: {}, port: {}, events: {}".format(
+            parsed.hostname or "unknown",
+            parsed.port or 5432,
+            len(events),
+        )
+    )
 
     payload = json.dumps(events, ensure_ascii=False)
 
-    with psycopg.connect(db_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT source_slug, deleted_count, inserted_count, imported_at "
-                "FROM public.replace_external_events(%s, %s::jsonb)",
-                (source_slug, payload),
-            )
-            row = cur.fetchone()
-        conn.commit()
+    try:
+        log_step("DB import connecting...")
+        with connect_postgres(db_url) as conn:
+            log_step("DB import connected, calling replace_external_events()...")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT source_slug, deleted_count, inserted_count, imported_at "
+                    "FROM public.replace_external_events(%s, %s::jsonb)",
+                    (source_slug, payload),
+                )
+                row = cur.fetchone()
+            conn.commit()
+    except Exception as e:
+        fail("Database import failed while calling replace_external_events()", e)
 
     if not row:
-        raise RuntimeError("replace_external_events returned no rows")
+        fail("replace_external_events returned no rows")
 
     source_slug, deleted_count, inserted_count, imported_at = row
-    print(
-        "DB import -> source: {}, deleted: {}, inserted: {}, at: {}".format(
+    log_step(
+        "DB import complete -> source: {}, deleted: {}, inserted: {}, at: {}".format(
             source_slug, deleted_count, inserted_count, imported_at
         )
     )
@@ -583,6 +660,11 @@ def parse_args():
         action="store_true",
         help="Write scraped events to Postgres via replace_external_events().",
     )
+    parser.add_argument(
+        "--no-scrape",
+        action="store_true",
+        help="Skip scraping; load events from --out and optionally --write-db only.",
+    )
     return parser.parse_args()
 
 
@@ -591,35 +673,47 @@ def main():
     delay = max(0.5, args.delay)
     workers = max(1, args.workers)
 
-    events = run(
-        city_filter=args.city,
-        delay=delay,
-        workers=workers,
-        with_description=not args.no_description,
-    )
+    try:
+        if args.no_scrape:
+            log_step("Loading events from {} (scrape skipped)".format(args.out))
+            events = read_json(args.out)
+        else:
+            log_step(
+                "Starting scrape -> city: {}, workers: {}, descriptions: {}".format(
+                    args.city or "all",
+                    workers,
+                    not args.no_description,
+                )
+            )
+            events = run(
+                city_filter=args.city,
+                delay=delay,
+                workers=workers,
+                with_description=not args.no_description,
+            )
 
-    if not events:
-        print("No events found. Check filters or site structure.", file=sys.stderr)
-        sys.exit(1)
+            if not events:
+                fail("No events found. Check filters or site structure.")
 
-    write_json(events, args.out)
+            write_json(events, args.out)
 
-    if args.csv:
-        csv_path = (
-            args.out.replace(".json", ".csv")
-            if args.out.endswith(".json")
-            else args.out + ".csv"
-        )
-        write_csv(events, csv_path)
+            if args.csv:
+                csv_path = (
+                    args.out.replace(".json", ".csv")
+                    if args.out.endswith(".json")
+                    else args.out + ".csv"
+                )
+                write_csv(events, csv_path)
 
-    if args.write_db:
-        try:
+        if args.write_db:
             write_db(events)
-        except Exception as e:
-            print("DB write failed: {}".format(e), file=sys.stderr)
-            sys.exit(1)
 
-    print_summary(events)
+        if not args.no_scrape or args.write_db:
+            print_summary(events)
+    except SystemExit:
+        raise
+    except Exception as e:
+        fail("Unexpected scraper failure", e)
 
 
 if __name__ == "__main__":

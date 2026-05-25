@@ -26,7 +26,7 @@ python lo_scrape_club_trending_events.py --city hanoi --write-db
 
 ### Database import
 
-Requires `DATABASE_URL` or `SUPABASE_DB_URL` (Postgres connection string with write access).
+Requires `DATABASE_URL` (same Postgres connection string as lo-app-backend).
 
 Apply the schema migration in `lo-app-backend`:
 
@@ -44,9 +44,8 @@ Workflow: `.github/workflows/scrape-events.yml`
 - **Schedule:** Monday and Friday at 05:00 ICT
 - **Manual:** Actions → Scrape nightlife events → Run workflow
 
-Set one of these repository secrets:
+Set this repository secret:
 
-- `DATABASE_URL`, or
-- `SUPABASE_DB_URL`
+- `DATABASE_URL` — same Postgres connection string used in lo-app-backend
 
-Use the Supabase **direct** Postgres connection string (not the anon key).
+**GitHub Actions note:** if the import step fails with `Network is unreachable` on an IPv6 address, the runner cannot reach Supabase’s direct host. Use the Session pooler URL for CI only, or rely on the scraper’s IPv4 fallback if your host has an A record.
