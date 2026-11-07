@@ -1,0 +1,56 @@
+name: Collect verified local discovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      city:
+        description: City (empty collects all three)
+        type: choice
+        options: ["", hcmc, hanoi, danang]
+        default: ""
+      pilot:
+        description: Audit adapters without importing
+        type: boolean
+        default: true
+      providers:
+        description: Include optional providers with verified free allowance
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 23 * * *" # 06:00 Vietnam; rollout guard below defaults off.
+
+permissions:
+  contents: read
+concurrency:
+  group: lo-discovery-ingestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    if: github.event_name == 'workflow_dispatch' || vars.TRENDING_SCHEDULE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python -m playwright install --with-deps chromium
+      - name: Collect and validate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
+          BRIGHTDATA_FREE_VERIFICATION_JSON: ${{ secrets.BRIGHTDATA_FREE_VERIFICATION_JSON }}
+          INPUT_CITY: ${{ inputs.city }}
+          INPUT_PILOT: ${{ inputs.pilot }}
+          INPUT_PROVIDERS: ${{ inputs.providers }}
+        run: |
+          args=(--browser --supplemental --limit 20)
+          if [ -n "$INPUT_CITY" ]; then args+=(--city "$INPUT_CITY"); fi
+          if [ "$INPUT_PILOT" = "true" ]; then args+=(--pilot); else args+=(--write-db); fi
+          if [ "$INPUT_PROVIDERS" = "true" ]; then args+=(--providers); fi
+          python -m trending "${args[@]}"
+      # No raw scrape artifacts or media uploads; receipts live in Postgres.

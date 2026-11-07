@@ -1,5 +1,9 @@
 # LoScraper
 
+The new **What's Trending** feed uses six source adapters, validation, durable upserts and free-only provider gates. See [setup, pilot results and rollout](docs/trending.md). Start a read-only pilot with `LO_BROWSER_CHANNEL=chrome .venv/bin/python -m trending --browser --pilot` after installing `requirements.txt`.
+
+The instructions below describe the separate legacy nightlife importer.
+
 Scrapes recurring nightlife events from [vietnamnightlife.com](https://vietnamnightlife.com) for Lo! content seeding.
 
 ## Setup
