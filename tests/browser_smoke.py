@@ -34,6 +34,7 @@ def main():
     with sync_playwright() as p:
         browser=p.chromium.launch(channel='chrome',headless=True)
         page=browser.new_page(viewport={'width':430,'height':932})
+        page.set_default_navigation_timeout(90000)
         mode={'value':'live'}
         errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
@@ -70,6 +71,7 @@ def main():
             page.screenshot(path=str(OUT/(city['slug']+'.png')),full_page=True)
             results.append({'city':city['slug'],'live_items':len(feeds[city['slug']]['items']),'filters':'passed'})
 
+        page.evaluate('(city)=>localStorage.setItem("lo.location.city.v1",JSON.stringify({...city,citySlug:city.slug,label:city.name,source:"manual"}))',CITIES[1])
         mode['value']='empty';page.reload(wait_until='domcontentloaded')
         expect(page.get_by_text('Chưa có gợi ý phù hợp',exact=True)).to_be_visible()
         mode['value']='error';page.reload(wait_until='domcontentloaded')
@@ -85,6 +87,8 @@ def main():
         source.click()
         assert page.evaluate('window.__openedSource')==sample['sources'][0]['url']
         page.set_viewport_size({'width':1280,'height':900})
+        mode['value']='live';page.reload(wait_until='domcontentloaded')
+        expect(page.get_by_text(sample['title_vi'],exact=True).first).to_be_visible()
         page.screenshot(path=str(OUT/'desktop.png'),full_page=True)
         assert not errors, errors
         browser.close()
