@@ -101,5 +101,23 @@
     ],
     "enabled": false,
     "discovery_only": true
+  },
+  "facebook": {
+    "name": "Facebook",
+    "platform": "facebook",
+    "enabled": false,
+    "pilot_status": "pending_verified_free_access"
+  },
+  "tiktok": {
+    "name": "Tiktok",
+    "platform": "tiktok",
+    "enabled": false,
+    "pilot_status": "pending_verified_free_access"
+  },
+  "instagram": {
+    "name": "Instagram",
+    "platform": "instagram",
+    "enabled": false,
+    "pilot_status": "pending_verified_free_access"
   }
 }

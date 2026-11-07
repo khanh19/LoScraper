@@ -48,6 +48,9 @@ def run(args):
     client = PublicClient(browser=args.browser)
     report = {'generated_at':now.isoformat(),'pilot':args.pilot,'sources':{},'accepted':[],'rejected':[], 'providers':{}}
     try:
+        if store and args.write_db:
+            for platform in ['facebook','tiktok','instagram']:
+                store.register(platform,platform.title(),bool(args.pilot or configs.get(platform,{}).get('enabled',False)),platform)
         extra = supplemental_links(client, configs) if args.supplemental else {s:[] for s in selected}
         if args.providers and store:
             search = SerpDiscovery(store)
@@ -101,7 +104,7 @@ def run(args):
                     for primary in primaries:
                         for row in rows:
                             evidence = social_evidence(primary,row,job['input_data']['platform'],now)
-                            if evidence and not evidence.validate(now) and args.write_db:
+                            if evidence and not evidence.validate(now) and args.write_db and (args.pilot or configs.get(evidence.source_slug,{}).get('enabled',False)):
                                 store.register(evidence.source_slug,evidence.source_name,True,evidence.platform)
                                 store.upsert(evidence,now)
                 except ProviderDisabled as exc:
@@ -120,7 +123,7 @@ def run(args):
                     try:
                         for row in social.collect(target,now):
                             evidence = social_evidence(primary,row,platform,now)
-                            if evidence and not evidence.validate(now) and args.write_db:
+                            if evidence and not evidence.validate(now) and args.write_db and (args.pilot or configs.get(platform,{}).get('enabled',False)):
                                 store.register(platform,platform.title(),True,platform)
                                 store.upsert(evidence,now)
                     except ProviderDisabled as exc:

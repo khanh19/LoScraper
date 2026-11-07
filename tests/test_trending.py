@@ -178,6 +178,8 @@ class FreeProviderGuards(unittest.TestCase):
         row={'url':'https://www.instagram.com/p/test','description':'Hà Nội đẹp quá','date_posted':NOW.isoformat(),'user_posted':'local'}
         self.assertIsNone(social_evidence(c,row,'instagram',NOW))
         row['description']='Ghé Xưởng Mây hôm nay'
+        self.assertIsNone(social_evidence(c,row,'instagram',NOW))
+        row['description']='Ghé Xưởng Mây tại Hà Nội hôm nay'
         result=social_evidence(c,row,'instagram',NOW)
         self.assertEqual(result.location_evidence,c.source_url)
         self.assertEqual(result.city_slug,'hanoi')

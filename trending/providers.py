@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import requests
 
-from .model import canonical, folded, parse_time
+from .model import canonical, city_from_address, folded, parse_time
 
 
 class ProviderDisabled(Exception):
@@ -183,6 +183,9 @@ def social_evidence(primary, row, platform, now):
     text = str(row.get('description') or row.get('content') or '')
     # A searched creator's city does not identify a destination. Require a named known venue.
     if not folded(primary.venue_name) or folded(primary.venue_name) not in folded(text):
+        return None
+    # A chain name alone cannot associate a post with this city's destination.
+    if city_from_address(text) != primary.city_slug:
         return None
     url = row.get('url', '')
     if post_platform(url) != platform:

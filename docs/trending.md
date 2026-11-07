@@ -49,7 +49,7 @@ No scrape/search credits were consumed during the account checks on 2026-11-08 I
 
 Bright Data additionally requires `BRIGHTDATA_FREE_VERIFICATION_JSON`: a control-panel receipt no older than 24 hours with `verified_at`, `unfunded: true`, `no_payment_method: true`, `auto_recharge: false`, and integer `free_credits_remaining`. The live balance response must explicitly report zero balance, credit, prepayment and pending costs. Missing fields fail closed. Do not invent this receipt from a zero balance. Reservations are deducted from verified remaining credits and capped at 4,500/month. No subscription, deposit, top-up, proxy fallback or account changes are performed by the collector.
 
-Social collection accepts bounded public Facebook posts/videos, TikTok videos and Instagram posts/reels associated with a named independently located destination. Creator location cannot establish venue location. Only dates, text, source/owner references and engagement metrics are retained. YouTube can surface through direct search but is not a metrics provider. Provider IDs persist across runs; submitted jobs resume polling, while ambiguous submissions are held instead of retried. The social adapter remains unvalidated against live output because the billing gate is unresolved.
+Social collection accepts bounded public Facebook posts/videos, TikTok videos and Instagram posts/reels associated with a named independently located destination. Creator location cannot establish venue location. Only dates, text, source/owner references and engagement metrics are retained. YouTube can surface through direct search but is not a metrics provider. Provider IDs persist across runs; submitted jobs resume polling, while ambiguous submissions are held instead of retried. The social adapter remains unvalidated against live output because the billing gate is unresolved. Facebook/TikTok/Instagram publication therefore stays disabled in `sources.json` even when provider credentials exist. Review a free-only pilot before enabling each social source. Social posts must explicitly corroborate the same city as the independently located venue.
 
 ## Validation and rollout
 
@@ -77,3 +77,9 @@ Roll out in this order:
 The previous nightlife workflow was observed as `disabled_inactivity` and has not been re-enabled. The new workflow cannot be manually dispatched until it exists on the default branch. No scheduled production collection or live social pilot is claimed by the local tests.
 
 Monitor `discovery_ingestion_runs` for per-source/city failures and rejection reasons, observation `verified_at` for freshness, and `discovery_provider_jobs` grouped by provider/billing month for reserved usage. Receipts retain 30 days, completed jobs 90 days, and long-unverified items 90 days. Uncertain provider jobs are retained for manual reconciliation; do not delete their reservations to force retries.
+
+## Verification record
+
+The local suite passed all 28 tests, including eight real-Postgres tests. `encore test ./...` passed; frontend type checking passed and full lint reported zero errors/five existing warnings. The browser checks passed again after pricing support, with clean console checks and phone/desktop screenshots. The 11 samples exist only in the disposable local database.
+
+`SERPAPI_API_KEY` and `BRIGHTDATA_API_KEY` have been configured as LoScraper GitHub Actions secrets using the existing local credentials. No Apify key or invented free-tier receipt was copied. The attempted manual dispatch returned HTTP 404 because `trending.yml` is not yet on the default branch. This is a rollout dependency, not a successful Actions pilot.
