@@ -43,6 +43,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
+          BRIGHTDATA_BILLING_API_KEY: ${{ secrets.BRIGHTDATA_BILLING_API_KEY }}
           BRIGHTDATA_FREE_VERIFICATION_JSON: ${{ secrets.BRIGHTDATA_FREE_VERIFICATION_JSON }}
           INPUT_CITY: ${{ inputs.city }}
           INPUT_PILOT: ${{ inputs.pilot }}

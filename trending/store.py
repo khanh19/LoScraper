@@ -75,7 +75,7 @@ class Store:
             VALUES (%s,%s,%s,now(),%s,%s,%s,%s)""",
             (source,city,started,'partial' if failures else 'complete',accepted,rejected,Jsonb({'failures':failures,'reasons':reasons})))
 
-    def reserve(self, provider, key, units, cap, remaining, inputs, now):
+    def reserve(self, provider, key, units, cap, remaining, inputs, now, verified_at=None):
         month = now.date().replace(day=1)
         if units <= 0 or units > remaining:
             return None
@@ -89,6 +89,14 @@ class Store:
             # The remote balance can lag in-flight requests. Conservatively charge
             # unresolved reservations against it as well as against our monthly cap.
             pending = self.db.execute("SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE provider=%s AND billing_month=%s AND status <> 'complete'",(provider,month)).fetchone()['used']
+            if verified_at:
+                # Subtract snapshot usage while holding the reservation lock.
+                # Include completed jobs since inspection and older unresolved
+                # jobs, even from the previous month. Neither may be re-spent.
+                pending = self.db.execute("""SELECT COALESCE(sum(reserved_units),0) AS used
+                    FROM discovery_provider_jobs WHERE provider=%s
+                    AND (created_at >= %s OR status <> 'complete')""",
+                    (provider, verified_at)).fetchone()['used']
             if used + units > cap or pending + units > remaining:
                 return None
             row = self.db.execute("""INSERT INTO discovery_provider_jobs(job_key,provider,billing_month,reserved_units,input_data)

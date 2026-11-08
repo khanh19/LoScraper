@@ -23,7 +23,7 @@ class Persistence(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         p=urlsplit(URL)
-        if p.hostname not in {'127.0.0.1','localhost'} or p.path!='/lo_trending_test':
+        if p.hostname not in {'127.0.0.1','localhost'} or p.path not in {'/lo_trending_test','/lo_trending_guards_test'}:
             raise RuntimeError('Tests require the disposable local lo_trending_test database')
         cls.store=Store(URL)
         cls.store.db.execute('DROP TABLE IF EXISTS discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
@@ -116,6 +116,34 @@ class Persistence(unittest.TestCase):
         self.assertEqual(result,[])
         self.assertTrue(all(method=='GET' for method,url in calls))
         self.assertEqual(self.store.job('yesterday')['status'],'complete')
+
+    def test_dashboard_allowance_counts_completed_and_old_unresolved_jobs(self):
+        verified_at=NOW.isoformat()
+        self.store.reserve('brightdata','completed',1,4500,2,{},NOW,verified_at=verified_at)
+        self.store.update_job('completed','complete')
+        # A request predating the receipt may still be awaiting a charge. It
+        # must count even when it was launched in a prior billing month.
+        self.store.reserve('brightdata','old-pending',1,4500,10,{},NOW-timedelta(days=35))
+        self.store.db.execute("UPDATE discovery_provider_jobs SET created_at=%s WHERE job_key='old-pending'",
+                              (NOW-timedelta(days=35),))
+        self.assertIsNone(self.store.reserve('brightdata','overrun',1,4500,2,{},NOW,verified_at=verified_at))
+
+    def test_concurrent_dashboard_reservations_cannot_reuse_last_credit(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        barrier=Barrier(2)
+        def reserve(key):
+            store=Store(URL)
+            try:
+                barrier.wait(timeout=10)
+                job=store.reserve('brightdata',key,1,4500,1,{},NOW,verified_at=NOW.isoformat())
+                if job:
+                    store.update_job(key,'complete')
+                return bool(job)
+            finally:
+                store.close()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(sum(pool.map(reserve,['parallel-a','parallel-b'])),1)
 
     def test_exhausted_provider_allowance_does_not_trigger_search(self):
         calls=[]

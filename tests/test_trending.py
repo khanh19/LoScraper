@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from trending.adapters import CLASSES, load_sources
 from trending.dates import schedule_occurrences, ticketbox_sessions, weekly
 from trending.model import Candidate, Occurrence, city_from_address, ICT
-from trending.providers import bright_allowance, serp_allowance, SerpDiscovery, BrightSocial, ProviderDisabled, social_evidence
+from trending.providers import bright_allowance, bright_preflight, serp_allowance, SerpDiscovery, BrightSocial, ProviderDisabled, social_evidence
 
 NOW = datetime(2026,11,7,12,tzinfo=timezone.utc)
 
@@ -172,6 +172,62 @@ class FreeProviderGuards(unittest.TestCase):
         self.assertEqual(bright_allowance({},proof,NOW),0)
         self.assertEqual(bright_allowance(balance,[],NOW),0)
         self.assertEqual(bright_allowance(balance,{**proof,'auto_recharge':True},NOW),0)
+
+    def test_promotional_balance_is_not_a_deposit_or_free_credit_count(self):
+        proof=dict(verified_at=NOW.isoformat(),unfunded=True,auto_recharge=False,
+                   deposits_checked=True,promotional_balance_usd=7,free_credits_remaining=5000)
+        balance=dict(balance=7,credit=0,prepayment=0,pending_costs=0)
+        self.assertEqual(bright_allowance(balance,proof,NOW),4500)
+        for fields in [{'deposits_checked':False},{'unfunded':False},{'auto_recharge':True},
+                       {'free_credits_remaining':0},{'free_credits_remaining':True},
+                       {'promotional_balance_usd':6},{'promotional_balance_usd':float('nan')}]:
+            with self.subTest(fields=fields):
+                self.assertEqual(bright_allowance(balance,{**proof,**fields},NOW),0)
+        for fields in [{'balance':8},{'balance':6},{'credit':1},{'prepayment':1},{'pending_costs':0.01},
+                       {'pending_costs':False},{'credit':float('inf')},{'balance':'7'}]:
+            with self.subTest(fields=fields):
+                self.assertEqual(bright_allowance({**balance,**fields},proof,NOW),0)
+        reset=datetime(2026,12,1,tzinfo=timezone.utc)
+        self.assertEqual(bright_allowance(balance,{**proof,'verified_at':(reset-timedelta(minutes=1)).isoformat()},reset),0)
+
+    def test_billing_key_separation_and_account_binding(self):
+        proof=dict(verified_at=NOW.isoformat(),unfunded=True,auto_recharge=False,
+                   account_id='hl_test',free_credits_remaining=10)
+        env={'BRIGHTDATA_API_KEY':'scraping-test','BRIGHTDATA_BILLING_API_KEY':'finance-test',
+             'BRIGHTDATA_FREE_VERIFICATION_JSON':json.dumps(proof)}
+        calls=[]
+        def request(method,url,**kwargs):
+            calls.append((method,url,kwargs['headers']['Authorization']))
+            if url.endswith('/balance'):
+                return dict(balance=0,credit=0,prepayment=0,pending_costs=0)
+            return {'customer':'hl_test'}
+        with patch.dict(os.environ,env,clear=True):
+            self.assertEqual(bright_preflight(NOW,request)[0],10)
+        self.assertEqual(calls[0][2],'Bearer finance-test')
+        self.assertEqual([c[2] for c in calls[1:]],['Bearer scraping-test','Bearer finance-test'])
+        self.assertTrue(all(c[0]=='GET' for c in calls))
+        def mismatch(method,url,**kwargs):
+            return request(method,url,**kwargs) if url.endswith('/balance') else {'customer':'hl_other'}
+        with patch.dict(os.environ,env,clear=True),self.assertRaisesRegex(ProviderDisabled,'account_mismatch'):
+            bright_preflight(NOW,mismatch)
+
+    def test_billing_403_and_exhausted_allowance_never_submit(self):
+        from unittest.mock import Mock
+        store=Mock();store.pending.return_value=None;store.job.return_value=None
+        for forbidden in (True,False):
+            calls=[]
+            def request(method,url,**kwargs):
+                calls.append((method,url))
+                if forbidden:
+                    raise ProviderDisabled('provider_http_403')
+                return dict(balance=0,credit=0,prepayment=0,pending_costs=0)
+            proof=dict(verified_at=NOW.isoformat(),unfunded=True,auto_recharge=False,free_credits_remaining=0)
+            with patch.dict(os.environ,{'BRIGHTDATA_API_KEY':'test',
+                            'BRIGHTDATA_FREE_VERIFICATION_JSON':json.dumps(proof)},clear=True):
+                with self.assertRaises(ProviderDisabled):
+                    BrightSocial(store,request).collect('https://www.tiktok.com/@lo/video/123',NOW)
+            self.assertEqual(calls,[('GET','https://api.brightdata.com/customer/balance')])
+        store.reserve.assert_not_called()
 
     def test_social_requires_known_destination_not_creator_city(self):
         c=candidate('place')
