@@ -26,7 +26,8 @@ class Persistence(unittest.TestCase):
         if p.hostname not in {'127.0.0.1','localhost'} or p.path not in {'/lo_trending_test','/lo_trending_guards_test'}:
             raise RuntimeError('Tests require the disposable local lo_trending_test database')
         cls.store=Store(URL)
-        cls.store.db.execute('DROP TABLE IF EXISTS discovery_image_permissions,discovery_pilots,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
+        cls.store.db.execute('DROP TABLE IF EXISTS discovery_bookmarks,discovery_image_permissions,discovery_pilots,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
+        cls.store.db.execute((BACKEND/'supabase/migrations/20260422000001_init_auth.sql').read_text())
         # Use the existing parent-table DDL, not a mock of the new migration.
         baseline=(BACKEND/'supabase/migrations/20260523000001_onboarding.sql').read_text()
         for name in ['cities','places']:
@@ -41,7 +42,7 @@ class Persistence(unittest.TestCase):
     def tearDownClass(cls): cls.store.close()
 
     def setUp(self):
-        self.store.db.execute('TRUNCATE discovery_image_permissions,discovery_pilots,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
+        self.store.db.execute('TRUNCATE discovery_bookmarks,discovery_image_permissions,discovery_pilots,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
         self.store.register('ticketbox','Ticketbox',True)
 
     def feed(self,now=NOW,city='hanoi',kind='all',limit=10):

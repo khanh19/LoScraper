@@ -1,0 +1,239 @@
+{
+  "checks": [
+    {
+      "path": "api/hanoi/all",
+      "status": "passed",
+      "count": 2
+    },
+    {
+      "path": "api/hanoi/event",
+      "status": "passed",
+      "count": 1
+    },
+    {
+      "path": "api/hanoi/place",
+      "status": "passed",
+      "count": 1
+    },
+    {
+      "path": "api/hcmc/all",
+      "status": "passed",
+      "count": 3
+    },
+    {
+      "path": "api/hcmc/event",
+      "status": "passed",
+      "count": 3
+    },
+    {
+      "path": "api/hcmc/place",
+      "status": "passed",
+      "count": 0
+    },
+    {
+      "path": "api/danang/all",
+      "status": "passed",
+      "count": 2
+    },
+    {
+      "path": "api/danang/event",
+      "status": "passed",
+      "count": 2
+    },
+    {
+      "path": "api/danang/place",
+      "status": "passed",
+      "count": 0
+    },
+    {
+      "path": "mobile/hanoi/all/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/hanoi/event/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/hanoi/place/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/hcmc/all/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/hcmc/event/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/hcmc/place/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/danang/all/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/danang/event/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "mobile/danang/place/detail-return-share",
+      "status": "passed"
+    },
+    {
+      "path": "local-accent-search-venue-hours-saved-auth-gate",
+      "status": "passed"
+    },
+    {
+      "path": "real-authenticated-browser-save",
+      "status": "blocked",
+      "reason": "real test login and preview callback allowance not supplied"
+    },
+    {
+      "path": "physical-iphone",
+      "status": "blocked",
+      "reason": "no physical iPhone/development build"
+    },
+    {
+      "path": "google-live",
+      "status": "blocked",
+      "reason": "free capacity unverified; requests disabled"
+    }
+  ],
+  "page_errors": [],
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failed_requests": [],
+  "api_responses": [
+    {
+      "path": "/cities",
+      "status": 200
+    },
+    {
+      "path": "/plans",
+      "status": 200
+    },
+    {
+      "path": "/lists",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/38713941-c685-4eef-a107-e639df00fdff",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/38713941-c685-4eef-a107-e639df00fdff",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/2977a689-8819-41b9-b69c-362c2b5929dc",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/plans",
+      "status": 200
+    },
+    {
+      "path": "/lists",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/0a53b5fc-f0d4-47c3-828d-1173ec2b0c5b",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/0a53b5fc-f0d4-47c3-828d-1173ec2b0c5b",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/lists",
+      "status": 200
+    },
+    {
+      "path": "/plans",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/adad3538-5c85-4a23-b0ae-3ff71d798930",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/items/adad3538-5c85-4a23-b0ae-3ff71d798930",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    },
+    {
+      "path": "/discover/search",
+      "status": 200
+    },
+    {
+      "path": "/discover/search",
+      "status": 200
+    },
+    {
+      "path": "/places/8638fdc1-8edb-4316-ab5b-c0b532b6e90e",
+      "status": 200
+    },
+    {
+      "path": "/cities",
+      "status": 200
+    },
+    {
+      "path": "/lists",
+      "status": 200
+    },
+    {
+      "path": "/plans",
+      "status": 200
+    },
+    {
+      "path": "/discover/trending",
+      "status": 200
+    }
+  ]
+}

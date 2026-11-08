@@ -43,6 +43,17 @@ class PublicClient:
         self._playwright = self._browser = None
 
     def get(self, url: str, allowed_hosts: set[str], render=False) -> BeautifulSoup:
+        # Exactly one retry for transient failures. Only successful parses are cached.
+        for attempt in range(2):
+            try:
+                return self._get_once(url, allowed_hosts, render)
+            except FetchError as exc:
+                if attempt or str(exc) not in {'http_408','http_429','http_500','http_502','http_503','http_504','Timeout','ReadTimeout','ConnectTimeout','ConnectionError','TimeoutError'}:
+                    raise
+                time.sleep(2)
+        raise FetchError('retry_exhausted')
+
+    def _get_once(self, url: str, allowed_hosts: set[str], render=False) -> BeautifulSoup:
         url = public_url(url)
         if urlsplit(url).hostname not in allowed_hosts:
             raise FetchError("host_not_allowed")
@@ -109,14 +120,19 @@ class PublicClient:
 
         page.route("**/*", route)
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=40000)
-            page.wait_for_selector("h1,main", timeout=15000)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            if response is None or response.status != 200:
+                raise FetchError(f"http_{response.status}" if response else "no_response")
+            # VnExpress food listings use title-news headings, not h1/main.
+            page.wait_for_selector("h1,main,h2.title-news,h3.title-news,.title_news,.fck_detail", timeout=15000)
             # Public hydrated event schedules may arrive after the shell.
             page.wait_for_timeout(1500)
             content = page.content()
             if len(content) > 4_000_000:
                 raise FetchError("page_too_large")
             return BeautifulSoup(content, "html.parser")
+        except FetchError:
+            raise
         except Exception as exc:
             raise FetchError(type(exc).__name__) from None
         finally:
