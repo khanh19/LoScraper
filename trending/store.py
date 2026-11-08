@@ -32,6 +32,14 @@ class Store:
             ON CONFLICT(slug) DO UPDATE SET name=excluded.name,enabled=excluded.enabled,platform=excluded.platform""",
             (slug,name,enabled,platform))
 
+    def sync_image_permissions(self, records):
+        with self.db.transaction():
+            self.db.execute('UPDATE discovery_image_permissions SET revoked=true WHERE NOT (id=ANY(%s::text[]))',([p['id'] for p in records],))
+            for p in records:
+                self.db.execute("""INSERT INTO discovery_image_permissions(id,policy,revoked) VALUES (%s,%s,%s)
+                    ON CONFLICT(id) DO UPDATE SET policy=excluded.policy,revoked=excluded.revoked""",
+                    (p['id'],Jsonb(p),bool(p.get('revoked',False))))
+
     def upsert(self, c: Candidate, now: datetime):
         reasons = c.validate(now)
         if reasons:
@@ -58,7 +66,7 @@ class Store:
                   AND lower(trim(p.address))=lower(trim(%s)) LIMIT 2""",(c.city_slug,c.venue_name,c.address)).fetchall()
             place_id = places[0]['id'] if len(places)==1 else None
             values = (c.kind,c.city_slug,c.category,p['title_vi'],p['description_vi'],c.title,c.venue_name,c.address,place_id)
-            facts = dict(version=1, evidence_locator=c.evidence_locator, kind=c.kind, city_slug=c.city_slug, category=c.category,
+            facts = dict(version=1, image_association_verified=c.image_association_verified, image_permission_id=(c.image_permission or {}).get('id'), evidence_locator=c.evidence_locator, kind=c.kind, city_slug=c.city_slug, category=c.category,
                          title_vi=p['title_vi'], description_vi=p['description_vi'], original_title=c.title,
                          venue_name=c.venue_name, address=c.address, price_text=c.price_text,
                          place_id=str(place_id) if place_id else None)

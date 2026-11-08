@@ -26,7 +26,7 @@ class Persistence(unittest.TestCase):
         if p.hostname not in {'127.0.0.1','localhost'} or p.path not in {'/lo_trending_test','/lo_trending_guards_test'}:
             raise RuntimeError('Tests require the disposable local lo_trending_test database')
         cls.store=Store(URL)
-        cls.store.db.execute('DROP TABLE IF EXISTS discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
+        cls.store.db.execute('DROP TABLE IF EXISTS discovery_image_permissions,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
         # Use the existing parent-table DDL, not a mock of the new migration.
         baseline=(BACKEND/'supabase/migrations/20260523000001_onboarding.sql').read_text()
         for name in ['cities','places']:
@@ -41,7 +41,7 @@ class Persistence(unittest.TestCase):
     def tearDownClass(cls): cls.store.close()
 
     def setUp(self):
-        self.store.db.execute('TRUNCATE discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
+        self.store.db.execute('TRUNCATE discovery_image_permissions,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
         self.store.register('ticketbox','Ticketbox',True)
 
     def feed(self,now=NOW,city='hanoi',kind='all',limit=10):
@@ -170,13 +170,20 @@ class Persistence(unittest.TestCase):
 
     def test_observation_facts_control_every_display_field_and_social_cannot_replace(self):
         from psycopg.types.json import Jsonb
-        c=candidate();c.price_text='100.000đ';c.image_permitted=True;c.image_url='https://ticketbox.vn/a.jpg'
+        c=candidate();c.price_text='100.000đ';c.image_permitted=True;c.image_association_verified=True;c.image_url='https://ticketbox.vn/a.jpg'
+        def permission(source,image):
+            return dict(id=source,source_slug=source,scope='asset',image_url=image,creator='Test creator',
+                        license_name='Test license',license_url='https://example.org/license',
+                        evidence_url='https://example.org/permission',reviewed_at=NOW.isoformat())
+        c.image_permission=permission('ticketbox',c.image_url)
+        self.store.sync_image_permissions([c.image_permission,permission('ticketgo','https://ticketgo.vn/b.jpg')])
         item_id=self.store.upsert(c,NOW)
         d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_name='TicketGo';d.source_url='https://ticketgo.vn/event/test'
         self.store.register('ticketgo','TicketGo',True)
         self.store.upsert(d,NOW)
         d.title='Tên mới';d.venue_name='Địa điểm mới';d.address='20 Tràng Tiền, Hà Nội';d.price_text='200.000đ'
         d.verified_at=(NOW+timedelta(minutes=1)).isoformat();d.image_url='https://ticketgo.vn/b.jpg'
+        d.image_permission=permission('ticketgo',d.image_url)
         self.assertEqual(self.store.upsert(d,NOW),item_id)
         row=self.feed()[0]
         for field in ['title_vi','description_vi','venue_name','address','price_text','image_url']:
@@ -384,7 +391,6 @@ class Persistence(unittest.TestCase):
         self.store.cancel(c.source_slug,c.source_url,NOW,c.entry_key)
         self.assertEqual([x['id'] for x in self.feed()],[second])
 
-
     def test_roundup_publication_cannot_rejuvenate_old_place(self):
         c=candidate('place');c.entry_key='anchor:a';self.store.upsert(c,NOW)
         c.published_at=(NOW+timedelta(days=8)).isoformat()
@@ -394,9 +400,17 @@ class Persistence(unittest.TestCase):
         row=self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()
         self.assertEqual(row['verified_at'],NOW)
 
-
     def test_roundup_same_destination_dedupes_source_links(self):
         c=candidate();c.entry_key='anchor:a';first=self.store.upsert(c,NOW)
         c.entry_key='anchor:b';self.assertEqual(self.store.upsert(c,NOW),first)
         self.assertEqual(len(self.feed()[0]['sources']),1)
+
+    def test_revoking_permission_hides_existing_image(self):
+        c=candidate();c.image_url='https://example.com/image.jpg';c.image_permitted=True;c.image_association_verified=True
+        p=dict(id='permitted',scope='asset',source_slug=c.source_slug,image_url=c.image_url,creator='Publisher',license_name='test',license_url='https://example.com/license',evidence_url='https://example.com/permission',reviewed_at=NOW.isoformat())
+        c.image_permission=p
+        self.store.sync_image_permissions([p]);self.store.upsert(c,NOW)
+        self.assertEqual(self.feed()[0]['image_url'],c.image_url)
+        self.store.sync_image_permissions([])
+        self.assertIsNone(self.feed()[0]['image_url'])
 

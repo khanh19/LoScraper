@@ -117,6 +117,11 @@ class Adapter:
                       original_text=text[:2000], published_at=published or None,
                       verified_at=now.isoformat(), image_url=meta(soup, "og:image") or None,
                       image_permitted=False)
+        images=event.get('image',[]) if event else []
+        if not isinstance(images,list):images=[images]
+        images=[i.get('url') if isinstance(i,dict) else i for i in images]
+        if body:images += [urljoin(url,img['src']) for img in body.select('img[src]')]
+        c.image_association_verified=bool(c.image_url and c.image_url in images)
         if body is None and not event:
             c.reasons.append("missing_primary_content")
         if event:
@@ -468,6 +473,8 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     continue
                 try:
                     if hasattr(adapter,'enrich'):c=adapter.enrich(c,soup,client,now)
+                    from .images import authorize
+                    authorize(c,now)
                     candidates.append(c)
                     metrics['extracted_entries']+=1
                 except Exception as exc:

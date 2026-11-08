@@ -81,6 +81,8 @@ class Candidate:
     owner_key: str = ""
     metrics: dict[str, int] = field(default_factory=dict)
 
+    image_association_verified: bool = False
+    image_permission: dict | None = None
     entry_key: str = ""
     evidence_locator: str = ""
 

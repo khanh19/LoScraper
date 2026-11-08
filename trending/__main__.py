@@ -50,6 +50,12 @@ def run(args):
     progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES))
     report = {'run_id':progress.run_id,'generated_at':now.isoformat(),'pilot':args.pilot,'sources':{},'accepted':[],'rejected':[], 'providers':{}}
     try:
+        if store and args.write_db:
+            from .images import permissions
+            synced,_=progress.call('sync_image_permissions',permissions(now))
+            if not synced:
+                progress.available=False
+                progress.fatal=True
         if store and args.write_db and args.providers:
             for platform in ['facebook','tiktok','instagram']:
                 progress.call('register',platform,platform.title(),bool(args.pilot or configs.get(platform,{}).get('enabled',False)),platform)
