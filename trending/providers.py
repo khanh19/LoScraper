@@ -166,6 +166,9 @@ class BrightSocial:
         headers = {'Authorization': 'Bearer ' + token}
         key = 'brightdata:' + (self.pilot_id or now.date().isoformat()) + ':' + hashlib.sha256(url.encode()).hexdigest()
         job = self.store.pending('brightdata', url) or self.store.job(key)
+        if not job and self.pilot_id:
+            existing = self.store.pilot_job_for_url('brightdata', url, self.pilot_id)
+            if isinstance(existing, dict): job = existing
         if job:
             key = job['job_key']
         if job and job['status'] == 'complete':
@@ -203,9 +206,10 @@ class BrightSocial:
         rows = self.request('GET', f'https://api.brightdata.com/datasets/v3/snapshot/{snapshot}', headers=headers, params={'format':'json'})
         if not isinstance(rows, list) or len(rows) > 1 or any(not isinstance(row,dict) for row in rows):
             raise ProviderDisabled('unexpected_result_count')
-        # Keep only fields needed for evidence, never comments, profiles, videos or raw datasets.
+        # Media references are evidence inputs, NOT downloads or reuse permission.
         fields = {'url','description','content','date_posted','create_time','date','likes','num_comments',
-                  'digg_count','share_count','comment_count','profile_url','user_posted','user_url','num_likes','num_shares'}
+                  'digg_count','share_count','comment_count','profile_url','user_posted','user_url','num_likes','num_shares',
+                  'user_profile_url','thumbnail','images','video_url','audio_url','transcript','alt_text'}
         result = [{k:v for k,v in row.items() if k in fields} for row in rows]
         self.store.update_job(key, 'complete', result=result)
         return result
@@ -228,6 +232,8 @@ def social_evidence(primary, row, platform, now):
     c = copy.deepcopy(primary)
     c.source_slug, c.source_name, c.source_url = platform, platform.title(), canonical(url)
     c.platform = platform
+    c.authority_type = "supporting"
+    c.verified_venue_id = ""
     c.original_text = text[:2000]
     c.published_at = row.get('date_posted') or row.get('create_time') or row.get('date')
     published = parse_time(c.published_at)
