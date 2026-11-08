@@ -8,7 +8,7 @@ async def main():
  async with async_playwright() as p:
   browser=await p.chromium.launch(channel='chrome',headless=True);page=await browser.new_page(viewport={'width':430,'height':932});page.set_default_timeout(20000);page.set_default_navigation_timeout(120000)
   await page.goto(APP+'/tabs/explore');await expect(page.get_by_text('Có gì mới tuần này?',exact=True)).to_be_visible(timeout=90000)
-  await page.get_by_role('button',name='Change location',exact=True).click();await page.get_by_role('button',name='Hanoi',exact=True).click()
+  await page.get_by_role('button',name='Change location',exact=True).click();await page.get_by_role('button',name='Hà Nội',exact=True).click()
   search=page.get_by_role('textbox',name='Tìm gợi ý đã xác minh')
   async def fail(route):await route.fulfill(status=503,json={'code':'unavailable','message':'controlled test'},headers={'Access-Control-Allow-Origin':'*'})
   await page.route(API+'/discover/search**',fail);await search.fill('vinh loi');await expect(page.get_by_text('Chưa tìm được. Thử lại',exact=True)).to_be_visible()

@@ -31,13 +31,13 @@ async def main():
   await page.goto(APP+'/tabs/explore',wait_until='domcontentloaded')
   await expect(page.get_by_text('Có gì mới tuần này?',exact=True)).to_be_visible(timeout=90000)
   for city in cities:
-   await page.get_by_role('button',name='Change location',exact=True).click();await page.get_by_role('button',name=city['name'],exact=True).click()
+   await page.get_by_role('button',name='Change location',exact=True).click();await page.get_by_role('button',name={'hanoi':'Hà Nội','hcmc':'TP. Hồ Chí Minh','danang':'Đà Nẵng'}[city['slug']],exact=True).click()
    for kind,label in [('all','Tất cả'),('event','Sự kiện'),('place','Địa điểm')]:
     await page.get_by_text(label,exact=True).last.click()
     items=feeds[(city['slug'],kind)]
     if items:
      await expect(page.get_by_text(items[0]['title_vi'],exact=True).first).to_be_visible()
-     await page.get_by_text('Xem chi tiết · Lưu · Chia sẻ',exact=True).first.click()
+     await page.get_by_role('button',name='Xem chi tiết · Lưu · Chia sẻ',exact=True).first.click()
      await page.wait_for_url('**/discovery/*')
      await expect(page.get_by_text(items[0]['description_vi'],exact=True)).to_be_visible()
      await expect(page.get_by_text('Đăng nhập để lưu',exact=True)).to_be_visible()
@@ -65,7 +65,7 @@ async def main():
     print('passed',city['slug'],kind,flush=True)
     checks.append({'path':f'mobile/{city["slug"]}/{kind}/detail-return-share','status':'passed'})
    await page.screenshot(path=str(OUT/f'{city["slug"]}-feed.png'),full_page=True)
-  await page.get_by_role('button',name='Change location',exact=True).click();await page.get_by_role('button',name='Hanoi',exact=True).click()
+  await page.get_by_role('button',name='Change location',exact=True).click();await page.get_by_role('button',name='Hà Nội',exact=True).click()
   search=page.get_by_role('textbox',name='Tìm gợi ý đã xác minh')
   await search.fill('vinh loi');await expect(page.get_by_role('button',name='Tiệm bánh mì Vĩnh Lợi',exact=False)).to_be_visible()
   await search.fill('something absent');await search.fill('VĨNH LỢI');await expect(page.get_by_role('button',name='Tiệm bánh mì Vĩnh Lợi',exact=False)).to_be_visible()
