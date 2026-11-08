@@ -1,0 +1,67 @@
+Generated with the built-in image generation tool. Final image includes a connector correction: optional provider discovery feeds normalization directly, and the refresh loop returns to collection.
+
+Create a polished, highly legible technical workflow infographic for Lô!, a Vietnamese local discovery app. This is a real system architecture explanation for project documentation, not a promotional image. Landscape aspect ratio about 16:10, high resolution. Warm ivory background, deep forest green panels, dark navy headings, restrained gold accents, crisp sans-serif typography, spacious structured layout, clean flat vector-style icons. No stock photos or invented screenshots. All English explanatory text except app labels specified. Prioritize exact readable text and unambiguous arrows.
+
+TITLE: "Lô! — How What’s Trending Works"
+SUBTITLE: "From public sources to verified local recommendations"
+Small scope line: "Ho Chi Minh City • Hanoi • Da Nang"
+
+PRIMARY FLOW: Six clearly numbered panels in a connected two-row snake arrangement: top row 1 → 2 → 3; arrow down from 3 to 4 at bottom right; bottom row 4 → 5 → 6 flowing right to left. Large arrows show the sequence without crossing labels.
+
+Panel 1 top left: "1  Collect public sources"
+List six publishers, accurately spelled:
+"Vietnam Nightlife"
+"Ticketbox"
+"Hanoi Grapevine"
+"Danang Fantasticity"
+"VnExpress"
+"TicketGo"
+Small caption: "Python HTTP collectors + browser rendering"
+Icon: website pages.
+
+Panel 2 top center: "2  Normalize the facts"
+List: "Canonical source URL", "Venue + city evidence", "Dates + individual sessions", "Vietnamese display text", "Image permissions + timestamps".
+Icon: structured record.
+
+Panel 3 top right: "3  Validate before publishing"
+List: "Supported city + real destination", "Events: next 7 days, including ongoing", "Places: mentions from past 7 days", "Reject cancellations and date conflicts", "Hold unresolved sessions".
+Branch underneath or to outer right: small gray rejection box "Rejected → reason logged"; connect from panel 3. Main downward arrow labelled "Verified only".
+Icon: checklist/shield.
+
+Panel 4 bottom right: "4  Store + update"
+Subtitle: "PostgreSQL"
+List: "Stable IDs + safe upserts", "Deduplicate; retain source evidence", "Match existing Lô places confidently", "Partial failures preserve valid records".
+Small line: "Items • occurrences • observations • run receipts"
+Icon: database cylinder.
+
+Panel 5 bottom center: "5  Serve eligible results"
+Prominent endpoint exactly: "GET /discover/trending"
+Small: "city_slug • kind • limit"
+List: "Rank independent recent mentions", "Then engagement growth + freshness", "Alternate events and places", "Hide unverified items after 72 hours", "Remove ended events".
+Icon: API gateway.
+
+Panel 6 bottom left: "6  Render the app"
+Tiny clean illustrated UI card, diagrammatic not a real screenshot.
+Show filter chips: "Tất cả" / "Sự kiện" / "Địa điểm".
+Below: "Venue • date • source • evidence label"
+Show labels "Sắp diễn ra" and "Mới được nhắc đến".
+List: "Matched place → venue screen", "Every item → original source", "Permitted image or neutral placeholder", "Loading • retry • empty states".
+Icon: phone card. Do not invent a venue, date, photo, rating or item count.
+
+BENEATH THE MAIN FLOW place two concise horizontal explanatory bands:
+Band A left with dashed amber border: "Optional discovery — gated"
+Text: "SerpAPI: ≤200 searches/month, verified included allowance"
+Text: "Bright Data: ≤4,500 credits/month, free-only checks + quota reservation"
+Text: "Facebook • TikTok • Instagram: publication DISABLED pending quality validation"
+Small: "Apify: alternative only; no automatic fallback"
+A dashed arrow from this optional band to panel 2, visibly labelled "Only after checks". Do not show it as an active social production feed.
+
+Band B right forest green outline: "Refresh loop"
+Text: "Manual collection works now"
+Text: "Planned: GitHub Actions daily at 06:00 Vietnam time"
+Clear amber badge: "SCHEDULE NOT ENABLED"
+Text: "Re-fetch sources → validate → upsert → next UI fetch shows updates"
+Draw a subtle looping arrow back to panel 1 and make clear UI reads stored data, not scraping during page load.
+Small footer across bottom: "Free-only. No fabricated cards. External popularity stays separate from Lô ratings."
+Small status note: "Current implementation • validated locally • no production deployment"
+Do not include any API keys, account information, external logo marks, fake working social claims, production rollout claims or Google Places arrows. Keep text accurate and sharp, spacing generous, and every arrow in the stated direction.

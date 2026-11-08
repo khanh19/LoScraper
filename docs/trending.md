@@ -1,5 +1,11 @@
 # Verified local discovery
 
+Start with the [teammate setup guide](teammate-setup.md) and [tool/status matrix](tool-status.md). This page explains the pipeline and retains the dated end-to-end evidence.
+
+![Lô What’s Trending workflow: sources, normalization, validation, database updates, API delivery, app rendering, and refresh controls.](assets/trending-workflow-hand-drawn.png)
+
+Workflow snapshot: 7 November 2026 in New York / 8 November 2026 in Vietnam. Solid arrows show the main data flow; the dashed branch is optional provider discovery. Social publication and the daily schedule remain disabled.
+
 The `trending` package collects visitable events and places for HCMC, Hanoi and Da Nang. It is separate from the legacy nightlife importer. It never calls `replace_external_events`, deletes another city's feed, translates through a paid service, or downloads videos/posters.
 
 ## Run locally
@@ -16,13 +22,13 @@ LO_BROWSER_CHANNEL=chrome .venv/bin/python -m trending --browser --pilot --city 
 
 On a machine without Chrome, install Chromium with `.venv/bin/python -m playwright install chromium` and leave `LO_BROWSER_CHANNEL` unset. HTTP-only collection is available without `--browser`; Ticketbox and Vietnamese VnExpress will report `browser_disabled` and other sources continue.
 
-The default is a read-only run. To import, apply the backend migration `20261108060000_discovery_trending.sql` to the existing Postgres database, supply `DATABASE_URL` through the environment or an ignored `.env`, and add `--write-db`. `--pilot --write-db` is restricted to loopback databases. Failed/invalid candidates do not replace valid observations. Each accepted page has its own transaction.
+The default is a read-only run. For teammate imports, create the fully isolated local database using the setup guide, supply its `DATABASE_URL` through the environment or an explicitly loaded ignored `.env`, and add `--write-db`. The discovery migration alone is insufficient to exercise the other backend services. `--pilot --write-db` is restricted to loopback databases. Failed/invalid candidates do not replace valid observations. Each accepted page has its own transaction.
 
 `--out pilot-output/review.json` writes an optional local audit report. That directory is ignored and GitHub Actions does not upload it. `--env-file` may be repeated and only reads an allowlist of collector configuration. It does not execute shell syntax or print credentials:
 
 ```sh
 LO_BROWSER_CHANNEL=chrome .venv/bin/python -m trending --browser --pilot \
-  --env-file ../LoApp/.env --env-file ../LoAppBackend/.env
+  --env-file .env
 ```
 
 An API key alone never enables a provider. Add `--providers` explicitly and provide a persistent quota database. Credentials should ultimately live in the scraper's ignored `.env` or GitHub Actions secrets, never in a mobile bundle. `BRIGHT_DATA_API_KEY` is accepted as a local alias for `BRIGHTDATA_API_KEY`.
@@ -60,29 +66,20 @@ The preferred setup keeps `BRIGHTDATA_API_KEY` at User permission for scraping a
 Store the separate credential in the scraper's ignored `.env` or matching GitHub Actions secret, never in chat or a frontend bundle. If absent, billing checks use the existing scraping token. Neither credential is logged. Run:
 
 ```sh
-.venv/bin/python -m trending.preflight --env-file ../LoApp/.env --env-file .env
+.venv/bin/python -m trending.preflight --env-file .env
 ```
 
 Omit `--env-file .env` until that file exists. This command only reads account endpoints, never starts a collection, and exits nonzero on a blocked gate. Passing means the account checks passed; a persistent quota reservation and a validated social pilot are still required. A fresh dashboard receipt and the separate Finance key were saved to ignored configuration and matching GitHub Actions secrets. The receipt expires after 24 hours; re-inspection is required before later collection. The workflow accepts the optional billing secret but social publication and scheduled provider collection remain disabled.
 
-Validation: 33 tests passed, including ten real PostgreSQL integration tests in the isolated `lo_trending_guards_test` database. Coverage includes promotional-vs-funded balances, malformed values, stale/month-boundary receipts, account mismatch, billing 403, exhausted allowance, concurrent last-credit reservations, old unresolved jobs, and interrupted polling. The existing local feed database was preserved.
+Latest full validation: 37 tests passed, including ten real PostgreSQL integration tests in the isolated `lo_trending_guards_test` database. Coverage includes promotional-vs-funded balances, malformed values, stale/month-boundary receipts, account mismatch, billing 403, exhausted allowance, concurrent last-credit reservations, old unresolved jobs, and interrupted polling. The existing local feed database was preserved.
 
 Social collection accepts bounded public Facebook posts/videos, TikTok videos and Instagram posts/reels associated with a named independently located destination. Creator location cannot establish venue location. Only dates, text, source/owner references and engagement metrics are retained. YouTube can surface through direct search but is not a metrics provider. Provider IDs persist across runs; submitted jobs resume polling, while ambiguous submissions are held instead of retried. The billing gate is resolved, but the bounded social pilot did not produce a publishable event-specific sample. Facebook/TikTok/Instagram publication therefore stays disabled in `sources.json` even when provider credentials exist. Review a free-only pilot before enabling each social source. Social posts must explicitly corroborate the same city as the independently located venue.
 
 ## Validation and rollout
 
-```sh
-.venv/bin/python -m unittest discover -s tests -v
-# Optional real Postgres tests: destructive ONLY to discovery tables in this dedicated local database.
-TRENDING_TEST_DATABASE_URL=postgresql://macbook@127.0.0.1:55439/lo_trending_guards_test \
-  .venv/bin/python -m unittest discover -s tests -v
-# After importing a fresh pilot and starting Expo :8082 and Encore :4100:
-.venv/bin/python tests/browser_smoke.py
-```
+Use the [teammate setup guide](teammate-setup.md#8-run-checks-and-interpret-the-results) for current test commands, isolated databases, ports 4101/8083, and browser prerequisites. The latest results are in the end-to-end table below; earlier 11-item/28-test/33-test snapshots are superseded. Database integration tests require a dedicated disposable database and the sibling backend repository; they do not run merely because unit tests pass.
 
-Integration tests read the actual migration/query from sibling `../LoAppBackend` (override `LO_BACKEND_ROOT`). The backend is private; public CI does not automatically check it out. Tests cover Vietnamese schedules, session separation, city evidence, stable upserts, conflicting dates, cancellations, partial imports, expiry, syndicated mentions, missing images, free quotas and resumed provider jobs. The browser check uses the real discovery API; unrelated app APIs and explicit error/image cases are isolated test responses. Screenshots stay in `/tmp/lo-trending-qa`.
-
-Local reviewed pilot: **11 published samples: HCMC 5 events; Hanoi 3 events + 1 place; Da Nang 2 events**. All published samples were re-fetched after parser corrections. Source-linked examples include [33.23.45](https://hanoigrapevine.com/vi/2026/11/trien-lam-33-23-45/), [Vĩnh Lợi](https://vnexpress.net/tiem-banh-mi-77-nam-cua-dan-sanh-an-ha-noi-5141032.html), [DACC reading room](https://danangfantasticity.com/vi/ket-noi-nghe-thuat-sang-tao-da-nang-2026/phong-doc-mo-diem-tuong-quan-tai-dacc-2026), and [QVTH XV](https://ticketbox.vn/liveconcert-qvth-xv-26686). Counts are a pilot snapshot, not guaranteed daily supply. HCMC/Da Nang places can legitimately be empty.
+Production rollout is separate from teammate onboarding. None of the following deployment/schedule steps has been completed by local validation.
 
 Roll out in this order:
 
@@ -92,16 +89,9 @@ Roll out in this order:
 4. Run **Collect verified local discovery** manually with `pilot=true`, `providers=false`. Review counts, rejected reasons and failures. Then run with `pilot=false` against the migrated database. The `DATABASE_URL` repository secret already exists; confirm it targets the intended database. Local/Encore secrets do not transfer to Actions.
 5. After those manual runs pass, set repository variable `TRENDING_SCHEDULE_ENABLED=true` for 23:00 UTC / 06:00 Vietnam daily. Scheduled provider use remains off. Optional manual provider runs require their separate Actions secrets and verified free allowance.
 
-The previous nightlife workflow was observed as `disabled_inactivity` and has not been re-enabled. The new workflow cannot be manually dispatched until it exists on the default branch. No scheduled production collection or live social pilot is claimed by the local tests.
+The previous nightlife workflow was observed as `disabled_inactivity` and has not been re-enabled. The new workflow cannot be manually dispatched until it exists on the default branch. No scheduled production collection is active. The bounded live social pilot ran but produced no publishable record; see the evidence below.
 
 Monitor `discovery_ingestion_runs` for per-source/city failures and rejection reasons, observation `verified_at` for freshness, and `discovery_provider_jobs` grouped by provider/billing month for reserved usage. Receipts retain 30 days, completed jobs 90 days, and long-unverified items 90 days. Uncertain provider jobs are retained for manual reconciliation; do not delete their reservations to force retries.
-
-## Previous verification record
-
-The local suite passed all 28 tests, including eight real-Postgres tests. `encore test ./...` passed; frontend type checking passed and full lint reported zero errors/five existing warnings. The browser checks passed again after pricing support, with clean console checks and phone/desktop screenshots. The 11 samples exist only in the disposable local database.
-
-`SERPAPI_API_KEY` and `BRIGHTDATA_API_KEY` have been configured as LoScraper GitHub Actions secrets using the existing local credentials. No Apify key or invented free-tier receipt was copied. The attempted manual dispatch returned HTTP 404 because `trending.yml` is not yet on the default branch. This is a rollout dependency, not a successful Actions pilot.
-
 
 ## End-to-end validation — 2026-11-08 ICT
 

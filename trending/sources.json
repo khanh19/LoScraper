@@ -106,18 +106,18 @@
     "name": "Facebook",
     "platform": "facebook",
     "enabled": false,
-    "pilot_status": "pending_verified_free_access"
+    "pilot_status": "disabled_campaign_evidence_rejected_and_trigger_http400"
   },
   "tiktok": {
     "name": "Tiktok",
     "platform": "tiktok",
     "enabled": false,
-    "pilot_status": "pending_verified_free_access"
+    "pilot_status": "disabled_not_live_piloted"
   },
   "instagram": {
     "name": "Instagram",
     "platform": "instagram",
     "enabled": false,
-    "pilot_status": "pending_verified_free_access"
+    "pilot_status": "disabled_trigger_http400"
   }
 }
