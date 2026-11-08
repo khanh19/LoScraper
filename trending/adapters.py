@@ -89,6 +89,12 @@ class Adapter:
     def fetch(self, client, url):
         return client.get(url, self.hosts, render=self.slug == "ticketbox")
 
+    def parse_many(self, soup, url, now):
+        if self.config.get('roundups'):
+            from .entries import sections
+            return sections(self,soup,url,now)
+        return [self.parse(soup,url,now)]
+
     def parse(self, soup, url, now):
         body = soup.select_one(self.content_selector)
         objects = list(structured(soup))
@@ -110,7 +116,12 @@ class Adapter:
                       venue_name=venue, address=address, category=category(title + " " + text[:300]),
                       original_text=text[:2000], published_at=published or None,
                       verified_at=now.isoformat(), image_url=meta(soup, "og:image") or None,
-                      image_permitted=self.config.get("image_permission", False))
+                      image_permitted=False)
+        images=event.get('image',[]) if event else []
+        if not isinstance(images,list):images=[images]
+        images=[i.get('url') if isinstance(i,dict) else i for i in images]
+        if body:images += [urljoin(url,img['src']) for img in body.select('img[src]')]
+        c.image_association_verified=bool(c.image_url and c.image_url in images)
         if body is None and not event:
             c.reasons.append("missing_primary_content")
         if event:
@@ -212,8 +223,17 @@ class Grapevine(Adapter):
 
 
 class Fantasticity(Adapter):
+    def parse(self,soup,url,now):
+        c=super().parse(soup,url,now)
+        if not c.occurrences and not re.search(r'lễ hội|sự kiện|festival|event|workshop|triển lãm',c.title,re.I) and c.category in {'restaurant','cafe','bar','experience'}:
+            scoped=VnExpress(self.slug,self.config)
+            scoped.content_selector=self.content_selector
+            place=scoped.parse(soup,url,now)
+            if place.venue_name and place.address:return place
+        return c
+
     content_selector = ".entry-content, article, .detail-content, .post-content, .article-content, .news-detail-content"
-    link_pattern = r"/(?:vi|en)/(?:le-hoi-su-kien|ket-noi-nghe-thuat[^/]*|kham-pha|festivals-events)/[^/?]{12,}$"
+    link_pattern = r"/(?:vi|en)/(?:le-hoi-su-kien|ket-noi-nghe-thuat[^/]*|kham-pha|am-thuc|trai-nghiem|festivals-events|local-food|experiences)/[^/?]{12,}$"
 
     def links(self, soup, base):
         links = list(super().links(soup, base))
@@ -233,9 +253,9 @@ class VnExpress(Adapter):
             return c
         # Restrict prose extraction to the article's opening paragraphs. Related
         # stories, bylines, captions and site footers cannot supply an address.
-        paragraphs = [p.get_text(' ', strip=True) for p in body.select(':scope > p')][:4]
+        paragraphs = [p.get_text(' ', strip=True) for p in body.select(':scope > p')][:8]
         for paragraph in paragraphs:
-            match = re.match(r'^((?:Tiệm|Quán|Nhà hàng|Cà phê|Bánh mì)\s+[^,.;]{2,100}),?\s+(?:nằm|tọa lạc)\s+(?:trên|tại|ở)\s+(.+)', paragraph, re.I)
+            match = re.match(r'^((?:Tiệm|Quán|Nhà hàng|Cà phê|Bánh mì|Cafe|Coffee)\s+[^,.;]{2,100}?),?\s+(?:(?:nằm|tọa lạc|có địa chỉ)\s+)?(?:trên|tại|ở)\s+(.+)', paragraph, re.I)
             if not match:
                 continue
             name, location = match.groups()
@@ -342,26 +362,97 @@ class Nightlife(Adapter):
         return c
 
 
+class LifeOfDaNang(Adapter):
+    content_selector = 'main'
+    link_pattern = r'^/(?:vi/)?(?:danang/[^/]+|weekly(?:/[^/]+)?)$'
+
+    def links(self,soup,base):
+        links=list(super().links(soup,base))
+        if urlsplit(base).path.rstrip('/') in {'/weekly','/vi/weekly'}:
+            links.insert(0,base)
+        return iter(dict.fromkeys(links))
+
+    def parse_many(self,soup,url,now):
+        if urlsplit(url).path.rstrip('/') in {'/weekly','/vi/weekly'}:
+            from .entries import life_weekly
+            return life_weekly(self,soup,url,now)
+        c=self.parse(soup,url,now)
+        if re.search(r'\band (?:the )?(?:Da Nang|Museum|Gallery)\b',c.venue_name,re.I):
+            c.reasons.append('multiple_destinations_unresolved')
+        # The publisher emits one Event object per occurrence of the same event.
+        events=[e for e in structured(soup) if is_type(e,'Event')]
+        if events and all(e.get('name')==events[0].get('name') and e.get('location')==events[0].get('location') for e in events):
+            c.occurrences=[o for e in events if (o:=iso_occurrence(str(e.get('startDate','')),e.get('endDate')))]
+        return [c]
+
+
+class Saigoneer(VnExpress):
+    content_selector = 'article.content'
+    link_pattern = r'^/(?:vn/)?(?:saigon-street-food-restaurants|hanoi-street-food-restaurants|vietnam-street-food-restaurants|an-uong)/\d+[^/]+$'
+
+    def fetch(self,client,url):
+        return client.get(url,self.hosts)
+
+    def links(self,soup,base):
+        return Adapter.links(self,soup,base)
+
+    def parse(self,soup,url,now):
+        c=super().parse(soup,url,now)
+        body=soup.select_one(self.content_selector)
+        # Publisher's closing venue/address block, not article headline or sidebar.
+        if body and not c.city_slug:
+            lines=[p.get_text(' ',strip=True) for p in body.select('p')]
+            for i,line in enumerate(lines):
+                city=city_from_address(line)
+                if city and re.match(r'^\d+[\w/-]*\s+',line) and i>0:
+                    name=lines[i-1]
+                    if len(name)<120 and not city_from_address(name):
+                        c.venue_name,c.address,c.city_slug=name,line,city
+                        c.location_evidence=url
+                        c.category=c.category or category(name)
+        return c
+
+
 CLASSES = {"vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
-           "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo}
+           "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang, "saigoneer": Saigoneer}
 
 
 def load_sources():
     return json.loads(Path(__file__).with_name('sources.json').read_text())
 
 
-def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None):
+def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None, metrics=None):
     adapter = CLASSES[slug](slug, config)
+    metrics = metrics if metrics is not None else {}
+    metrics.update(listing_pages=0,detail_pages=0,extracted_entries=0)
     links = list(extra_urls)
     failures = []
-    for seed in config['seeds']:
+    seeds = list(config['seeds'])
+    for seed in seeds:
         heartbeat()
         try:
-            links.extend(adapter.links(adapter.fetch(client, seed), seed))
+            listing=adapter.fetch(client,seed)
+            metrics['listing_pages']+=1
+            found=list(adapter.links(listing,seed))
+            # Dated listing entries first; undated links retain publisher order.
+            dated=[]
+            for node in listing.select('article:has(time), [data-published]'):
+                dated.extend(adapter.links(node,seed))
+                parent=node.find_parent('a',href=True)
+                if parent:
+                    dated.extend(adapter.links(BeautifulSoup(str(parent),'html.parser'),seed))
+            links.extend(found if slug=='danangfantasticity' else dated+found)
+            next_page=listing.select_one('a[rel="next"][href]')
+            if next_page and len(seeds)<len(config['seeds'])*2:
+                target=canonical(urljoin(seed,next_page['href']))
+                if urlsplit(target).hostname in adapter.hosts and target not in seeds:seeds.append(target)
         except Exception as exc:
-            failures.append({"stage": "listing", "reason": type(exc).__name__})
+            failures.append({"stage": "listing", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
         heartbeat()
     links = list(dict.fromkeys(links))[:limit]
+    if slug == 'danangfantasticity':
+        # Reserve detail capacity for the individual activities linked by campaigns.
+        links = links[:max(1,limit-3)]
     if not links:
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
@@ -369,18 +460,27 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
         heartbeat()
         try:
             soup = adapter.fetch(client, url)
+            metrics['detail_pages']+=1
             # Official campaign pages link to individual activities. Discover
             # those pages within the same total detail-page budget.
             if slug == 'danangfantasticity':
                 for child in adapter.links(soup,url):
                     if child not in links and len(links) < limit:
                         links.append(child)
-            c = adapter.parse(soup, url, now)
-            if hasattr(adapter, 'enrich'):
-                c = adapter.enrich(c, soup, client, now)
-            candidates.append(c)
+            for c in adapter.parse_many(soup,url,now):
+                if isinstance(c,dict) and c.get('extraction_failure'):
+                    failures.append({'stage':'entry','reason':c['extraction_failure']})
+                    continue
+                try:
+                    if hasattr(adapter,'enrich'):c=adapter.enrich(c,soup,client,now)
+                    from .images import authorize
+                    authorize(c,now)
+                    candidates.append(c)
+                    metrics['extracted_entries']+=1
+                except Exception as exc:
+                    failures.append({'stage':'entry','reason':type(exc).__name__})
         except Exception as exc:
-            failures.append({"stage": "detail", "reason": type(exc).__name__})
+            failures.append({"stage": "detail", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
         heartbeat()
     return candidates, failures
 

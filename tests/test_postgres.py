@@ -26,7 +26,7 @@ class Persistence(unittest.TestCase):
         if p.hostname not in {'127.0.0.1','localhost'} or p.path not in {'/lo_trending_test','/lo_trending_guards_test'}:
             raise RuntimeError('Tests require the disposable local lo_trending_test database')
         cls.store=Store(URL)
-        cls.store.db.execute('DROP TABLE IF EXISTS discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
+        cls.store.db.execute('DROP TABLE IF EXISTS discovery_image_permissions,discovery_pilots,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
         # Use the existing parent-table DDL, not a mock of the new migration.
         baseline=(BACKEND/'supabase/migrations/20260523000001_onboarding.sql').read_text()
         for name in ['cities','places']:
@@ -41,7 +41,7 @@ class Persistence(unittest.TestCase):
     def tearDownClass(cls): cls.store.close()
 
     def setUp(self):
-        self.store.db.execute('TRUNCATE discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
+        self.store.db.execute('TRUNCATE discovery_image_permissions,discovery_pilots,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
         self.store.register('ticketbox','Ticketbox',True)
 
     def feed(self,now=NOW,city='hanoi',kind='all',limit=10):
@@ -170,13 +170,20 @@ class Persistence(unittest.TestCase):
 
     def test_observation_facts_control_every_display_field_and_social_cannot_replace(self):
         from psycopg.types.json import Jsonb
-        c=candidate();c.price_text='100.000đ';c.image_permitted=True;c.image_url='https://ticketbox.vn/a.jpg'
+        c=candidate();c.price_text='100.000đ';c.image_permitted=True;c.image_association_verified=True;c.image_url='https://ticketbox.vn/a.jpg'
+        def permission(source,image):
+            return dict(id=source,source_slug=source,scope='asset',image_url=image,creator='Test creator',
+                        license_name='Test license',license_url='https://example.org/license',
+                        evidence_url='https://example.org/permission',reviewed_at=NOW.isoformat())
+        c.image_permission=permission('ticketbox',c.image_url)
+        self.store.sync_image_permissions([c.image_permission,permission('ticketgo','https://ticketgo.vn/b.jpg')])
         item_id=self.store.upsert(c,NOW)
         d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_name='TicketGo';d.source_url='https://ticketgo.vn/event/test'
         self.store.register('ticketgo','TicketGo',True)
         self.store.upsert(d,NOW)
         d.title='Tên mới';d.venue_name='Địa điểm mới';d.address='20 Tràng Tiền, Hà Nội';d.price_text='200.000đ'
         d.verified_at=(NOW+timedelta(minutes=1)).isoformat();d.image_url='https://ticketgo.vn/b.jpg'
+        d.image_permission=permission('ticketgo',d.image_url)
         self.assertEqual(self.store.upsert(d,NOW),item_id)
         row=self.feed()[0]
         for field in ['title_vi','description_vi','venue_name','address','price_text','image_url']:
@@ -374,3 +381,59 @@ class Persistence(unittest.TestCase):
         d.occurrences.append(Occurrence((NOW-timedelta(days=2)).isoformat(),(NOW-timedelta(days=1)).isoformat()))
         self.store.upsert(d,NOW)
         self.assertEqual(len(self.feed()),1)
+
+    def test_roundup_entries_replay_disappearance_and_scoped_cancellation(self):
+        c=candidate();c.entry_key='anchor:a';first=self.store.upsert(c,NOW)
+        d=copy.deepcopy(c);d.entry_key='anchor:b';d.title='Second workshop';second=self.store.upsert(d,NOW)
+        self.assertNotEqual(first,second)
+        self.assertEqual(self.store.upsert(d,NOW),second)
+        self.assertEqual(len(self.feed()),2)
+        self.store.cancel(c.source_slug,c.source_url,NOW,c.entry_key)
+        self.assertEqual([x['id'] for x in self.feed()],[second])
+
+    def test_roundup_publication_cannot_rejuvenate_old_place(self):
+        c=candidate('place');c.entry_key='anchor:a';self.store.upsert(c,NOW)
+        c.published_at=(NOW+timedelta(days=8)).isoformat()
+        c.verified_at=c.published_at
+        with self.assertRaisesRegex(ValueError,'stale_roundup_evidence'):
+            self.store.upsert(c,NOW+timedelta(days=8))
+        row=self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()
+        self.assertEqual(row['verified_at'],NOW)
+
+    def test_roundup_same_destination_dedupes_source_links(self):
+        c=candidate();c.entry_key='anchor:a';first=self.store.upsert(c,NOW)
+        c.entry_key='anchor:b';self.assertEqual(self.store.upsert(c,NOW),first)
+        self.assertEqual(len(self.feed()[0]['sources']),1)
+
+    def test_pilot_caps_are_durable_and_platform_scoped(self):
+        self.store.db.execute("INSERT INTO discovery_pilots(id) VALUES ('coverage-20261108')")
+        for platform in ['facebook','instagram','tiktok']:
+            for n in range(3):
+                self.assertTrue(self.store.reserve('brightdata',f'{platform}-{n}',1,4500,4500,{'platform':platform},NOW,pilot_id='coverage-20261108'))
+            self.assertIsNone(self.store.reserve('brightdata',platform+'-overflow',1,4500,4500,{'platform':platform},NOW,pilot_id='coverage-20261108'))
+        for n in range(6):
+            self.assertTrue(self.store.reserve('serpapi',f'search-{n}',1,200,200,{},NOW,pilot_id='coverage-20261108'))
+        self.assertIsNone(self.store.reserve('serpapi','search-overflow',1,200,200,{},NOW,pilot_id='coverage-20261108'))
+        self.store.update_job('facebook-0','unknown')
+        old=self.store.reserve('brightdata','facebook-0',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108')
+        self.assertFalse(old['created_now'])
+        self.assertEqual(old['status'],'unknown')
+
+    def test_revoking_permission_hides_existing_image(self):
+        c=candidate();c.image_url='https://example.com/image.jpg';c.image_permitted=True;c.image_association_verified=True
+        p=dict(id='permitted',scope='asset',source_slug=c.source_slug,image_url=c.image_url,creator='Publisher',license_name='test',license_url='https://example.com/license',evidence_url='https://example.com/permission',reviewed_at=NOW.isoformat())
+        c.image_permission=p
+        self.store.sync_image_permissions([p]);self.store.upsert(c,NOW)
+        self.assertEqual(self.feed()[0]['image_url'],c.image_url)
+        self.store.sync_image_permissions([])
+        self.assertIsNone(self.feed()[0]['image_url'])
+
+    def test_concurrent_pilot_reservations_cannot_exceed_platform_cap(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.store.db.execute("INSERT INTO discovery_pilots(id) VALUES ('coverage-20261108')")
+        def reserve(n):
+            s=Store(URL)
+            try:return bool(s.reserve('brightdata',f'concurrent-{n}',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108'))
+            finally:s.close()
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            self.assertEqual(sum(pool.map(reserve,range(12))),3)

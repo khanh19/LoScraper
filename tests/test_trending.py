@@ -155,7 +155,7 @@ class FreeProviderGuards(unittest.TestCase):
                 with patch.dict(os.environ,{'BRIGHTDATA_API_KEY':'test-placeholder'}),patch('trending.providers.bright_preflight',return_value=(3,NOW.isoformat())):
                     with self.assertRaisesRegex(ProviderDisabled,'brightdata_job_pending'):
                         BrightSocial(store,request).collect('https://www.facebook.com/venue/posts/title/123',NOW)
-                self.assertEqual(request.call_args_list[0].kwargs['json']['limit_per_input'],1)
+                self.assertEqual(request.call_args_list[0].kwargs['params']['limit_per_input'],1)
                 self.assertEqual(request.call_args_list[1].args[0],'GET')
                 self.assertTrue(any(c.kwargs.get('provider_id')==snapshot for c in store.update_job.call_args_list))
 
