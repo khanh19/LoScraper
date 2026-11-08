@@ -1,0 +1,87 @@
+[
+  {
+    "start_seconds": 0,
+    "title": "01  Open Discover",
+    "detail": "Real local app + isolated API. Vietnamese cards show verified events and recent place mentions."
+  },
+  {
+    "start_seconds": 5.0,
+    "title": "02  Choose a city",
+    "detail": "Open the location picker and select Hanoi. The feed changes with the city."
+  },
+  {
+    "start_seconds": 11.85,
+    "title": "03  Filter events",
+    "detail": "Tap Sự kiện. Read the event title, venue, date in Vietnam time, address and evidence label."
+  },
+  {
+    "start_seconds": 17.8,
+    "title": "04  Browse the carousel",
+    "detail": "Scroll sideways to the next event. Ticket prices appear when verified in the source."
+  },
+  {
+    "start_seconds": 26.16,
+    "title": "05  Open the original source",
+    "detail": "Tap Nguồn on the card. The publisher opens in a new browser tab."
+  },
+  {
+    "start_seconds": 28.11,
+    "title": "06  Read publisher information",
+    "detail": "Original event page: dates, location and full information. This is the actual external website."
+  },
+  {
+    "start_seconds": 36.38,
+    "title": "07  Return and inspect image credits",
+    "detail": "Back in Lô, the photo is labelled Ảnh minh họa. Its credit is separate from event-source evidence."
+  },
+  {
+    "start_seconds": 41.36,
+    "title": "08  Follow the photo credit",
+    "detail": "The correct Unsplash asset link opens, but the external site denies access in this browser. The bundled illustration still works in Lô."
+  },
+  {
+    "start_seconds": 46.36,
+    "title": "09  Show recently mentioned places",
+    "detail": "Return to the app and tap Địa điểm. Fresh place mentions have their own evidence label."
+  },
+  {
+    "start_seconds": 52.35,
+    "title": "10  Open the matched venue",
+    "detail": "Tap Khám phá địa điểm. A confidently matched card opens the existing venue screen."
+  },
+  {
+    "start_seconds": 58.32,
+    "title": "11  Inspect available venue details",
+    "detail": "Read the stored address and venue information. Missing hours or other details are shown honestly."
+  },
+  {
+    "start_seconds": 63.58,
+    "title": "12  Return to Discover",
+    "detail": "Tap Discover in the bottom navigation to return to the trending feed."
+  },
+  {
+    "start_seconds": 67.52,
+    "title": "13  Switch to Ho Chi Minh City",
+    "detail": "Choose Ho Chi Minh City and Tất cả to browse its verified local events."
+  },
+  {
+    "start_seconds": 78.23,
+    "title": "14  Check an honest empty state",
+    "detail": "Tap Địa điểm. With no eligible recent place mentions, the app shows an empty state instead of fabricated cards."
+  },
+  {
+    "start_seconds": 83.17,
+    "title": "15  Refresh the feed",
+    "detail": "Tap Làm mới. The app fetches the stored feed again; it does not start scraping while you browse."
+  },
+  {
+    "start_seconds": 88.05,
+    "title": "16  Explore Da Nang",
+    "detail": "Select Da Nang and Tất cả. Read verified cultural events and the Dragon Bridge schedule."
+  },
+  {
+    "start_seconds": 100.05,
+    "title": "17  What this demo verifies",
+    "detail": "Real website-derived feed, filters, links and venue navigation. Social publication stays disabled; no production rollout or live Google search is claimed."
+  }
+]

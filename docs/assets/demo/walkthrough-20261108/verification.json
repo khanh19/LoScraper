@@ -1,0 +1,28 @@
+{
+  "recorded_at": "2026-11-08T06:00:04.506793+00:00",
+  "steps": 17,
+  "layout": "mobile web",
+  "captions": true,
+  "click_highlights": true,
+  "long_pauses_shortened": true,
+  "api_responses_mocked": false,
+  "local_api_responses": 16,
+  "local_api_non_200": 0,
+  "page_errors": [],
+  "feed_counts": {
+    "hanoi": 3,
+    "hcmc": 4,
+    "danang": 2
+  },
+  "external_source": "publisher_page_opened",
+  "external_image_credit": "Unsplash_access_denied_shown_and_labelled",
+  "playback": {
+    "duration": 105.375,
+    "width": 1280,
+    "height": 960,
+    "seek": 79.03125,
+    "error": null
+  },
+  "bytes": 1713986,
+  "sha256": "a9f16b20c4bf64a45761d0e1fde8349b98c6870a2c991fbdf3d7ab0ef7255a2c"
+}
