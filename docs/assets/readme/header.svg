@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="330" viewBox="0 0 1100 330" role="img" aria-labelledby="title desc">
+<title id="title">Lô! — LoScraper</title><desc id="desc">Real places. Fresh perspectives. Collect evidence. Verify the details. Keep it fresh.</desc>
+<rect x="1" y="1" width="1098" height="328" rx="20" fill="#f7f7f3" stroke="#d8d8d1"/>
+<path d="M700 34v262" stroke="#d8d8d1"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#171717">
+<text x="42" y="51" font-size="13" letter-spacing="2">LÔ! DISCOVER / 03 / COLLECTION</text>
+<text x="40" y="126" font-size="58" font-weight="700" letter-spacing="-2">LoScraper</text>
+<text x="42" y="173" font-size="23">Real places. Fresh perspectives.</text>
+<text x="42" y="210" font-size="16" fill="#5a5a54">Collect evidence. Verify the details. Keep it fresh.</text>
+<path d="M42 246h40" stroke="#171717" stroke-width="2"/>
+<text x="42" y="281" font-size="12" letter-spacing="1.5">HO CHI MINH CITY / HANOI / DA NANG</text>
+</g>
+<g fill="#fafaf8" stroke="#aaa"><rect x="750" y="66" width="67" height="66" rx="8"/><rect x="750" y="150" width="67" height="66" rx="8"/><rect x="858" y="108" width="70" height="66" rx="8"/><rect x="971" y="108" width="70" height="66" rx="8"/></g><g stroke="#171717" stroke-width="2" fill="none"><path d="M764 85h38m-38 10h30m-30 10h20m-20 64h38m-38 10h30m-30 10h20"/><path d="M817 99h18v42h23m-41 42h18v-42m93 0h43"/><path d="m875 140 11 11 21-24"/><path d="M984 126h43m-43 12h43m-43 12h28"/></g><g font-family="Arial, sans-serif" font-size="13" fill="#60605b"><text x="750" y="245">SOURCES</text><text x="866" y="202">VERIFY</text><text x="981" y="202">FEED</text></g>
+</svg>
