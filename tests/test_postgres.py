@@ -26,7 +26,7 @@ class Persistence(unittest.TestCase):
         if p.hostname not in {'127.0.0.1','localhost'} or p.path not in {'/lo_trending_test','/lo_trending_guards_test'}:
             raise RuntimeError('Tests require the disposable local lo_trending_test database')
         cls.store=Store(URL)
-        cls.store.db.execute('DROP TABLE IF EXISTS discovery_bookmarks,discovery_image_permissions,discovery_pilots,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
+        cls.store.db.execute('DROP TABLE IF EXISTS discovery_engine_evidence,discovery_engine_requests,discovery_leads,discovery_verified_venues,discovery_publisher_accounts,discovery_bookmarks,discovery_image_permissions,discovery_pilots,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
         cls.store.db.execute((BACKEND/'supabase/migrations/20260422000001_init_auth.sql').read_text())
         # Use the existing parent-table DDL, not a mock of the new migration.
         baseline=(BACKEND/'supabase/migrations/20260523000001_onboarding.sql').read_text()
@@ -42,7 +42,7 @@ class Persistence(unittest.TestCase):
     def tearDownClass(cls): cls.store.close()
 
     def setUp(self):
-        self.store.db.execute('TRUNCATE discovery_bookmarks,discovery_image_permissions,discovery_pilots,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
+        self.store.db.execute('TRUNCATE discovery_leads,discovery_verified_venues,discovery_publisher_accounts,discovery_bookmarks,discovery_image_permissions,discovery_pilots,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
         self.store.register('ticketbox','Ticketbox',True)
 
     def feed(self,now=NOW,city='hanoi',kind='all',limit=10):
@@ -167,7 +167,7 @@ class Persistence(unittest.TestCase):
         self.assertEqual(self.feed()[0]['evidence_label'],'Mới được nhắc đến')
         d.original_text='An independently authored review with new evidence'
         self.store.upsert(d,NOW)
-        self.assertEqual(self.feed()[0]['evidence_label'],'Đang được quan tâm')
+        self.assertEqual(self.feed()[0]['attention_label'],'Đang được quan tâm')
 
     def test_observation_facts_control_every_display_field_and_social_cannot_replace(self):
         from psycopg.types.json import Jsonb
@@ -438,3 +438,55 @@ class Persistence(unittest.TestCase):
             finally:s.close()
         with ThreadPoolExecutor(max_workers=6) as pool:
             self.assertEqual(sum(pool.map(reserve,range(12))),3)
+
+    def test_timely_windows_ongoing_and_planning(self):
+        from trending.model import Occurrence
+        for days,section in [(6,'weekly'),(7,'planning'),(29,'planning')]:
+            c=candidate();c.source_url+=str(days);c.title+=str(days)
+            c.occurrences=[Occurrence((NOW+timedelta(days=days)).isoformat(),(NOW+timedelta(days=days,hours=2)).isoformat())]
+            item=self.store.upsert(c,NOW)
+            row=self.store.db.execute("SELECT payload FROM discovery_evaluate_all(%s,'hanoi') WHERE item_id=%s::uuid AND reason='eligible'",(NOW,item)).fetchone()
+            self.assertEqual(row['payload']['section'],section)
+            if section=='planning':self.assertNotIn(item,[x['id'] for x in self.feed()])
+        c=candidate();c.occurrences=[Occurrence((NOW-timedelta(hours=1)).isoformat(),(NOW+timedelta(hours=1)).isoformat())]
+        item=self.store.upsert(c,NOW)
+        self.assertEqual(next(x for x in self.feed() if x['id']==item)['timing_status'],'ongoing')
+        # A changed evaluation clock must not rejuvenate evidence.
+        self.assertEqual(self.feed(NOW+timedelta(hours=73)),[])
+
+    def test_social_authority_requires_reviewed_account_venue_and_gate(self):
+        c=candidate();c.platform='instagram';c.source_slug='instagram';c.source_url='https://www.instagram.com/p/sample'
+        c.owner_key='organizer';c.authority_type='organizer'
+        self.store.register('instagram','Instagram',True,'instagram')
+        self.store.db.execute("INSERT INTO discovery_publisher_accounts(publisher_id,platform,owner_key,name,ownership_evidence_url,reviewed_at) VALUES('org','instagram','organizer','Org','https://example.com/official',%s)",(NOW,))
+        v=self.store.db.execute("INSERT INTO discovery_verified_venues(publisher_id,name,address,city_slug,evidence_url,reviewed_at) VALUES('org',%s,%s,'hanoi','https://example.com/location',%s) RETURNING id",(c.venue_name,c.address,NOW)).fetchone()['id']
+        c.verified_venue_id=str(v);item=self.store.upsert(c,NOW)
+        self.assertEqual(self.feed(),[])
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET publication_enabled=true")
+        self.assertEqual(self.feed()[0]['authority_type'],'organizer')
+        self.store.db.execute('UPDATE discovery_verified_venues SET revoked=true')
+        self.assertEqual(self.feed(),[])
+        self.store.db.execute('UPDATE discovery_verified_venues SET revoked=false')
+        # A website disagreeing about the full session holds the same event.
+        d=candidate();d.occurrences[0].ends_at=(NOW+timedelta(days=1,hours=3)).isoformat()
+        self.assertEqual(self.store.upsert(d,NOW),item)
+        self.assertEqual(self.feed(),[])
+        result=self.store.db.execute("SELECT reason,payload FROM discovery_evaluate_all(%s,'hanoi') WHERE item_id=%s::uuid",(NOW,item)).fetchone()
+        self.assertEqual(result['reason'],'unresolved_sessions');self.assertIsNone(result['payload'])
+
+    def test_publisher_aliases_do_not_inflate_attention(self):
+        c=candidate('place');c.original_text='Original review';self.store.upsert(c,NOW)
+        d=copy.deepcopy(c);d.source_slug='sister';d.source_url='https://example.com/sister';d.original_text='Different version of same owner review'
+        self.store.register('sister','Sister',True);self.store.upsert(d,NOW)
+        for owner in ['ticketbox','sister']:
+            self.store.db.execute("INSERT INTO discovery_publisher_accounts(publisher_id,platform,owner_key,name,ownership_evidence_url,reviewed_at) VALUES('same-org','web',%s,'Org','https://example.com/ownership',%s)",(owner,NOW))
+        self.assertIsNone(self.feed()[0]['attention_label'])
+        self.assertEqual(self.feed()[0]['independent_mentions'],1)
+
+    def test_pilot_trailing_slash_reuses_completed_record(self):
+        self.store.db.execute("INSERT INTO discovery_pilots(id) VALUES('coverage-20261108')")
+        self.store.reserve('brightdata','legacy-url',1,4500,4500,{'url':'https://www.instagram.com/p/example/','platform':'instagram'},NOW,pilot_id='coverage-20261108')
+        self.store.update_job('legacy-url','complete',result=[{'url':'https://www.instagram.com/p/example/'}])
+        def never(*a,**k):raise AssertionError('must reuse persisted result')
+        with patch.dict(os.environ,{'BRIGHTDATA_API_KEY':'test'}):
+            self.assertEqual(len(BrightSocial(self.store,never,pilot_id='coverage-20261108').collect('https://www.instagram.com/p/example',NOW)),1)
