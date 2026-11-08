@@ -132,3 +132,11 @@ Preview: `http://localhost:8083/tabs/explore`, API `http://localhost:4101`. Coll
 - [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search) and [evaluation guidance](https://developers.openai.com/api/docs/guides/evaluation-best-practices).
 - [YouTube quota costs](https://developers.google.com/youtube/data/determine_quota_cost), [caption permissions](https://developers.google.com/youtube/v3/docs/captions/download), [developer policies](https://developers.google.com/youtube/terms/developer-policies).
 - [Apify run limits](https://docs.apify.com/api/v2/actors-runs-post), [account limits](https://docs.apify.com/account/limits), [TikTok Actor](https://apify.com/clockworks/tiktok-scraper).
+
+## Workflow visuals and recorded demonstration
+
+![Complete pipeline and technology stack](assets/workflows/whats-trending-tech-stack-workflow-20261108.png)
+
+[Live collection walkthrough](demo.md) · [Minimal two-phase diagram](assets/workflows/whats-trending-minimal-workflow-20261108.png) · [Hand-drawn detailed diagram](assets/workflows/whats-trending-multimodal-workflow-20261108.png)
+
+The diagrams describe implementation and current gates, not successful social publication. Website adapters feed eligibility directly; AI extraction/judging is the social pilot path. PostgreSQL supplies the Encore API, which supplies the app. Operations/reporting are supporting services. Phone cards in diagrams are illustrative. The recorded demo uses actual website data; it does not establish improved social coverage.
