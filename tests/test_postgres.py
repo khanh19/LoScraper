@@ -32,7 +32,9 @@ class Persistence(unittest.TestCase):
         for name in ['cities','places']:
             ddl=re.search(r'CREATE TABLE IF NOT EXISTS public\.'+name+r' \([\s\S]*?\n\);',baseline).group()
             cls.store.db.execute(ddl)
-        cls.store.db.execute((BACKEND/'supabase/migrations/20261108060000_discovery_trending.sql').read_text())
+        cls.store.db.execute('DROP FUNCTION IF EXISTS public.discovery_evaluate(timestamptz,text)')
+        for migration in sorted((BACKEND/'supabase/migrations').glob('*_discovery_*.sql')):
+            cls.store.db.execute(migration.read_text())
         cls.sql=(BACKEND/'discovery/trending.sql').read_text()
 
     @classmethod
@@ -165,3 +167,210 @@ class Persistence(unittest.TestCase):
         d.original_text='An independently authored review with new evidence'
         self.store.upsert(d,NOW)
         self.assertEqual(self.feed()[0]['evidence_label'],'Đang được quan tâm')
+
+    def test_observation_facts_control_every_display_field_and_social_cannot_replace(self):
+        from psycopg.types.json import Jsonb
+        c=candidate();c.price_text='100.000đ';c.image_permitted=True;c.image_url='https://ticketbox.vn/a.jpg'
+        item_id=self.store.upsert(c,NOW)
+        d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_name='TicketGo';d.source_url='https://ticketgo.vn/event/test'
+        self.store.register('ticketgo','TicketGo',True)
+        self.store.upsert(d,NOW)
+        d.title='Tên mới';d.venue_name='Địa điểm mới';d.address='20 Tràng Tiền, Hà Nội';d.price_text='200.000đ'
+        d.verified_at=(NOW+timedelta(minutes=1)).isoformat();d.image_url='https://ticketgo.vn/b.jpg'
+        self.assertEqual(self.store.upsert(d,NOW),item_id)
+        row=self.feed()[0]
+        for field in ['title_vi','description_vi','venue_name','address','price_text','image_url']:
+            self.assertEqual(row[field],d.payload()[field])
+        self.assertEqual(row['image_source']['url'],d.source_url)
+        self.assertEqual(row['sources'][0]['url'],d.source_url)
+        from datetime import datetime
+        self.assertEqual(datetime.fromisoformat(row['next_occurrence']['starts_at']),datetime.fromisoformat(d.occurrences[0].starts_at))
+        self.assertIsNone(row['place_id'])
+        social=copy.deepcopy(c);social.source_slug='tiktok';social.platform='tiktok';social.source_url='https://www.tiktok.com/@test/video/123'
+        self.store.register('tiktok','TikTok',True,'tiktok')
+        self.store.upsert(social,NOW)
+        before=self.feed()[0]
+        self.store.db.execute("UPDATE discovery_observations SET facts=%s,verified_at=%s WHERE source_slug='tiktok'",
+            (Jsonb(dict(version=1,title_vi='Wrong social title')),NOW+timedelta(minutes=2)))
+        self.assertEqual(self.feed()[0]['title_vi'],before['title_vi'])
+        # A missing/invalid snapshot falls back to a complete website observation.
+        self.store.db.execute("UPDATE discovery_observations SET facts=facts-'address' WHERE source_slug='ticketgo'")
+        self.assertEqual(self.feed()[0]['title_vi'],c.payload()['title_vi'])
+
+    def test_equal_verification_tie_and_legacy_facts_are_withheld(self):
+        c=candidate();self.store.upsert(c,NOW)
+        self.store.register('aaa','First',True)
+        d=copy.deepcopy(c);d.source_slug='aaa';d.source_url='https://ticketgo.vn/event/tie'
+        self.store.upsert(d,NOW)
+        d.price_text='Tie winner';self.store.upsert(d,NOW)
+        self.assertEqual(self.feed()[0]['price_text'],'Tie winner')
+        self.store.db.execute("UPDATE discovery_observations SET facts='{}'")
+        self.assertEqual(self.feed(),[])
+        self.assertEqual(self.store.db.execute('SELECT reason FROM discovery_evaluate(%s,%s)',(NOW,'hanoi')).fetchone()['reason'],'incomplete_facts')
+        self.store.upsert(c,NOW)
+        self.assertEqual(len(self.feed()),1)
+
+    def test_identity_conflict_does_not_change_existing_verification(self):
+        c=candidate();item=self.store.upsert(c,NOW)
+        c.kind='place';c.occurrences=[];c.verified_at=(NOW+timedelta(minutes=1)).isoformat()
+        with self.assertRaisesRegex(ValueError,'identity_conflict'):self.store.upsert(c,NOW)
+        c.kind='event';c.occurrences=candidate().occurrences;c.city_slug='danang';c.address='10 Hải Phòng, Đà Nẵng'
+        with self.assertRaisesRegex(ValueError,'identity_conflict'):self.store.upsert(c,NOW)
+        row=self.store.db.execute('SELECT verified_at FROM discovery_observations WHERE item_id=%s',(item,)).fetchone()
+        self.assertEqual(row['verified_at'],NOW)
+        self.assertEqual(len(self.feed()),1)
+
+    def test_whole_schedule_requires_symmetric_coverage(self):
+        from trending.model import Occurrence
+        c=candidate();second=Occurrence((NOW+timedelta(days=2)).isoformat(),(NOW+timedelta(days=2,hours=2)).isoformat())
+        c.occurrences.append(second);self.store.upsert(c,NOW)
+        self.store.register('ticketgo','TicketGo',True)
+        d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_url='https://ticketgo.vn/event/test'
+        d.occurrences=d.occurrences[:1];self.store.upsert(d,NOW)
+        self.assertEqual(self.feed(),[])
+        self.assertEqual(self.store.db.execute('SELECT reason FROM discovery_evaluate(%s,%s)',(NOW,'hanoi')).fetchone()['reason'],'unresolved_sessions')
+        d.occurrences.append(copy.deepcopy(second));self.store.upsert(d,NOW)
+        self.assertEqual(len(self.feed()),1)
+        d.occurrences[1].ends_at=(NOW+timedelta(days=2,hours=3)).isoformat();self.store.upsert(d,NOW)
+        self.assertEqual(self.feed(),[])
+        # An empty relevant set cannot corroborate a nonempty one.
+        self.store.db.execute("DELETE FROM discovery_occurrences WHERE observation_id IN (SELECT id FROM discovery_observations WHERE source_slug='ticketgo')")
+        self.assertEqual(self.feed(),[])
+
+    def test_date_only_must_contain_full_timed_session_and_equivalent_timezones(self):
+        from datetime import datetime, timezone
+        from trending.model import ICT, Occurrence
+        c=candidate();self.store.upsert(c,NOW)
+        self.store.register('ticketgo','TicketGo',True)
+        d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_url='https://ticketgo.vn/event/test'
+        for o in d.occurrences:
+            o.starts_at=datetime.fromisoformat(o.starts_at).astimezone(ICT).isoformat()
+            o.ends_at=datetime.fromisoformat(o.ends_at).astimezone(ICT).isoformat()
+        self.store.upsert(d,NOW);self.assertEqual(len(self.feed()),1)
+        day=datetime.fromisoformat(d.occurrences[0].starts_at).replace(hour=0,minute=0)
+        d.occurrences=[Occurrence(day.isoformat(),(day+timedelta(days=1)).isoformat(),'date')]
+        self.store.upsert(d,NOW);self.assertEqual(len(self.feed()),1)
+        # date evidence ending during a timed session is insufficient.
+        d.occurrences[0].ends_at=(NOW+timedelta(days=1,hours=1)).isoformat()
+        self.store.upsert(d,NOW);self.assertEqual(self.feed(),[])
+
+    def test_health_agrees_with_api_and_is_read_only(self):
+        from trending.health import report
+        self.store.upsert(candidate('place'),NOW)
+        run=self.store.start_run(['ticketbox'],['hanoi'],'ticketbox')
+        self.store.db.execute('UPDATE discovery_ingestion_runs SET heartbeat_at=%s WHERE id=%s',(NOW-timedelta(minutes=31),run))
+        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=49))
+        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=49))))
+        self.assertEqual(len(health['cities']['hanoi']['losing_last_fresh_evidence_within_24h']),1)
+        self.assertTrue(health['cities']['danang']['empty'])
+        self.assertEqual(health['runs'][0]['status'],'interrupted')
+        self.assertEqual(self.store.db.execute('SELECT status FROM discovery_ingestion_runs WHERE id=%s',(run,)).fetchone()['status'],'running')
+        self.assertIn('NOT a live',health['provider_accounting']['label'])
+
+    def test_transaction_failure_rolls_back_observation_and_keeps_other_items(self):
+        c=candidate();self.store.upsert(c,NOW)
+        old=self.store.db.execute('SELECT verified_at,facts FROM discovery_observations').fetchone()
+        self.store.db.execute("""CREATE FUNCTION pg_temp.reject_occurrence() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'injected failure'; END $$""")
+        self.store.db.execute('CREATE TRIGGER reject_occurrence BEFORE INSERT ON discovery_occurrences FOR EACH ROW EXECUTE FUNCTION pg_temp.reject_occurrence()')
+        try:
+            c.verified_at=(NOW+timedelta(minutes=1)).isoformat();c.price_text='should roll back'
+            with self.assertRaises(psycopg.Error):self.store.upsert(c,NOW)
+        finally:
+            self.store.db.execute('DROP TRIGGER reject_occurrence ON discovery_occurrences')
+        self.assertEqual(self.store.db.execute('SELECT verified_at,facts FROM discovery_observations').fetchone(),old)
+        self.assertEqual(len(self.feed()),1)
+
+    def test_connection_loss_reconnects_once_without_retrying_write(self):
+        from trending.progress import Progress
+        progress=Progress(self.store,['ticketbox'],['hanoi'])
+        progress.start_source('ticketbox')
+        self.store.db.close()
+        with patch.object(self.store,'upsert',wraps=self.store.upsert) as upsert:
+            ok,_=progress.call('upsert',candidate(),NOW)
+            self.assertFalse(ok);self.assertEqual(upsert.call_count,1)
+        self.assertTrue(progress.available);self.assertTrue(progress.reconnect_attempted)
+        self.assertTrue(progress.call('upsert',candidate(),NOW)[0])
+        self.store.db.close()
+        self.assertFalse(progress.call('upsert',candidate(),NOW)[0])
+        self.assertFalse(progress.available)
+        self.store.reconnect()  # restore the test fixture only, not the run
+        self.assertEqual(len(self.feed()),1)
+
+    def test_run_continues_after_bad_candidate_failed_write_and_source(self):
+        from argparse import Namespace
+        from contextlib import redirect_stdout
+        from datetime import datetime
+        import io
+        from trending.__main__ import run
+        args=Namespace(sources='ticketbox,ticketgo',city=None,pilot=True,write_db=True,browser=False,
+                       supplemental=False,providers=False,limit=12,out=None)
+        class Clock:
+            @staticmethod
+            def now(tz):return NOW
+        good=candidate();bad=candidate();bad.title=None
+        write_bad=candidate();write_bad.source_url='https://ticketbox.vn/failed'
+        other=candidate('place');other.source_url='https://ticketbox.vn/other'
+        calls=[]
+        real_upsert=self.store.upsert
+        def upsert(c,now):
+            calls.append(c.source_url)
+            if c.source_url.endswith('/failed'):raise psycopg.DataError('secret must never be printed')
+            return real_upsert(c,now)
+        def collect(slug,*args,**kwargs):
+            kwargs['heartbeat']()
+            # Receipts already exist while collection is in progress.
+            self.assertEqual(self.store.db.execute("SELECT count(*) AS n FROM discovery_ingestion_runs WHERE status='running'").fetchone()['n'],2)
+            if slug=='ticketgo':raise RuntimeError('parser exception with secret')
+            return [good,bad,write_bad,other],[]
+        output=io.StringIO()
+        with patch.dict(os.environ,{'DATABASE_URL':URL}),patch('trending.__main__.datetime',Clock),\
+             patch('trending.__main__.Store',return_value=self.store),patch.object(self.store,'close'),\
+             patch('trending.__main__.PublicClient'),patch('trending.__main__.collect_source',side_effect=collect),\
+             patch.object(self.store,'upsert',side_effect=upsert),redirect_stdout(output):
+            result=run(args)
+        self.assertEqual(result['status'],'partial')
+        self.assertEqual(result['sources']['ticketbox']['accepted'],2)
+        self.assertEqual(result['sources']['ticketbox']['failed'],2)
+        self.assertEqual(result['sources']['ticketgo']['status'],'failed')
+        self.assertEqual(len(self.feed()),2)
+        self.assertEqual(calls.count(write_bad.source_url),1)
+        self.assertNotIn('secret',output.getvalue())
+        self.assertEqual(self.store.db.execute('SELECT status FROM discovery_ingestion_runs WHERE id=%s',(result['run_id'],)).fetchone()['status'],'partial')
+
+    def test_primary_place_match_and_price_follow_selected_observation(self):
+        c=candidate();self.store.upsert(c,NOW)
+        self.store.register('ticketgo','TicketGo',True)
+        d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_url='https://ticketgo.vn/event/test'
+        self.store.upsert(d,NOW)
+        city=self.store.db.execute("INSERT INTO cities(slug,name,country_code) VALUES ('hanoi','Hanoi','VN') ON CONFLICT(slug) DO UPDATE SET name=excluded.name RETURNING id").fetchone()['id']
+        place=self.store.db.execute("INSERT INTO places(city_id,source,name,address) VALUES (%s,'curated','New venue','20 Tràng Tiền, Hà Nội') RETURNING id",(city,)).fetchone()['id']
+        try:
+            d.venue_name='New venue';d.address='20 Tràng Tiền, Hà Nội';d.price_text='250.000đ'
+            d.verified_at=(NOW+timedelta(minutes=1)).isoformat();self.store.upsert(d,NOW)
+            row=self.feed()[0]
+            self.assertEqual(row['place_id'],str(place));self.assertEqual(row['price_text'],d.price_text)
+            self.assertEqual(row['venue_name'],d.venue_name)
+            c.verified_at=(NOW+timedelta(minutes=2)).isoformat();self.store.upsert(c,NOW)
+            row=self.feed()[0]
+            self.assertIsNone(row['place_id']);self.assertIsNone(row['price_text'])
+            self.assertEqual(row['venue_name'],c.venue_name)
+        finally:
+            self.store.db.execute('DELETE FROM places WHERE id=%s',(place,))
+
+    def test_health_detects_publication_expiry_even_with_new_verification(self):
+        from trending.health import report
+        c=candidate('place');c.published_at=(NOW-timedelta(days=6,hours=12)).isoformat()
+        self.store.upsert(c,NOW)
+        health=report(self.store.db,['hanoi'],NOW)
+        self.assertEqual(len(health['cities']['hanoi']['losing_last_fresh_evidence_within_24h']),1)
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=13)),[])
+
+    def test_expired_sessions_do_not_conflict_with_the_upcoming_window(self):
+        from trending.model import Occurrence
+        c=candidate();self.store.upsert(c,NOW)
+        self.store.register('ticketgo','TicketGo',True)
+        d=copy.deepcopy(c);d.source_slug='ticketgo';d.source_url='https://ticketgo.vn/event/test'
+        d.occurrences.append(Occurrence((NOW-timedelta(days=2)).isoformat(),(NOW-timedelta(days=1)).isoformat()))
+        self.store.upsert(d,NOW)
+        self.assertEqual(len(self.feed()),1)

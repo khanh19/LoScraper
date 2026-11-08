@@ -1,5 +1,7 @@
 # Verified local discovery
 
+> **Reliability update:** see [migration order, operator health, and current validation](reliability.md). The 55-test / 8-item website snapshot supersedes the earlier test and feed counts below; provider pilot history is unchanged.
+
 Start with the [teammate setup guide](teammate-setup.md) and [tool/status matrix](tool-status.md). This page explains the pipeline and retains the dated end-to-end evidence.
 
 ![Lô What’s Trending workflow: sources, normalization, validation, database updates, API delivery, app rendering, and refresh controls.](assets/trending-workflow-hand-drawn.png)

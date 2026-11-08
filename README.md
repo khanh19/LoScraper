@@ -19,6 +19,8 @@
 
 Turn local source pages into places people can actually visit. LoScraper collects and verifies events and recently mentioned destinations for **What’s Trending** in Ho Chi Minh City, Hanoi, and Da Nang.
 
+**[Reliability update and operator health](docs/reliability.md)** — migration order, failure recovery, and fresh validation evidence.
+
 **[Watch the actual 45-second demo](docs/demo.md)** — cities, filters, real API results, and venue navigation.
 
 ## From source to screen

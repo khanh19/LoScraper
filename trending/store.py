@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import uuid4
 
 import psycopg
 from psycopg.rows import dict_row
@@ -11,7 +12,17 @@ from .model import Candidate
 
 class Store:
     def __init__(self, url):
-        self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+        self.url = url
+        self.initial_reconnect = False
+        try:
+            self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            self.initial_reconnect = True
+            self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+
+    def reconnect(self):
+        self.db.close()
+        self.db = psycopg.connect(self.url, connect_timeout=10, autocommit=True, row_factory=dict_row)
 
     def close(self):
         self.db.close()
@@ -28,8 +39,10 @@ class Store:
         p = c.payload()
         with self.db.transaction():
             self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
-            known = self.db.execute("SELECT item_id FROM discovery_observations WHERE source_slug=%s AND source_url=%s",
+            known = self.db.execute("SELECT o.item_id,i.kind,i.city_slug FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id WHERE source_slug=%s AND source_url=%s",
                                     (c.source_slug,c.source_url)).fetchone()
+            if known and (known['kind'] != c.kind or known['city_slug'] != c.city_slug):
+                raise ValueError('identity_conflict')
             existing = known or self.db.execute("SELECT id AS item_id FROM discovery_items WHERE fingerprint=%s",(p['fingerprint'],)).fetchone()
             # Only match an existing place when name AND address AND city agree.
             places = self.db.execute("""SELECT p.id FROM places p JOIN cities c ON c.id=p.city_id
@@ -37,9 +50,14 @@ class Store:
                   AND lower(trim(p.address))=lower(trim(%s)) LIMIT 2""",(c.city_slug,c.venue_name,c.address)).fetchall()
             place_id = places[0]['id'] if len(places)==1 else None
             values = (c.kind,c.city_slug,c.category,p['title_vi'],p['description_vi'],c.title,c.venue_name,c.address,place_id)
+            facts = dict(version=1, kind=c.kind, city_slug=c.city_slug, category=c.category,
+                         title_vi=p['title_vi'], description_vi=p['description_vi'], original_title=c.title,
+                         venue_name=c.venue_name, address=c.address, price_text=c.price_text,
+                         place_id=str(place_id) if place_id else None)
             if existing:
                 item_id = existing['item_id']
-                self.db.execute("""UPDATE discovery_items SET kind=%s,city_slug=%s,category=%s,title_vi=%s,
+                if c.platform == "web":
+                    self.db.execute("""UPDATE discovery_items SET kind=%s,city_slug=%s,category=%s,title_vi=%s,
                     description_vi=%s,original_title=%s,venue_name=%s,address=%s,place_id=%s,updated_at=now() WHERE id=%s""",(*values,item_id))
             else:
                 item_id = self.db.execute("""INSERT INTO discovery_items(kind,city_slug,category,title_vi,description_vi,
@@ -57,7 +75,7 @@ class Store:
                         THEN discovery_observations.verified_at ELSE discovery_observations.previous_observed_at END,
                     metrics=excluded.metrics,verified_at=excluded.verified_at,status='active',image_url=excluded.image_url,facts=excluded.facts
                 RETURNING id""",(item_id,c.source_slug,c.source_url,p['owner_key'],p['content_hash'],p['original_text'],c.location_evidence,
-                                 c.published_at,c.verified_at,p['image_url'],Jsonb(c.metrics),Jsonb({'price_text':c.price_text}))).fetchone()['id']
+                                 c.published_at,c.verified_at,p['image_url'],Jsonb(c.metrics),Jsonb(facts))).fetchone()['id']
             # Replace occurrences for THIS successfully parsed page only, inside its transaction.
             self.db.execute("DELETE FROM discovery_occurrences WHERE observation_id=%s",(observation_id,))
             for o in c.occurrences:
@@ -69,11 +87,26 @@ class Store:
         self.db.execute("""UPDATE discovery_observations SET status='cancelled',verified_at=%s
             WHERE source_slug=%s AND source_url=%s""",(now,source_slug,url))
 
-    def receipt(self, source, city, accepted, rejected, failures, reasons, started):
+    def start_run(self, sources, cities, source='__run__', parent_id=None):
+        run_id = str(uuid4())
         self.db.execute("""INSERT INTO discovery_ingestion_runs
-            (source_slug,city_slug,started_at,finished_at,status,accepted,rejected,diagnostics)
-            VALUES (%s,%s,%s,now(),%s,%s,%s,%s)""",
-            (source,city,started,'partial' if failures else 'complete',accepted,rejected,Jsonb({'failures':failures,'reasons':reasons})))
+            (id,source_slug,city_slug,status,heartbeat_at,requested_cities,requested_sources,diagnostics)
+            VALUES (%s,%s,%s,'running',now(),%s,%s,%s)""",
+            (run_id,source,cities[0] if len(cities)==1 else None,cities,sources,
+             Jsonb({'parent_id':parent_id} if parent_id else {})))
+        return run_id
+
+    def progress(self, run_id, accepted, rejected, failed, diagnostics, status='running'):
+        self.db.execute("""UPDATE discovery_ingestion_runs SET heartbeat_at=now(),
+            accepted=%s,rejected=%s,failed=%s,diagnostics=%s,status=%s,
+            finished_at=CASE WHEN %s='running' THEN NULL ELSE COALESCE(finished_at,now()) END WHERE id=%s""",
+            (accepted,rejected,failed,Jsonb(diagnostics),status,status,run_id))
+
+    def receipt(self, source, city, accepted, rejected, failures, reasons, started):
+        # Compatibility for callers writing a finished receipt.
+        run_id = self.start_run([source], [city] if city else [], source)
+        self.progress(run_id,accepted,rejected,len(failures),
+                      {'failures':failures,'reasons':reasons},'partial' if failures else 'complete')
 
     def reserve(self, provider, key, units, cap, remaining, inputs, now, verified_at=None):
         month = now.date().replace(day=1)

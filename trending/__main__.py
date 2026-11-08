@@ -13,6 +13,7 @@ from .http import PublicClient
 from .model import CITIES
 from .providers import BrightSocial, ProviderDisabled, SerpDiscovery, post_platform, social_evidence
 from .store import Store
+from .progress import Progress
 
 
 def load_env_files(paths):
@@ -46,11 +47,12 @@ def run(args):
         raise ValueError('Pilot imports require a local test database')
     store = Store(url) if url and (args.write_db or args.providers) else None
     client = PublicClient(browser=args.browser)
-    report = {'generated_at':now.isoformat(),'pilot':args.pilot,'sources':{},'accepted':[],'rejected':[], 'providers':{}}
+    progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES))
+    report = {'run_id':progress.run_id,'generated_at':now.isoformat(),'pilot':args.pilot,'sources':{},'accepted':[],'rejected':[], 'providers':{}}
     try:
-        if store and args.write_db:
+        if store and args.write_db and args.providers:
             for platform in ['facebook','tiktok','instagram']:
-                store.register(platform,platform.title(),bool(args.pilot or configs.get(platform,{}).get('enabled',False)),platform)
+                progress.call('register',platform,platform.title(),bool(args.pilot or configs.get(platform,{}).get('enabled',False)),platform)
         extra = supplemental_links(client, configs) if args.supplemental else {s:[] for s in selected}
         if args.providers and store:
             search = SerpDiscovery(store)
@@ -67,35 +69,55 @@ def run(args):
             config = configs[slug]
             if not config['enabled'] and not args.pilot:
                 if store and args.write_db:
-                    store.register(slug,config['name'],False)
+                    progress.call('register',slug,config['name'],False)
                 report['sources'][slug] = {'status':'disabled_pending_pilot'}
                 continue
+            stats = progress.start_source(slug)
             if store and args.write_db:
-                store.register(slug, config['name'], True)
-            candidates, failures = collect_source(slug, config, client, now, args.limit, extra.get(slug, []))
-            reasons = Counter()
-            accepted = rejected = 0
+                ok, _ = progress.call('register',slug,config['name'],True)
+                if not ok:
+                    progress.fail('source_registration_failed')
+            try:
+                candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
+                                                      heartbeat=progress.heartbeat)
+            except Exception as exc:
+                candidates, failures = [], [{'stage':'source','reason':type(exc).__name__}]
+            stats['failures'] = failures
+            for failure in failures:
+                progress.fail(failure['reason'])
+            progress.heartbeat()
             for c in candidates:
-                if args.city and c.city_slug and c.city_slug != args.city:
+                city = getattr(c,'city_slug',None)
+                if args.city and city and city != args.city:
                     continue
-                invalid = c.validate(now)
-                if invalid:
-                    rejected += 1
-                    reasons.update(invalid)
-                    report['rejected'].append({'source':slug,'url':c.source_url,'title':c.title,'reasons':invalid})
-                    if c.status == 'cancelled' and store and args.write_db:
-                        store.cancel(slug,c.source_url,now)
-                    continue
-                if store and args.write_db:
-                    store.upsert(c,now)
-                accepted += 1
-                primaries.append(c)
-                report['accepted'].append(c.payload())
-            report['sources'][slug] = {'accepted':accepted,'rejected':rejected,'failures':failures,'reasons':dict(reasons)}
-            print(json.dumps({'source':slug,'accepted':accepted,'rejected':rejected,'failures':len(failures)}),flush=True)
-            if store and args.write_db:
-                store.receipt(slug,args.city,accepted,rejected,failures,dict(reasons),now)
-        if args.providers and store:
+                try:
+                    invalid = c.validate(now)
+                    if invalid:
+                        progress.count('rejected',city,invalid)
+                        report['rejected'].append({'source':slug,'reasons':invalid})
+                        if c.status == 'cancelled' and store and args.write_db:
+                            ok,_ = progress.call('cancel',slug,c.source_url,now)
+                            if not ok:
+                                progress.count('failed',city,['cancellation_write_failed'])
+                        continue
+                    payload = c.payload()
+                    if store and args.write_db:
+                        ok,result = progress.call('upsert',c,now)
+                        if result == 'identity_conflict':
+                            progress.count('rejected',city,['identity_conflict'])
+                            continue
+                        if not ok:
+                            progress.count('failed',city,['candidate_write_failed'])
+                            continue
+                    progress.count('accepted',city)
+                    primaries.append(c)
+                    report['accepted'].append(payload)
+                except Exception as exc:
+                    progress.count('failed',city,[type(exc).__name__])
+            progress.finish_source()
+            report['sources'][slug] = stats
+            print(json.dumps({'source':slug,**{k:stats[k] for k in ('accepted','rejected','failed','status')}}),flush=True)
+        if args.providers and store and progress.available:
             search, social = SerpDiscovery(store), BrightSocial(store)
             # Resume provider polling even if today's discovery omits yesterday's URL.
             for job in store.submitted('brightdata'):
@@ -131,7 +153,17 @@ def run(args):
         elif args.providers:
             report['providers']['status'] = 'disabled_without_persistent_quota_store'
         if store and args.write_db:
-            store.cleanup()
+            progress.call('cleanup')
+        progress.heartbeat(final=True)
+        report['status'] = progress.status()
+        report['persistence_errors'] = dict(progress.errors)
+    except BaseException as exc:
+        progress.fatal = True
+        progress.errors[type(exc).__name__] += 1
+        progress.heartbeat(final=True)
+        print(json.dumps({'run_id':progress.run_id,'status':'failed','counts':progress.totals(),
+                          'errors':dict(progress.errors)}),flush=True)
+        raise
     finally:
         client.close()
         if store:
@@ -140,7 +172,9 @@ def run(args):
         path = Path(args.out)
         path.parent.mkdir(parents=True,exist_ok=True)
         path.write_text(json.dumps(report,ensure_ascii=False,indent=2))
-    print(json.dumps({'sources':report['sources'],'providers':report['providers'],
+    print(json.dumps({'run_id':report['run_id'],'status':report['status'],
+                      'persistence_errors':report['persistence_errors'],
+                      'sources':report['sources'],'providers':report['providers'],
                       'accepted_by_city':dict(Counter(c['city_slug'] for c in report['accepted']))},ensure_ascii=False,indent=2))
     return report
 
@@ -162,10 +196,11 @@ def main():
         parser.error('--limit must be between 1 and 30')
     try:
         load_env_files(args.env_file)
-        run(args)
-    except Exception as exc:
+        report = run(args)
+        raise SystemExit({'complete':0,'partial':2,'failed':1}[report.get('status','complete')])
+    except (Exception, KeyboardInterrupt) as exc:
         # Connection/provider exceptions may contain credentials: only print their class.
-        print(json.dumps({'status':'failed','reason':str(exc) if isinstance(exc,ValueError) else type(exc).__name__}))
+        print(json.dumps({'status':'failed','reason':type(exc).__name__}))
         raise SystemExit(1) from None
 
 

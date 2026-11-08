@@ -1,5 +1,7 @@
 # Teammate setup: Lô discovery and search
 
+> **Reliability update:** see [migration order, operator health, and current validation](reliability.md). The 55-test / 8-item website snapshot supersedes the earlier test and feed counts below; provider pilot history is unchanged.
+
 Start here for the three-repository local preview. This guide uses a new local database, API **4101**, and web app **8083**. It does not deploy, enable schedules, or make paid provider requests. No Xcode, simulator, Docker, or hosted database upgrade is needed for this path.
 
 See [tool status](tool-status.md) for what is implemented, actually tested, and still blocked; [pipeline details](trending.md) explains validation and ranking. The last validation was **7 November 2026 in New York / 8 November in Vietnam**. Provider allowances and feed counts below are historical evidence, not today's entitlement.

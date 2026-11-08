@@ -350,20 +350,23 @@ def load_sources():
     return json.loads(Path(__file__).with_name('sources.json').read_text())
 
 
-def collect_source(slug, config, client, now, limit=12, extra_urls=()):
+def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None):
     adapter = CLASSES[slug](slug, config)
     links = list(extra_urls)
     failures = []
     for seed in config['seeds']:
+        heartbeat()
         try:
             links.extend(adapter.links(adapter.fetch(client, seed), seed))
-        except FetchError as exc:
-            failures.append({"stage": "listing", "url": seed, "reason": str(exc)})
+        except Exception as exc:
+            failures.append({"stage": "listing", "reason": type(exc).__name__})
+        heartbeat()
     links = list(dict.fromkeys(links))[:limit]
     if not links:
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
     for url in links:
+        heartbeat()
         try:
             soup = adapter.fetch(client, url)
             # Official campaign pages link to individual activities. Discover
@@ -376,8 +379,9 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=()):
             if hasattr(adapter, 'enrich'):
                 c = adapter.enrich(c, soup, client, now)
             candidates.append(c)
-        except (FetchError, ValueError, TypeError, KeyError) as exc:
-            failures.append({"stage": "detail", "url": url, "reason": str(exc) if isinstance(exc, FetchError) else type(exc).__name__})
+        except Exception as exc:
+            failures.append({"stage": "detail", "reason": type(exc).__name__})
+        heartbeat()
     return candidates, failures
 
 
