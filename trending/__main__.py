@@ -78,8 +78,10 @@ def run(args):
                 if not ok:
                     progress.fail('source_registration_failed')
             try:
+                metrics = {}
                 candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
-                                                      heartbeat=progress.heartbeat)
+                                                      heartbeat=progress.heartbeat,metrics=metrics)
+                stats.update(metrics)
             except Exception as exc:
                 candidates, failures = [], [{'stage':'source','reason':type(exc).__name__}]
             stats['failures'] = failures
@@ -93,23 +95,23 @@ def run(args):
                 try:
                     invalid = c.validate(now)
                     if invalid:
-                        progress.count('rejected',city,invalid)
+                        progress.count('rejected',city,invalid,kind=c.kind)
                         report['rejected'].append({'source':slug,'reasons':invalid})
                         if c.status == 'cancelled' and store and args.write_db:
-                            ok,_ = progress.call('cancel',slug,c.source_url,now)
+                            ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key)
                             if not ok:
                                 progress.count('failed',city,['cancellation_write_failed'])
                         continue
                     payload = c.payload()
                     if store and args.write_db:
                         ok,result = progress.call('upsert',c,now)
-                        if result == 'identity_conflict':
-                            progress.count('rejected',city,['identity_conflict'])
+                        if result in {'identity_conflict','stale_roundup_evidence'}:
+                            progress.count('rejected',city,[result])
                             continue
                         if not ok:
                             progress.count('failed',city,['candidate_write_failed'])
                             continue
-                    progress.count('accepted',city)
+                    progress.count('accepted',city,kind=c.kind)
                     primaries.append(c)
                     report['accepted'].append(payload)
                 except Exception as exc:

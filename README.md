@@ -23,6 +23,9 @@ Turn local source pages into places people can actually visit. LoScraper collect
 
 **[Watch the actual 45-second demo](docs/demo.md)** — cities, filters, real API results, and venue navigation.
 
+
+**[Coverage and imagery follow-up](docs/coverage-followup.md)** — local setup, review dependencies, validation and remaining limits.
+
 ## From source to screen
 
 **Collect → normalize → validate → upsert → serve through Encore → render in LoApp.**

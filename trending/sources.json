@@ -7,8 +7,7 @@
     "hosts": [
       "vietnamnightlife.com"
     ],
-    "enabled": true,
-    "image_permission": false
+    "enabled": true
   },
   "ticketbox": {
     "name": "Ticketbox",
@@ -18,8 +17,7 @@
     "hosts": [
       "ticketbox.vn"
     ],
-    "enabled": true,
-    "image_permission": false
+    "enabled": true
   },
   "hanoigrapevine": {
     "name": "Hanoi Grapevine",
@@ -29,20 +27,20 @@
     "hosts": [
       "hanoigrapevine.com"
     ],
-    "enabled": true,
-    "image_permission": false
+    "enabled": true
   },
   "danangfantasticity": {
     "name": "Danang Fantasticity",
     "seeds": [
       "https://danangfantasticity.com/vi",
-      "https://danangfantasticity.com/danh-muc/le-hoi-su-kien?id=12925"
+      "https://danangfantasticity.com/danh-muc/le-hoi-su-kien?id=12925",
+      "https://danangfantasticity.com/vi/am-thuc",
+      "https://danangfantasticity.com/vi/kham-pha"
     ],
     "hosts": [
       "danangfantasticity.com"
     ],
-    "enabled": true,
-    "image_permission": false
+    "enabled": true
   },
   "vnexpress": {
     "name": "VnExpress",
@@ -55,7 +53,7 @@
       "e.vnexpress.net"
     ],
     "enabled": true,
-    "image_permission": false
+    "roundups": true
   },
   "ticketgo": {
     "name": "TicketGo",
@@ -66,8 +64,7 @@
       "www.ticketgo.vn",
       "ticketgo.vn"
     ],
-    "enabled": true,
-    "image_permission": false
+    "enabled": true
   },
   "lifeofdanang": {
     "name": "Life of Da Nang",
@@ -77,19 +74,22 @@
     "hosts": [
       "lifeofdanang.com"
     ],
-    "enabled": false,
-    "discovery_only": true
+    "enabled": true,
+    "pilot_status": "validated_20261108_single_destination_event"
   },
   "saigoneer": {
     "name": "Saigoneer",
     "seeds": [
-      "https://saigoneer.com/saigon-street-food-restaurants"
+      "https://saigoneer.com/saigon-street-food-restaurants",
+      "https://saigoneer.com/hanoi-street-food-restaurants",
+      "https://saigoneer.com/vietnam-street-food-restaurants"
     ],
     "hosts": [
       "saigoneer.com"
     ],
     "enabled": false,
-    "discovery_only": true
+    "pilot_status": "disabled_no_fresh_eligible_sample_20261108",
+    "roundups": true
   },
   "visithcmc": {
     "name": "Visit HCMC",

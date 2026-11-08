@@ -374,3 +374,29 @@ class Persistence(unittest.TestCase):
         d.occurrences.append(Occurrence((NOW-timedelta(days=2)).isoformat(),(NOW-timedelta(days=1)).isoformat()))
         self.store.upsert(d,NOW)
         self.assertEqual(len(self.feed()),1)
+
+    def test_roundup_entries_replay_disappearance_and_scoped_cancellation(self):
+        c=candidate();c.entry_key='anchor:a';first=self.store.upsert(c,NOW)
+        d=copy.deepcopy(c);d.entry_key='anchor:b';d.title='Second workshop';second=self.store.upsert(d,NOW)
+        self.assertNotEqual(first,second)
+        self.assertEqual(self.store.upsert(d,NOW),second)
+        self.assertEqual(len(self.feed()),2)
+        self.store.cancel(c.source_slug,c.source_url,NOW,c.entry_key)
+        self.assertEqual([x['id'] for x in self.feed()],[second])
+
+
+    def test_roundup_publication_cannot_rejuvenate_old_place(self):
+        c=candidate('place');c.entry_key='anchor:a';self.store.upsert(c,NOW)
+        c.published_at=(NOW+timedelta(days=8)).isoformat()
+        c.verified_at=c.published_at
+        with self.assertRaisesRegex(ValueError,'stale_roundup_evidence'):
+            self.store.upsert(c,NOW+timedelta(days=8))
+        row=self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()
+        self.assertEqual(row['verified_at'],NOW)
+
+
+    def test_roundup_same_destination_dedupes_source_links(self):
+        c=candidate();c.entry_key='anchor:a';first=self.store.upsert(c,NOW)
+        c.entry_key='anchor:b';self.assertEqual(self.store.upsert(c,NOW),first)
+        self.assertEqual(len(self.feed()[0]['sources']),1)
+
