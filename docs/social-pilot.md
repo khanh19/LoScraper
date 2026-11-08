@@ -1,5 +1,31 @@
 # Bounded social pilot — coverage-20261108
 
+## Email snapshot verification — 8 November 2026
+
+Read-only progress and snapshot GET requests confirmed that
+`sd_mw88d4ve1wyhgxljq2` is ready (both HTTP 200), using the Instagram Reels
+dataset `gd_lyclm20il4r5helnj`. It contains one record for
+`https://www.instagram.com/reel/DfezjTRTU4a/`, published
+`2026-11-08T13:01:20.000Z`. This matches the reel already documented below;
+no trigger, retry submission, discovery search, or new reservation was issued.
+
+Its caption mentions Saigon Burger Fest on 14–15 November but provides no
+session hours or independently verified street address. Successful retrieval
+does not authorize publication or resolve the separate 22:00/23:00 conflict.
+The canonical local ledger on port 55439 was unavailable during this check,
+so its accounting was not modified and new provider submissions remain blocked.
+
+The provider email distinguishes profile discovery from direct reel retrieval:
+All Reels reads the Reels tab, while Discovery by URL reads a profile's Posts
+tab. Those discovery modes are not interchangeable with our bounded one-post
+requests. Date filters can omit results; an empty response is a coverage gap,
+not evidence that no event exists. Validate returned publication timestamps
+separately from event sessions, and compare public pages without login.
+
+Local regression check after the schedule-range guard: 83 tests discovered,
+51 passed and 32 PostgreSQL-dependent tests skipped because no test database
+was configured. This is not a completed database or UI acceptance pass.
+
 Routine social collection stays disabled. This exploratory CLI uses the existing
 provider ledger and an isolated feed database. Never copy an empty quota table
 into a new preview and treat that as a fresh allowance.
