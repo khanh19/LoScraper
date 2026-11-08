@@ -18,7 +18,7 @@ from .progress import Progress
 
 def load_env_files(paths):
     # Explicit files only, a small allowlist, no shell evaluation or key logging.
-    allowed = {'DATABASE_URL','SERPAPI_API_KEY','BRIGHTDATA_API_KEY','BRIGHT_DATA_API_KEY',
+    allowed = {'QUOTA_DATABASE_URL','DATABASE_URL','SERPAPI_API_KEY','BRIGHTDATA_API_KEY','BRIGHT_DATA_API_KEY',
                'BRIGHTDATA_FREE_VERIFICATION_JSON','BRIGHTDATA_BILLING_API_KEY','LO_BROWSER_CHANNEL'}
     for path in paths:
         for line in Path(path).read_text().splitlines():

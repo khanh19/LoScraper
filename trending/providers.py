@@ -116,14 +116,14 @@ def post_platform(url):
 
 
 class SerpDiscovery:
-    def __init__(self, store, request=api_json):
-        self.store, self.request = store, request
+    def __init__(self, store, request=api_json, pilot_id=None):
+        self.store, self.request, self.pilot_id = store, request, pilot_id
 
     def search(self, query, now):
         key = os.environ.get('SERPAPI_API_KEY')
         if not key or not self.store:
             raise ProviderDisabled('serpapi_not_configured')
-        job_key = 'serpapi:' + now.date().isoformat() + ':' + hashlib.sha256(query.encode()).hexdigest()
+        job_key = 'serpapi:' + (self.pilot_id or now.date().isoformat()) + ':' + hashlib.sha256(query.encode()).hexdigest()
         old = self.store.job(job_key)
         if old:
             if old['status'] == 'complete':
@@ -131,7 +131,7 @@ class SerpDiscovery:
             raise ProviderDisabled('serpapi_submission_already_reserved')
         account = self.request('GET', 'https://serpapi.com/account.json', params={'api_key': key})
         remaining = serp_allowance(account)
-        job = self.store.reserve('serpapi', job_key, 1, 200, remaining, {'query': query}, now) if remaining else None
+        job = self.store.reserve('serpapi', job_key, 1, 200, remaining, {'query': query}, now, pilot_id=self.pilot_id) if remaining else None
         if not job or not job['created_now']:
             raise ProviderDisabled('serpapi_no_verified_free_allowance')
         # Mark unknown before sending. A crash/time-out cannot trigger a second paid request.
@@ -155,8 +155,8 @@ class SerpDiscovery:
 class BrightSocial:
     DATASETS = {'tiktok': 'gd_lu702nij2f790tmv9h', 'instagram': 'gd_lk5ns7kz21pck8jpis', 'facebook':'gd_lyclm1571iy3mv57zw'}
 
-    def __init__(self, store, request=api_json):
-        self.store, self.request = store, request
+    def __init__(self, store, request=api_json, pilot_id=None):
+        self.store, self.request, self.pilot_id = store, request, pilot_id
 
     def collect(self, url, now):
         platform = post_platform(url)
@@ -164,7 +164,7 @@ class BrightSocial:
         if not platform or not token or not self.store:
             raise ProviderDisabled('brightdata_not_configured')
         headers = {'Authorization': 'Bearer ' + token}
-        key = 'brightdata:' + now.date().isoformat() + ':' + hashlib.sha256(url.encode()).hexdigest()
+        key = 'brightdata:' + (self.pilot_id or now.date().isoformat()) + ':' + hashlib.sha256(url.encode()).hexdigest()
         job = self.store.pending('brightdata', url) or self.store.job(key)
         if job:
             key = job['job_key']
@@ -176,13 +176,13 @@ class BrightSocial:
             if not dataset:
                 raise ProviderDisabled('unsupported_dataset')
             job = self.store.reserve('brightdata', key, 1, 4500, remaining,
-                                     {'url': url, 'platform': platform}, now, verified_at=verified_at)
+                                     {'url': url, 'platform': platform}, now, verified_at=verified_at, pilot_id=self.pilot_id)
             if not job or not job['created_now']:
                 raise ProviderDisabled('brightdata_monthly_cap')
             self.store.update_job(key, 'unknown')
             result = self.request('POST', 'https://api.brightdata.com/datasets/v3/trigger', headers=headers,
-                params={'dataset_id': dataset, 'format': 'json'},
-                json={'input': [{'url': url}], 'limit_per_input': 1})
+                params={'dataset_id': dataset, 'format': 'json', 'limit_per_input': 1},
+                json=[{'url': url}])
             snapshot = result.get('snapshot_id') if isinstance(result,dict) else None
             if not snapshot or not re.fullmatch(r'sd?_[A-Za-z0-9_-]+', snapshot):
                 raise ProviderDisabled('brightdata_unknown_submission')
@@ -194,7 +194,7 @@ class BrightSocial:
         progress = self.request('GET', f'https://api.brightdata.com/datasets/v3/progress/{snapshot}', headers=headers)
         if not isinstance(progress,dict):
             raise ProviderDisabled('invalid_job_response')
-        if progress.get('status') == 'failed':
+        if progress.get('status') in {'failed','canceled'}:
             self.store.update_job(key, 'failed')
             raise ProviderDisabled('brightdata_job_failed')
         if progress.get('status') != 'ready':

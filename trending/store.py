@@ -124,7 +124,7 @@ class Store:
         self.progress(run_id,accepted,rejected,len(failures),
                       {'failures':failures,'reasons':reasons},'partial' if failures else 'complete')
 
-    def reserve(self, provider, key, units, cap, remaining, inputs, now, verified_at=None):
+    def reserve(self, provider, key, units, cap, remaining, inputs, now, verified_at=None, pilot_id=None):
         month = now.date().replace(day=1)
         if units <= 0 or units > remaining:
             return None
@@ -134,6 +134,16 @@ class Store:
             if old:
                 old['created_now'] = False
                 return old
+            if pilot_id:
+                pilot=self.db.execute('SELECT id FROM discovery_pilots WHERE id=%s FOR UPDATE',(pilot_id,)).fetchone()
+                if not pilot:raise ValueError('unknown_pilot')
+                if provider not in {'brightdata','serpapi'}:raise ValueError('invalid_pilot_provider')
+                platform=inputs.get('platform')
+                if provider=='brightdata' and (units!=1 or platform not in {'facebook','instagram','tiktok'}):
+                    raise ValueError('invalid_pilot_record')
+                total=self.db.execute('SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE pilot_id=%s AND provider=%s',(pilot_id,provider)).fetchone()['used']
+                platform_used=self.db.execute("SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE pilot_id=%s AND provider=%s AND input_data->>'platform'=%s",(pilot_id,provider,platform)).fetchone()['used']
+                if total+units>(9 if provider=='brightdata' else 6) or (provider=='brightdata' and platform_used+units>3):return None
             used = self.db.execute("SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE provider=%s AND billing_month=%s",(provider,month)).fetchone()['used']
             # The remote balance can lag in-flight requests. Conservatively charge
             # unresolved reservations against it as well as against our monthly cap.
@@ -148,8 +158,8 @@ class Store:
                     (provider, verified_at)).fetchone()['used']
             if used + units > cap or pending + units > remaining:
                 return None
-            row = self.db.execute("""INSERT INTO discovery_provider_jobs(job_key,provider,billing_month,reserved_units,input_data)
-                VALUES (%s,%s,%s,%s,%s) RETURNING *""",(key,provider,month,units,Jsonb(inputs))).fetchone()
+            row = self.db.execute("""INSERT INTO discovery_provider_jobs(job_key,provider,billing_month,reserved_units,input_data,pilot_id)
+                VALUES (%s,%s,%s,%s,%s,%s) RETURNING *""",(key,provider,month,units,Jsonb(inputs),pilot_id)).fetchone()
             row['created_now'] = True
             return row
 
@@ -171,5 +181,5 @@ class Store:
 
     def cleanup(self):
         self.db.execute("DELETE FROM discovery_ingestion_runs WHERE started_at < now() - interval '30 days'")
-        self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete'")
+        self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete' AND pilot_id IS NULL")
         self.db.execute("DELETE FROM discovery_items WHERE updated_at < now() - interval '90 days' AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.item_id=discovery_items.id AND o.verified_at > now() - interval '90 days')")

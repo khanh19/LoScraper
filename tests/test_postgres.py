@@ -26,7 +26,7 @@ class Persistence(unittest.TestCase):
         if p.hostname not in {'127.0.0.1','localhost'} or p.path not in {'/lo_trending_test','/lo_trending_guards_test'}:
             raise RuntimeError('Tests require the disposable local lo_trending_test database')
         cls.store=Store(URL)
-        cls.store.db.execute('DROP TABLE IF EXISTS discovery_image_permissions,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
+        cls.store.db.execute('DROP TABLE IF EXISTS discovery_image_permissions,discovery_pilots,discovery_provider_jobs,discovery_ingestion_runs,discovery_occurrences,discovery_observations,discovery_items,discovery_sources CASCADE')
         # Use the existing parent-table DDL, not a mock of the new migration.
         baseline=(BACKEND/'supabase/migrations/20260523000001_onboarding.sql').read_text()
         for name in ['cities','places']:
@@ -41,7 +41,7 @@ class Persistence(unittest.TestCase):
     def tearDownClass(cls): cls.store.close()
 
     def setUp(self):
-        self.store.db.execute('TRUNCATE discovery_image_permissions,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
+        self.store.db.execute('TRUNCATE discovery_image_permissions,discovery_pilots,discovery_items,discovery_provider_jobs,discovery_ingestion_runs CASCADE')
         self.store.register('ticketbox','Ticketbox',True)
 
     def feed(self,now=NOW,city='hanoi',kind='all',limit=10):
@@ -405,6 +405,20 @@ class Persistence(unittest.TestCase):
         c.entry_key='anchor:b';self.assertEqual(self.store.upsert(c,NOW),first)
         self.assertEqual(len(self.feed()[0]['sources']),1)
 
+    def test_pilot_caps_are_durable_and_platform_scoped(self):
+        self.store.db.execute("INSERT INTO discovery_pilots(id) VALUES ('coverage-20261108')")
+        for platform in ['facebook','instagram','tiktok']:
+            for n in range(3):
+                self.assertTrue(self.store.reserve('brightdata',f'{platform}-{n}',1,4500,4500,{'platform':platform},NOW,pilot_id='coverage-20261108'))
+            self.assertIsNone(self.store.reserve('brightdata',platform+'-overflow',1,4500,4500,{'platform':platform},NOW,pilot_id='coverage-20261108'))
+        for n in range(6):
+            self.assertTrue(self.store.reserve('serpapi',f'search-{n}',1,200,200,{},NOW,pilot_id='coverage-20261108'))
+        self.assertIsNone(self.store.reserve('serpapi','search-overflow',1,200,200,{},NOW,pilot_id='coverage-20261108'))
+        self.store.update_job('facebook-0','unknown')
+        old=self.store.reserve('brightdata','facebook-0',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108')
+        self.assertFalse(old['created_now'])
+        self.assertEqual(old['status'],'unknown')
+
     def test_revoking_permission_hides_existing_image(self):
         c=candidate();c.image_url='https://example.com/image.jpg';c.image_permitted=True;c.image_association_verified=True
         p=dict(id='permitted',scope='asset',source_slug=c.source_slug,image_url=c.image_url,creator='Publisher',license_name='test',license_url='https://example.com/license',evidence_url='https://example.com/permission',reviewed_at=NOW.isoformat())
@@ -414,3 +428,12 @@ class Persistence(unittest.TestCase):
         self.store.sync_image_permissions([])
         self.assertIsNone(self.feed()[0]['image_url'])
 
+    def test_concurrent_pilot_reservations_cannot_exceed_platform_cap(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.store.db.execute("INSERT INTO discovery_pilots(id) VALUES ('coverage-20261108')")
+        def reserve(n):
+            s=Store(URL)
+            try:return bool(s.reserve('brightdata',f'concurrent-{n}',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108'))
+            finally:s.close()
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            self.assertEqual(sum(pool.map(reserve,range(12))),3)
