@@ -1,0 +1,123 @@
+{
+  "vietnamnightlife": {
+    "name": "Vietnam Nightlife",
+    "seeds": [
+      "https://vietnamnightlife.com/en/upcoming-events-1-11.html"
+    ],
+    "hosts": [
+      "vietnamnightlife.com"
+    ],
+    "enabled": true,
+    "image_permission": false
+  },
+  "ticketbox": {
+    "name": "Ticketbox",
+    "seeds": [
+      "https://ticketbox.vn/"
+    ],
+    "hosts": [
+      "ticketbox.vn"
+    ],
+    "enabled": true,
+    "image_permission": false
+  },
+  "hanoigrapevine": {
+    "name": "Hanoi Grapevine",
+    "seeds": [
+      "https://hanoigrapevine.com/vi/"
+    ],
+    "hosts": [
+      "hanoigrapevine.com"
+    ],
+    "enabled": true,
+    "image_permission": false
+  },
+  "danangfantasticity": {
+    "name": "Danang Fantasticity",
+    "seeds": [
+      "https://danangfantasticity.com/vi",
+      "https://danangfantasticity.com/danh-muc/le-hoi-su-kien?id=12925"
+    ],
+    "hosts": [
+      "danangfantasticity.com"
+    ],
+    "enabled": true,
+    "image_permission": false
+  },
+  "vnexpress": {
+    "name": "VnExpress",
+    "seeds": [
+      "https://vnexpress.net/du-lich/am-thuc",
+      "https://e.vnexpress.net/taxonomy/vietnamese-food-7918"
+    ],
+    "hosts": [
+      "vnexpress.net",
+      "e.vnexpress.net"
+    ],
+    "enabled": true,
+    "image_permission": false
+  },
+  "ticketgo": {
+    "name": "TicketGo",
+    "seeds": [
+      "https://www.ticketgo.vn/"
+    ],
+    "hosts": [
+      "www.ticketgo.vn",
+      "ticketgo.vn"
+    ],
+    "enabled": true,
+    "image_permission": false
+  },
+  "lifeofdanang": {
+    "name": "Life of Da Nang",
+    "seeds": [
+      "https://lifeofdanang.com/weekly"
+    ],
+    "hosts": [
+      "lifeofdanang.com"
+    ],
+    "enabled": false,
+    "discovery_only": true
+  },
+  "saigoneer": {
+    "name": "Saigoneer",
+    "seeds": [
+      "https://saigoneer.com/saigon-street-food-restaurants"
+    ],
+    "hosts": [
+      "saigoneer.com"
+    ],
+    "enabled": false,
+    "discovery_only": true
+  },
+  "visithcmc": {
+    "name": "Visit HCMC",
+    "seeds": [
+      "https://visithcmc.vn/vi/trang-chu/"
+    ],
+    "hosts": [
+      "visithcmc.vn"
+    ],
+    "enabled": false,
+    "discovery_only": true
+  },
+  "facebook": {
+    "name": "Facebook",
+    "platform": "facebook",
+    "enabled": false,
+    "pilot_status": "disabled_campaign_evidence_rejected_and_trigger_http400"
+  },
+  "tiktok": {
+    "name": "Tiktok",
+    "platform": "tiktok",
+    "enabled": false,
+    "pilot_status": "disabled_not_live_piloted"
+  },
+  "instagram": {
+    "name": "Instagram",
+    "platform": "instagram",
+    "enabled": false,
+    "pilot_status": "disabled_trigger_http400"
+  }
+}

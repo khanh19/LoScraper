@@ -1,6 +1,12 @@
+.venv/
 venv/
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
+.state/
+pilot-output/
 events.json
 events.csv
+.DS_Store
