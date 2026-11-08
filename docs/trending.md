@@ -4,6 +4,8 @@ Start with the [teammate setup guide](teammate-setup.md) and [tool/status matrix
 
 ![Lô What’s Trending workflow: sources, normalization, validation, database updates, API delivery, app rendering, and refresh controls.](assets/trending-workflow-hand-drawn.png)
 
+[Download the one-slide PowerPoint](presentations/whats-trending-workflow.pptx) · [View the one-page PDF](presentations/whats-trending-workflow.pdf). The hand-drawn artwork is preserved as one image.
+
 Workflow snapshot: 7 November 2026 in New York / 8 November 2026 in Vietnam. Solid arrows show the main data flow; the dashed branch is optional provider discovery. Social publication and the daily schedule remain disabled.
 
 The `trending` package collects visitable events and places for HCMC, Hanoi and Da Nang. It is separate from the legacy nightlife importer. It never calls `replace_external_events`, deletes another city's feed, translates through a paid service, or downloads videos/posters.

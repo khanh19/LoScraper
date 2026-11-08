@@ -92,6 +92,7 @@ Database tests are skipped without an explicitly configured disposable PostgreSQ
 |---|---|
 | [Teammate setup](docs/teammate-setup.md) | All three repos, dependencies, local database, app startup, and troubleshooting. |
 | [Tools and status](docs/tool-status.md) | Implemented capabilities, test evidence, and next steps. |
+| [Workflow PowerPoint and PDF](docs/presentations/README.md) | One-slide presentation and matching one-page PDF of the hand-drawn workflow. |
 | [Pipeline and workflow diagram](docs/trending.md) | Collection, validation, quotas, refresh, and rollout. |
 | [Environment example](.env.example) | Configuration names; real values belong in ignored files or Actions secrets. |
 
