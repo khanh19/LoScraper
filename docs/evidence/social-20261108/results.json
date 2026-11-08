@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-08",
+  "additional_serpapi_searches": 0,
+  "additional_brightdata_attempts": 2,
+  "published": 0,
+  "tiktok_status": "blocked_no_verified_video_url",
+  "instagram": [
+    {
+      "url": "https://www.instagram.com/p/Dfa848qFPwL/",
+      "status": "complete",
+      "records": 1,
+      "publication": "held",
+      "reason": "schedule_conflict"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DfezjTRTU4a/",
+      "status": "complete",
+      "records": 1,
+      "publication": "held",
+      "reason": "missing_explicit_city_and_address"
+    }
+  ]
+}

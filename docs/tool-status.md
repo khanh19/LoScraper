@@ -20,7 +20,7 @@ Evidence snapshot: **2026-11-07 America/New_York / 2026-11-08 Asia/Ho_Chi_Minh**
 | SerpAPI | Free-plan account check, URL discovery, durable reservations | Six live searches passed; 244 included searches remained then. Cap 200/month or less if verified remaining allowance is smaller. Recheck before future use. |
 | Bright Data billing | Separate Finance key, account identity checks, dashboard receipt, monetary checks | Billing access passed. Original scraping key remains User. Receipt expires within 24h; no permanent clearance. |
 | Bright Data Facebook | Bounded public-post collection and event-specific corroboration | Pilot failed publication criteria: one returned campaign post rejected, another trigger HTTP 400. Disabled. |
-| Bright Data Instagram | Public post/reel collection | Trigger HTTP 400; no validated sample. Disabled. |
+| Bright Data Instagram | Public post/reel collection | Live Posts retrieval passed on 8 Nov; Reels routing corrected. Event held for conflicting end times; routine publication disabled. See social-pilot.md. |
 | Bright Data TikTok | Public video metadata collection, no video downloads | Implemented but not live-piloted. Disabled. |
 | Apify | Researched/authenticated alternative | Free plan observed, no Actor run or integration; no automatic fallback. |
 | YouTube | Links may surface during search discovery | No dedicated collection/metrics adapter. |

@@ -172,7 +172,8 @@ class BrightSocial:
             return job['input_data'].get('result', [])
         if not job:
             remaining, verified_at = bright_preflight(now, self.request)
-            dataset = self.DATASETS.get(platform)
+            dataset = ('gd_lyclm20il4r5helnj' if platform == 'instagram' and urlsplit(url).path.startswith('/reel/')
+                       else self.DATASETS.get(platform))
             if not dataset:
                 raise ProviderDisabled('unsupported_dataset')
             job = self.store.reserve('brightdata', key, 1, 4500, remaining,

@@ -1,0 +1,14 @@
+[
+  {
+    "path": "controlled-search-outage-retry-to-real-result",
+    "status": "passed"
+  },
+  {
+    "path": "controlled-late-response-change-and-clear",
+    "status": "passed"
+  },
+  {
+    "path": "actual-unavailable-detail-no-save",
+    "status": "passed"
+  }
+]
