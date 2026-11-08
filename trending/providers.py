@@ -110,7 +110,7 @@ def post_platform(url):
         return 'tiktok'
     if host == 'instagram.com' and re.fullmatch(r'/(p|reel)/[A-Za-z0-9_-]+', p.path):
         return 'instagram'
-    if host == 'facebook.com' and re.search(r'/(posts|videos)/[^/]+$', p.path):
+    if host == 'facebook.com' and re.fullmatch(r'/[^/]+/(posts|videos)/(?:[^/]+/)?[^/]+', p.path):
         return 'facebook'
     return None
 
@@ -184,7 +184,7 @@ class BrightSocial:
                 params={'dataset_id': dataset, 'format': 'json'},
                 json={'input': [{'url': url}], 'limit_per_input': 1})
             snapshot = result.get('snapshot_id') if isinstance(result,dict) else None
-            if not snapshot or not re.fullmatch(r'sd_[A-Za-z0-9_-]+', snapshot):
+            if not snapshot or not re.fullmatch(r'sd?_[A-Za-z0-9_-]+', snapshot):
                 raise ProviderDisabled('brightdata_unknown_submission')
             self.store.update_job(key, 'submitted', provider_id=snapshot)
             job = self.store.job(key)
@@ -214,6 +214,9 @@ def social_evidence(primary, row, platform, now):
     text = str(row.get('description') or row.get('content') or '')
     # A searched creator's city does not identify a destination. Require a named known venue.
     if not folded(primary.venue_name) or folded(primary.venue_name) not in folded(text):
+        return None
+    # A campaign roundup naming a museum does not corroborate every event at it.
+    if primary.kind == 'event' and folded(primary.title) not in folded(text):
         return None
     # A chain name alone cannot associate a post with this city's destination.
     if city_from_address(text) != primary.city_slug:

@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from trending.adapters import CLASSES, load_sources
 from trending.dates import schedule_occurrences, ticketbox_sessions, weekly
 from trending.model import Candidate, Occurrence, city_from_address, ICT
-from trending.providers import bright_allowance, bright_preflight, serp_allowance, SerpDiscovery, BrightSocial, ProviderDisabled, social_evidence
+from trending.providers import bright_allowance, bright_preflight, serp_allowance, SerpDiscovery, BrightSocial, ProviderDisabled, social_evidence, post_platform
 
 NOW = datetime(2026,11,7,12,tzinfo=timezone.utc)
 
@@ -128,14 +128,48 @@ class Parsers(unittest.TestCase):
         self.assertTrue(all(datetime.fromisoformat(x.starts_at).hour==8 for x in c.occurrences))
 
     def test_ticketgo_and_fantasticity_structured_events(self):
-        event={'@type':'Event','name':'Triển lãm nghệ thuật','startDate':'2026-11-08','endDate':'2026-11-09',
+        event={'@type':'Event','name':'Triển lãm nghệ thuật','startDate':'2026-11-08','endDate':'2026-11-08',
             'location':{'name':'Bảo tàng','address':{'streetAddress':'31 Trần Phú','addressLocality':'Đà Nẵng'}}}
         html=f'<h1>Triển lãm</h1><script type="application/ld+json">{json.dumps(event)}</script>'
         for slug in ['ticketgo','danangfantasticity']:
             with self.subTest(slug=slug): self.assertEqual(self.parse(slug,html).validate(NOW),[])
 
+    def test_ticketgo_season_is_not_a_continuous_session(self):
+        event={'@type':'Event','name':'Show Ca trù','startDate':'2026-09-25T20:00:00+07:00',
+               'endDate':'2027-05-01T00:00:00+07:00',
+               'location':{'name':'CADAO Collective','address':'66 Tô Ngọc Vân, Hà Nội'}}
+        html=f'<h1>Show Ca trù</h1><script type="application/ld+json">{json.dumps(event)}</script>'
+        self.assertIn('unresolved_individual_sessions',self.parse('ticketgo',html).validate(NOW))
+
 
 class FreeProviderGuards(unittest.TestCase):
+    def test_trigger_records_both_documented_snapshot_prefixes(self):
+        from unittest.mock import Mock
+        for snapshot in ['s_live123','sd_live123']:
+            with self.subTest(snapshot=snapshot):
+                store=Mock()
+                store.pending.return_value=None
+                store.job.side_effect=[None,{'status':'submitted','provider_job_id':snapshot}]
+                store.reserve.return_value={'created_now':True}
+                request=Mock(side_effect=[{'snapshot_id':snapshot},{'status':'running'}])
+                with patch.dict(os.environ,{'BRIGHTDATA_API_KEY':'test-placeholder'}),patch('trending.providers.bright_preflight',return_value=(3,NOW.isoformat())):
+                    with self.assertRaisesRegex(ProviderDisabled,'brightdata_job_pending'):
+                        BrightSocial(store,request).collect('https://www.facebook.com/venue/posts/title/123',NOW)
+                self.assertEqual(request.call_args_list[0].kwargs['json']['limit_per_input'],1)
+                self.assertEqual(request.call_args_list[1].args[0],'GET')
+                self.assertTrue(any(c.kwargs.get('provider_id')==snapshot for c in store.update_job.call_args_list))
+
+    def test_facebook_slugged_post_urls(self):
+        self.assertEqual(post_platform('https://www.facebook.com/venue/posts/event-description/123456'),'facebook')
+        self.assertEqual(post_platform('https://www.facebook.com/venue/posts/123456'),'facebook')
+        self.assertIsNone(post_platform('https://www.facebook.com/venue'))
+
+    def test_venue_roundup_does_not_corroborate_an_individual_event(self):
+        c=candidate()
+        row={'url':'https://www.facebook.com/museum/posts/123','content':'Nhiều hoạt động tại Xưởng Mây, Hà Nội',
+             'date_posted':NOW.isoformat(),'user_url':'https://www.facebook.com/museum'}
+        self.assertIsNone(social_evidence(c,row,'facebook',NOW))
+
     def test_web_collection_continues_without_provider_credentials(self):
         from trending.__main__ import run
         c=candidate('place')

@@ -5,15 +5,16 @@ No provider requests, database writes, or externally uploaded screenshots.
 """
 import copy
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
 from playwright.sync_api import sync_playwright, expect
 
-API = 'http://localhost:4100'
-APP = 'http://localhost:8082'
-OUT = Path('/tmp/lo-trending-qa')
+API = os.environ.get('LO_QA_API_URL', 'http://localhost:4100')
+APP = os.environ.get('LO_QA_APP_URL', 'http://localhost:8082')
+OUT = Path(os.environ.get('LO_QA_OUT', '/tmp/lo-trending-qa'))
 CITIES = [
     dict(slug='hcmc',name='TP Hồ Chí Minh',latitude=10.776,longitude=106.7,sw_lat=10.3,sw_lng=106.3,ne_lat=11.2,ne_lng=107.1,search_radius_m=20000),
     dict(slug='hanoi',name='Hà Nội',latitude=21.028,longitude=105.834,sw_lat=20.7,sw_lng=105.4,ne_lat=21.5,ne_lng=106.1,search_radius_m=20000),
@@ -49,7 +50,7 @@ def main():
                 if mode['value']=='empty':data['items']=[]
                 if mode['value']=='image':
                     data['items']=[copy.deepcopy(sample)]
-                    data['items'][0]['image_url']='http://localhost:8082/qa-missing-poster.png'
+                    data['items'][0]['image_url']=APP+'/qa-missing-poster.png'
                 return route.fulfill(json=data,headers={'Access-Control-Allow-Origin':'*'})
             route.fulfill(json={'cities':CITIES} if path=='/cities' else {'lists':[],'plans':[],'places':[],'items':[]},headers={'Access-Control-Allow-Origin':'*'})
 

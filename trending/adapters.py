@@ -265,7 +265,7 @@ class VnExpress(Adapter):
 
 
 class TicketGo(Adapter):
-    content_selector = ".event-content, .event-detail, .event-description, article, main"
+    content_selector = ".ticket_info_box, .event-content, .event-detail, .event-description, article, main"
     link_pattern = r"/(?:event|su-kien)/[^/?]+/?$"
 
     def parse(self, soup, url, now):
@@ -276,6 +276,14 @@ class TicketGo(Adapter):
             c.address = c.venue_name
             c.venue_name = c.venue_name.split(',')[0].strip()
             c.city_slug = city_from_address(c.address)
+        # TicketGo also uses JSON-LD dates for an entire ticket-sales season.
+        # A multi-month show is not a continuous performance. Until its session
+        # selector is parsed, hold it out rather than publish invented hours.
+        from .model import parse_time
+        from datetime import timedelta
+        if any(parse_time(o.ends_at) - parse_time(o.starts_at) > timedelta(hours=36)
+               for o in c.occurrences):
+            c.reasons.append('unresolved_individual_sessions')
         return c
 
 
