@@ -24,6 +24,10 @@
     "status": "passed"
   },
   {
+    "path": "controlled-publisher-image-failure/category-photo",
+    "status": "passed"
+  },
+  {
     "path": "controlled-image-failure/neutral-placeholder",
     "status": "passed"
   }

@@ -31,5 +31,5 @@ accessibility text and a separate photographer/Unsplash credit. They do not clai
 to depict the destination. Event-source links remain separate from image credits.
 
 Tests cover scope, association, revocation, future review dates, exact host matching,
-API revocation and actual mobile/desktop fallback rendering. Image-network failure
-is explicitly injected in a separate browser pass; it is not live publisher evidence.
+API revocation and actual mobile/desktop fallback rendering. Both publisher-image → category-photo and category-photo → neutral-placeholder
+failures are explicitly injected in a separate browser pass; it is not live publisher evidence.
