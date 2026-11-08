@@ -1,0 +1,40 @@
+{
+  "evaluation_date": "2026-11-08",
+  "live": {
+    "openai_web_search_calls": 4,
+    "openai_extractions": 12,
+    "openai_judgments": 12,
+    "openai_estimated_usd": 0.823225,
+    "openai_reserved_usd": 4.44795,
+    "apify_runs": 1,
+    "apify_records": 10,
+    "apify_reported_usd": 0.038,
+    "youtube_searches": 3,
+    "youtube_video_batches": 3,
+    "youtube_metadata_records_before_deduplication": 30,
+    "new_bright_jobs": 0,
+    "new_serpapi_searches": 0,
+    "published_social_items": 0
+  },
+  "tests": {
+    "scraper_postgresql": {
+      "passed": 114
+    },
+    "encore_all_packages": "passed",
+    "encore_discovery_postgresql": "passed",
+    "frontend_types": "passed",
+    "frontend_lint": "passed",
+    "unmocked_browser_checks": 12
+  },
+  "calibration": "pending human labels; controlled tests are not human-calibrated accuracy",
+  "coverage_comparison": "Website-only preview: Hanoi1, DaNang1, HCMC0. New social publication0. Different inputs; not a paired quality experiment.",
+  "blockers": [
+    "legacy Bright/Serp accounting unavailable",
+    "TikTok thumbnail retrieval failed",
+    "no eligible independently verified social sample published",
+    "human calibration unavailable",
+    "permitted audio and sampled video live validation pending",
+    "reviewed YouTube channel directory has no verified channel IDs yet"
+  ],
+  "cost_basis": "OpenAI computed from returned token usage and published rates, not a billing invoice. Apify provider usageTotalUsd. Conservative reservations retained."
+}
