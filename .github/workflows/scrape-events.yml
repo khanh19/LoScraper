@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       city:
-        description: "City filter (empty = both hcmc and hanoi)"
+        description: "City filter (all = both hcmc and hanoi)"
         required: false
-        default: ""
+        default: all
         type: choice
         options:
-          - ""
+          - all
           - hcmc
           - hanoi
 
@@ -47,7 +47,7 @@ jobs:
           set -euo pipefail
           echo "::group::Scrape events"
           ARGS=(--delay 1.0 --workers 2 --out events.json)
-          if [ -n "${{ github.event.inputs.city }}" ]; then
+          if [ -n "${{ github.event.inputs.city }}" ] && [ "${{ github.event.inputs.city }}" != "all" ]; then
             ARGS+=(--city "${{ github.event.inputs.city }}")
             echo "City filter: ${{ github.event.inputs.city }}"
           else
