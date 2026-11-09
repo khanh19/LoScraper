@@ -119,3 +119,5 @@ The legacy workflow was last observed as `disabled_inactivity`. Use the isolated
 | **LoScraper** · you are here | Source collection, validation, and ingestion. |
 
 See [Discovery journey validation](docs/discovery-journey.md) for the new app flow, collector fix, setup, screenshots, video, and remaining blockers.
+
+[Multimodal discovery setup and validation](docs/multimodal-discovery.md)

@@ -1,20 +1,24 @@
 name: Scrape nightlife events
 
 on:
-  schedule:
-    # Monday and Friday at 05:00 ICT (UTC+7) = Sunday/Thursday 22:00 UTC
-    - cron: "0 22 * * 0,4"
   workflow_dispatch:
     inputs:
       city:
-        description: "City filter (empty = both hcmc and hanoi)"
+        description: "City filter (all = both hcmc and hanoi)"
         required: false
-        default: ""
+        default: all
         type: choice
         options:
-          - ""
+          - all
           - hcmc
           - hanoi
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lo-discovery-ingestion
+  cancel-in-progress: false
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -43,7 +47,7 @@ jobs:
           set -euo pipefail
           echo "::group::Scrape events"
           ARGS=(--delay 1.0 --workers 2 --out events.json)
-          if [ -n "${{ github.event.inputs.city }}" ]; then
+          if [ -n "${{ github.event.inputs.city }}" ] && [ "${{ github.event.inputs.city }}" != "all" ]; then
             ARGS+=(--city "${{ github.event.inputs.city }}")
             echo "City filter: ${{ github.event.inputs.city }}"
           else

@@ -1,0 +1,154 @@
+{
+  "collection_exit": 0,
+  "counts": {
+    "hanoi": 1,
+    "danang": 1,
+    "hcmc": 0
+  },
+  "errors": [],
+  "failed_requests": [],
+  "mocked": false,
+  "provider_requests": 0,
+  "wait_shortened": true,
+  "collection_sources": {
+    "hanoigrapevine": {
+      "accepted": 1,
+      "rejected": 4,
+      "failed": 0,
+      "reasons": {
+        "irrelevant_category": 1,
+        "no_upcoming_occurrence": 4,
+        "unverified_city": 1,
+        "unverified_destination": 1,
+        "unresolved_multiple_destinations": 1
+      },
+      "failures": [],
+      "cities": {
+        "hanoi": {
+          "accepted": 1,
+          "rejected": 2,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 1,
+              "rejected": 2,
+              "failed": 0
+            }
+          }
+        },
+        "unclassified": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        },
+        "danang": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 5,
+      "extracted_entries": 5,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.2
+    },
+    "lifeofdanang": {
+      "accepted": 1,
+      "rejected": 9,
+      "failed": 0,
+      "reasons": {
+        "no_upcoming_occurrence": 9,
+        "irrelevant_category": 1
+      },
+      "failures": [],
+      "cities": {
+        "danang": {
+          "accepted": 1,
+          "rejected": 9,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 1,
+              "rejected": 9,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 5,
+      "extracted_entries": 10,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.1
+    }
+  },
+  "source_verification": {
+    "url": "https://hanoigrapevine.com/vi/2026/11/trien-lam-33-23-45",
+    "http_status": 200,
+    "checks": {
+      "07/11": true,
+      "27/12/2026": true,
+      "Sóng Mây": true,
+      "Hà Nội": true
+    },
+    "sessions": "Tuesday–Sunday, 10:00–18:00; 7 Nov–27 Dec 2026"
+  },
+  "playback": {
+    "chrome": "passed",
+    "seek_seconds": 40,
+    "duration": 52.533333,
+    "method": "local MP4 Blob; HTTP preview without Range support could not seek"
+  },
+  "export": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 1100,
+        "height": 900
+      }
+    ],
+    "format": {
+      "duration": "52.533333",
+      "size": "874355"
+    }
+  },
+  "checks": [
+    {
+      "id": "51e19946-66bf-4977-aeff-32d920bd5263",
+      "title": "“33.23.45”",
+      "city": "hanoi",
+      "api_card_match": true
+    },
+    {
+      "source_action": "https://hanoigrapevine.com/vi/2026/11/trien-lam-33-23-45/",
+      "expected": "https://hanoigrapevine.com/vi/2026/11/trien-lam-33-23-45"
+    }
+  ],
+  "recorded_date": "2026-11-08",
+  "scope": "Isolated local web demo; Hanoi card shown. Two website sources, five detail pages each; no social provider requests.",
+  "limitations": [
+    "Shortened waits are captioned.",
+    "No production or native-device validation.",
+    "Da Nang record was not demonstrated; precise date-only session representation remains a rollout review item.",
+    "Workflow phone mockups are illustrative, not scraped evidence."
+  ]
+}

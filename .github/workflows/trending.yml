@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       city:
-        description: City (empty collects all three)
+        description: City (all collects all three)
         type: choice
-        options: ["", hcmc, hanoi, danang]
-        default: ""
+        options: [all, hcmc, hanoi, danang]
+        default: all
       pilot:
         description: Audit adapters without importing
         type: boolean
@@ -16,8 +16,6 @@ on:
         description: Include optional providers with verified free allowance
         type: boolean
         default: false
-  schedule:
-    - cron: "0 23 * * *" # 06:00 Vietnam; rollout guard below defaults off.
 
 permissions:
   contents: read
@@ -50,7 +48,7 @@ jobs:
           INPUT_PROVIDERS: ${{ inputs.providers }}
         run: |
           args=(--browser --supplemental --limit 20)
-          if [ -n "$INPUT_CITY" ]; then args+=(--city "$INPUT_CITY"); fi
+          if [ -n "$INPUT_CITY" ] && [ "$INPUT_CITY" != "all" ]; then args+=(--city "$INPUT_CITY"); fi
           if [ "$INPUT_PILOT" = "true" ]; then args+=(--pilot); else args+=(--write-db); fi
           if [ "$INPUT_PROVIDERS" = "true" ]; then args+=(--providers); fi
           python -m trending "${args[@]}"
