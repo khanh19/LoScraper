@@ -1,9 +1,6 @@
 name: Scrape nightlife events
 
 on:
-  schedule:
-    # Monday and Friday at 05:00 ICT (UTC+7) = Sunday/Thursday 22:00 UTC
-    - cron: "0 22 * * 0,4"
   workflow_dispatch:
     inputs:
       city:
@@ -15,6 +12,13 @@ on:
           - ""
           - hcmc
           - hanoi
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lo-discovery-ingestion
+  cancel-in-progress: false
 
 env:
   PYTHONUNBUFFERED: "1"
