@@ -70,9 +70,11 @@ class OpenAI:
 
     def call(self, operation, payload, image_count=0):
         key=os.environ.get('OPENAI_API_KEY')
-        if not key:raise ProviderDisabled('openai_not_configured')
         model=payload['model']
         if model not in RATES:raise ProviderDisabled('unpriced_model')
+        cached=self.ledger.get(self.ledger.key('openai',operation,payload))
+        if cached and cached['status']=='complete' and cached['result'] is not None:return cached['result']
+        if not key:raise ProviderDisabled('openai_not_configured')
         # UTF-8 byte count is an upper bound on text tokens. Base64 image bytes
         # are excluded and separately bounded after local resizing.
         clean=json.loads(json.dumps(payload))
