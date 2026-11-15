@@ -3,14 +3,16 @@ from unittest.mock import Mock, patch
 
 from trending.adapters import collect_source
 from trending.progress import Progress
-from test_trending import NOW
+from test_trending import NOW, candidate
 
 
 class CollectionFailures(unittest.TestCase):
     def test_parser_exception_does_not_stop_remaining_pages_and_heartbeats(self):
         adapter=Mock()
         adapter.links.return_value=['https://example.org/bad','https://example.org/good']
-        adapter.parse.side_effect=[RuntimeError('private detail'),object()]
+        from bs4 import BeautifulSoup
+        adapter.fetch.return_value=BeautifulSoup('<main></main>','html.parser')
+        adapter.parse_many.side_effect=[RuntimeError('private detail'),[candidate()]]
         adapter.enrich.side_effect=lambda c,*args:c
         beat=Mock()
         with patch.dict('trending.adapters.CLASSES',{'test':Mock(return_value=adapter)}):

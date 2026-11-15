@@ -35,8 +35,8 @@ class Progress:
         try:
             return True, getattr(self.store, method)(*args, **kwargs)
         except Exception as exc:
-            if isinstance(exc, ValueError) and str(exc) == 'identity_conflict':
-                return False, 'identity_conflict'
+            if isinstance(exc, ValueError) and str(exc) in {'identity_conflict','stale_roundup_evidence'}:
+                return False, str(exc)
             # SQL error details can include row contents, connection strings or secrets.
             self.errors[type(exc).__name__] += 1
             # Candidate failures are counted by the caller; receipt failures have no candidate.
@@ -77,12 +77,16 @@ class Progress:
         s['failed'] += 1
         s['reasons'][reason] = s['reasons'].get(reason,0)+1
 
-    def count(self, outcome, city, reasons=()):
+    def count(self, outcome, city, reasons=(), kind=None):
         s = self.stats[self.source]
         s[outcome] += 1
         bucket = s['cities'].setdefault(city if city in self.cities else 'unclassified',
                                        dict(accepted=0,rejected=0,failed=0))
         bucket[outcome] += 1
+        if kind in {'event','place'}:
+            kinds=bucket.setdefault('by_kind',{})
+            counts=kinds.setdefault(kind,dict(accepted=0,rejected=0,failed=0))
+            counts[outcome]+=1
         for reason in reasons:
             s['reasons'][reason] = s['reasons'].get(reason,0)+1
         self.heartbeat()
@@ -112,5 +116,6 @@ class Progress:
         s = self.stats[self.source]
         error_count = sum(self.errors.values())-self.source_error_start
         s['persistence_errors'] = error_count
+        s['acceptance_yield'] = s['accepted']/s['extracted_entries'] if s.get('extracted_entries') else 0
         s['status'] = ('partial' if s['accepted'] else 'failed') if s['failed'] or error_count else 'complete'
         self.heartbeat()

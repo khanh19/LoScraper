@@ -47,7 +47,8 @@ def report(db, cities, now=None):
                     # A failed page may not reveal its city. Do not invent city attribution.
                     city_counts=(last['diagnostics'].get('cities',{}).get(city,{}) if last else {}),
                     source_counts={k:last[k] for k in ('accepted','rejected','failed')} if last else {},
-                    reasons=last['diagnostics'].get('reasons',{}) if last else {}))
+                    reasons=last['diagnostics'].get('reasons',{}) if last else {},
+                    quality={k:last['diagnostics'].get(k,0) for k in ('listing_pages','detail_pages','extracted_entries','acceptance_yield')} if last else {}))
         reservations = db.execute("""SELECT provider,billing_month,status,count(*) AS jobs,
             sum(reserved_units) AS reserved_units FROM discovery_provider_jobs
             GROUP BY provider,billing_month,status ORDER BY billing_month DESC,provider,status""").fetchall()
@@ -87,7 +88,7 @@ def main():
                 print(f"{city}: {feed['eligible_total']} eligible ({feed['eligible']}); empty={feed['empty']}; withheld={feed['withheld']}")
                 print('  Last fresh evidence expires within 24h:',len(feed['losing_last_fresh_evidence_within_24h']))
             for row in result['source_city_coverage']:
-                print(f"{row['source']} / {row['city']}: {row['last_status']}; attempted={row['last_attempt']}; completed={row['last_completed']}; counts={row['source_counts']}; reasons={row['reasons']}")
+                print(f"{row['source']} / {row['city']}: {row['last_status']}; attempted={row['last_attempt']}; completed={row['last_completed']}; counts={row['source_counts']}; reasons={row['reasons']}; quality={row['quality']}")
             for row in result['runs']:
                 print(f"Run {row['id']} ({row['source_slug']}): {row['status']}; accepted={row['accepted']} rejected={row['rejected']} failed={row['failed']}")
             print(result['provider_accounting']['label'])

@@ -32,6 +32,14 @@ class Store:
             ON CONFLICT(slug) DO UPDATE SET name=excluded.name,enabled=excluded.enabled,platform=excluded.platform""",
             (slug,name,enabled,platform))
 
+    def sync_image_permissions(self, records):
+        with self.db.transaction():
+            self.db.execute('UPDATE discovery_image_permissions SET revoked=true WHERE NOT (id=ANY(%s::text[]))',([p['id'] for p in records],))
+            for p in records:
+                self.db.execute("""INSERT INTO discovery_image_permissions(id,policy,revoked) VALUES (%s,%s,%s)
+                    ON CONFLICT(id) DO UPDATE SET policy=excluded.policy,revoked=excluded.revoked""",
+                    (p['id'],Jsonb(p),bool(p.get('revoked',False))))
+
     def upsert(self, c: Candidate, now: datetime):
         reasons = c.validate(now)
         if reasons:
@@ -39,10 +47,18 @@ class Store:
         p = c.payload()
         with self.db.transaction():
             self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
-            known = self.db.execute("SELECT o.item_id,i.kind,i.city_slug FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id WHERE source_slug=%s AND source_url=%s",
-                                    (c.source_slug,c.source_url)).fetchone()
+            known = self.db.execute("SELECT o.item_id,i.kind,i.city_slug,o.published_at FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id WHERE source_slug=%s AND source_url=%s AND entry_key=%s",
+                                    (c.source_slug,c.source_url,c.entry_key)).fetchone()
             if known and (known['kind'] != c.kind or known['city_slug'] != c.city_slug):
                 raise ValueError('identity_conflict')
+            if known and c.entry_key and c.kind == 'place' and known['published_at']:
+                from .model import parse_time
+                # A rotating roundup date cannot rejuvenate an existing entry.
+                if parse_time(c.published_at) > known['published_at']:
+                    from dataclasses import replace
+                    c = replace(c,published_at=known['published_at'].isoformat())
+                    if c.validate(now):
+                        raise ValueError('stale_roundup_evidence')
             existing = known or self.db.execute("SELECT id AS item_id FROM discovery_items WHERE fingerprint=%s",(p['fingerprint'],)).fetchone()
             # Only match an existing place when name AND address AND city agree.
             places = self.db.execute("""SELECT p.id FROM places p JOIN cities c ON c.id=p.city_id
@@ -50,7 +66,7 @@ class Store:
                   AND lower(trim(p.address))=lower(trim(%s)) LIMIT 2""",(c.city_slug,c.venue_name,c.address)).fetchall()
             place_id = places[0]['id'] if len(places)==1 else None
             values = (c.kind,c.city_slug,c.category,p['title_vi'],p['description_vi'],c.title,c.venue_name,c.address,place_id)
-            facts = dict(version=1, kind=c.kind, city_slug=c.city_slug, category=c.category,
+            facts = dict(version=1, image_association_verified=c.image_association_verified, image_permission_id=(c.image_permission or {}).get('id'), evidence_locator=c.evidence_locator, kind=c.kind, city_slug=c.city_slug, category=c.category,
                          title_vi=p['title_vi'], description_vi=p['description_vi'], original_title=c.title,
                          venue_name=c.venue_name, address=c.address, price_text=c.price_text,
                          place_id=str(place_id) if place_id else None)
@@ -64,9 +80,9 @@ class Store:
                     original_title,venue_name,address,place_id,fingerprint) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                     (*values,p['fingerprint'])).fetchone()['id']
             observation_id = self.db.execute("""INSERT INTO discovery_observations
-                (item_id,source_slug,source_url,owner_key,content_hash,original_text,location_evidence,published_at,verified_at,status,image_url,metrics,facts)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s,%s,%s)
-                ON CONFLICT(source_slug,source_url) DO UPDATE SET
+                (item_id,source_slug,source_url,entry_key,owner_key,content_hash,original_text,location_evidence,published_at,verified_at,status,image_url,metrics,facts)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s,%s,%s)
+                ON CONFLICT(source_slug,source_url,entry_key) DO UPDATE SET
                     owner_key=excluded.owner_key,content_hash=excluded.content_hash,original_text=excluded.original_text,
                     location_evidence=excluded.location_evidence,published_at=excluded.published_at,
                     previous_metrics=CASE WHEN discovery_observations.verified_at < excluded.verified_at - interval '1 hour'
@@ -74,7 +90,7 @@ class Store:
                     previous_observed_at=CASE WHEN discovery_observations.verified_at < excluded.verified_at - interval '1 hour'
                         THEN discovery_observations.verified_at ELSE discovery_observations.previous_observed_at END,
                     metrics=excluded.metrics,verified_at=excluded.verified_at,status='active',image_url=excluded.image_url,facts=excluded.facts
-                RETURNING id""",(item_id,c.source_slug,c.source_url,p['owner_key'],p['content_hash'],p['original_text'],c.location_evidence,
+                RETURNING id""",(item_id,c.source_slug,c.source_url,c.entry_key,p['owner_key'],p['content_hash'],p['original_text'],c.location_evidence,
                                  c.published_at,c.verified_at,p['image_url'],Jsonb(c.metrics),Jsonb(facts))).fetchone()['id']
             # Replace occurrences for THIS successfully parsed page only, inside its transaction.
             self.db.execute("DELETE FROM discovery_occurrences WHERE observation_id=%s",(observation_id,))
@@ -83,9 +99,9 @@ class Store:
                     VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",(observation_id,o.starts_at,o.ends_at,o.precision))
         return str(item_id)
 
-    def cancel(self, source_slug, url, now):
+    def cancel(self, source_slug, url, now, entry_key=""):
         self.db.execute("""UPDATE discovery_observations SET status='cancelled',verified_at=%s
-            WHERE source_slug=%s AND source_url=%s""",(now,source_slug,url))
+            WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",(now,source_slug,url,entry_key))
 
     def start_run(self, sources, cities, source='__run__', parent_id=None):
         run_id = str(uuid4())
@@ -108,7 +124,7 @@ class Store:
         self.progress(run_id,accepted,rejected,len(failures),
                       {'failures':failures,'reasons':reasons},'partial' if failures else 'complete')
 
-    def reserve(self, provider, key, units, cap, remaining, inputs, now, verified_at=None):
+    def reserve(self, provider, key, units, cap, remaining, inputs, now, verified_at=None, pilot_id=None):
         month = now.date().replace(day=1)
         if units <= 0 or units > remaining:
             return None
@@ -118,6 +134,16 @@ class Store:
             if old:
                 old['created_now'] = False
                 return old
+            if pilot_id:
+                pilot=self.db.execute('SELECT id FROM discovery_pilots WHERE id=%s FOR UPDATE',(pilot_id,)).fetchone()
+                if not pilot:raise ValueError('unknown_pilot')
+                if provider not in {'brightdata','serpapi'}:raise ValueError('invalid_pilot_provider')
+                platform=inputs.get('platform')
+                if provider=='brightdata' and (units!=1 or platform not in {'facebook','instagram','tiktok'}):
+                    raise ValueError('invalid_pilot_record')
+                total=self.db.execute('SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE pilot_id=%s AND provider=%s',(pilot_id,provider)).fetchone()['used']
+                platform_used=self.db.execute("SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE pilot_id=%s AND provider=%s AND input_data->>'platform'=%s",(pilot_id,provider,platform)).fetchone()['used']
+                if total+units>(9 if provider=='brightdata' else 6) or (provider=='brightdata' and platform_used+units>3):return None
             used = self.db.execute("SELECT COALESCE(sum(reserved_units),0) AS used FROM discovery_provider_jobs WHERE provider=%s AND billing_month=%s",(provider,month)).fetchone()['used']
             # The remote balance can lag in-flight requests. Conservatively charge
             # unresolved reservations against it as well as against our monthly cap.
@@ -132,8 +158,8 @@ class Store:
                     (provider, verified_at)).fetchone()['used']
             if used + units > cap or pending + units > remaining:
                 return None
-            row = self.db.execute("""INSERT INTO discovery_provider_jobs(job_key,provider,billing_month,reserved_units,input_data)
-                VALUES (%s,%s,%s,%s,%s) RETURNING *""",(key,provider,month,units,Jsonb(inputs))).fetchone()
+            row = self.db.execute("""INSERT INTO discovery_provider_jobs(job_key,provider,billing_month,reserved_units,input_data,pilot_id)
+                VALUES (%s,%s,%s,%s,%s,%s) RETURNING *""",(key,provider,month,units,Jsonb(inputs),pilot_id)).fetchone()
             row['created_now'] = True
             return row
 
@@ -155,5 +181,5 @@ class Store:
 
     def cleanup(self):
         self.db.execute("DELETE FROM discovery_ingestion_runs WHERE started_at < now() - interval '30 days'")
-        self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete'")
+        self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete' AND pilot_id IS NULL")
         self.db.execute("DELETE FROM discovery_items WHERE updated_at < now() - interval '90 days' AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.item_id=discovery_items.id AND o.verified_at > now() - interval '90 days')")

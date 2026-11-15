@@ -1,0 +1,195 @@
+{
+  "evaluation_time": "2026-11-08T05:05:14.792759+00:00",
+  "method": "Shared captured pages and evaluation clock; 12 detail pages/source; new adapters add sources",
+  "sources": {
+    "vietnamnightlife": {
+      "baseline_accepted": 2,
+      "updated_accepted": 2,
+      "rejected": 10,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 1,
+        "detail_pages": 12,
+        "extracted_entries": 12
+      }
+    },
+    "ticketbox": {
+      "baseline_accepted": 1,
+      "updated_accepted": 1,
+      "rejected": 11,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 1,
+        "detail_pages": 12,
+        "extracted_entries": 12
+      }
+    },
+    "hanoigrapevine": {
+      "baseline_accepted": 2,
+      "updated_accepted": 2,
+      "rejected": 10,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 1,
+        "detail_pages": 12,
+        "extracted_entries": 12
+      }
+    },
+    "danangfantasticity": {
+      "baseline_accepted": 1,
+      "updated_accepted": 1,
+      "rejected": 11,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 4,
+        "detail_pages": 12,
+        "extracted_entries": 12
+      }
+    },
+    "vnexpress": {
+      "baseline_accepted": 1,
+      "updated_accepted": 1,
+      "rejected": 11,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 2,
+        "detail_pages": 12,
+        "extracted_entries": 12
+      }
+    },
+    "ticketgo": {
+      "baseline_accepted": 1,
+      "updated_accepted": 1,
+      "rejected": 11,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 1,
+        "detail_pages": 12,
+        "extracted_entries": 12
+      }
+    },
+    "lifeofdanang": {
+      "baseline_accepted": 0,
+      "updated_accepted": 1,
+      "rejected": 16,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 1,
+        "detail_pages": 12,
+        "extracted_entries": 17
+      }
+    },
+    "saigoneer": {
+      "baseline_accepted": 0,
+      "updated_accepted": 0,
+      "rejected": 18,
+      "failures": [],
+      "metrics": {
+        "listing_pages": 3,
+        "detail_pages": 12,
+        "extracted_entries": 18
+      }
+    }
+  },
+  "cities": {
+    "hcmc": {
+      "baseline": 4,
+      "updated": 4
+    },
+    "hanoi": {
+      "baseline": 3,
+      "updated": 3
+    },
+    "danang": {
+      "baseline": 1,
+      "updated": 2
+    }
+  },
+  "fresh_cli": {
+    "status": "partial",
+    "sources": {
+      "lifeofdanang": {
+        "accepted": 1,
+        "rejected": 16,
+        "failed": 0,
+        "reasons": {
+          "no_upcoming_occurrence": 14,
+          "irrelevant_category": 2,
+          "multiple_destinations_unresolved": 1,
+          "unverified_city": 5,
+          "unverified_destination": 1
+        },
+        "failures": [],
+        "cities": {
+          "danang": {
+            "accepted": 1,
+            "rejected": 11,
+            "failed": 0,
+            "by_kind": {
+              "event": {
+                "accepted": 1,
+                "rejected": 11,
+                "failed": 0
+              }
+            }
+          },
+          "unclassified": {
+            "accepted": 0,
+            "rejected": 5,
+            "failed": 0,
+            "by_kind": {
+              "event": {
+                "accepted": 0,
+                "rejected": 5,
+                "failed": 0
+              }
+            }
+          }
+        },
+        "status": "complete",
+        "listing_pages": 1,
+        "detail_pages": 12,
+        "extracted_entries": 17,
+        "persistence_errors": 0,
+        "acceptance_yield": 0.058823529411764705
+      },
+      "vnexpress": {
+        "accepted": 0,
+        "rejected": 0,
+        "failed": 2,
+        "reasons": {
+          "Error": 1,
+          "no_detail_links": 1
+        },
+        "failures": [
+          {
+            "stage": "listing",
+            "reason": "Error"
+          },
+          {
+            "stage": "listing",
+            "reason": "no_detail_links"
+          }
+        ],
+        "cities": {},
+        "status": "failed",
+        "listing_pages": 1,
+        "detail_pages": 0,
+        "extracted_entries": 0,
+        "persistence_errors": 0,
+        "acceptance_yield": 0
+      }
+    }
+  },
+  "social": {
+    "pilot_id": "coverage-20261108",
+    "new_serpapi_searches": 6,
+    "new_brightdata_attempts": 1,
+    "returned_records": 1,
+    "accepted_social_observations": 0,
+    "facebook": "transport_passed_evidence_failed",
+    "instagram": "blocked_no_suitable_post",
+    "tiktok": "blocked_no_suitable_post",
+    "routine_enabled": false
+  }
+}

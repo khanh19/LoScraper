@@ -81,6 +81,11 @@ class Candidate:
     owner_key: str = ""
     metrics: dict[str, int] = field(default_factory=dict)
 
+    image_association_verified: bool = False
+    image_permission: dict | None = None
+    entry_key: str = ""
+    evidence_locator: str = ""
+
     def validate(self, now: datetime) -> list[str]:
         reasons = list(self.reasons)
         if not self.title.strip() or len(self.title) > 500:
