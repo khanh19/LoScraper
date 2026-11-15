@@ -13,7 +13,7 @@ from .engine_store import EngineStore,CAMPAIGN
 from .http import PublicClient
 from .intent import queries,ACTIVITIES
 from .model import CITIES,ICT
-from .multimodal import normalize_record,process
+from .multimodal import normalize_record,process_destinations
 from .providers import BrightSocial,ProviderDisabled
 from .store import Store
 
@@ -121,7 +121,13 @@ def run(args):
                 published=parse_time(row.get('date_posted'))
                 text=folded(str(row.get('description','')))
                 local=any(folded(alias) in text for alias in [CITIES[city],{'hcmc':'Sài Gòn','hanoi':'Hanoi','danang':'Danang'}[city]])
-                return (not local,not bool(published and (now-published).days<=7),-(published.timestamp() if published else 0),row['url'])
+                from .social_quality import triage
+                from .engagement import assess
+                # Absolute counts triage extraction only; they never confer a
+                # trend badge or override eligibility. Avoid comparing raw
+                # counts across platforms with different metric semantics.
+                popular=assess(row)['popularity_candidate']
+                return (-triage(text)['priority'],not local,not popular,not bool(published and (now-published).days<=7),-(published.timestamp() if published else 0),row['url'])
             # Website leads are still collected by dedicated adapters. Search
             # snippets and invented synthetic posts never become evidence here.
             for row in sorted(rows.values(),key=priority)[:args.max_candidates]:
@@ -137,7 +143,10 @@ def run(args):
                                     (account['publisher_id'],city)).fetchall()
                     ledger.evidence(package)
                     permissions=json.loads(args.media_permissions.read_text()) if args.media_permissions else []
-                    outcome.update(process(package,ai,ledger,now,fetch_images=args.images,media_permissions=permissions))
+                    children=process_destinations(package,ai,ledger,now,fetch_images=args.images,media_permissions=permissions)
+                    outcome['destinations']=children
+                    outcome['reasons']=sorted({r for child in children for r in child.get('reasons',[child.get('reason','destination_failed')])})
+                    if not children:outcome['reasons']=['no_identifiable_destination']
                     outcome['extraction_status']='passed'
                     outcome['validation_status']='passed' if not outcome['reasons'] else 'held'
                 except ProviderDisabled as exc:outcome.update(extraction_status='blocked',reason=str(exc))

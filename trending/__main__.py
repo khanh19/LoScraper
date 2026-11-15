@@ -104,7 +104,9 @@ def run(args):
                     invalid = c.validate(now)
                     if invalid:
                         progress.count('rejected',city,invalid,kind=c.kind)
-                        report['rejected'].append({'source':slug,'reasons':invalid})
+                        report['rejected'].append({'source':slug,'reasons':invalid,
+                            'sample': {k:c.payload().get(k) for k in
+                                ('source_url','title','city_slug','published_at','verified_at','venue_name','kind')}})
                         if c.status == 'cancelled' and store and args.write_db:
                             ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key)
                             if not ok:

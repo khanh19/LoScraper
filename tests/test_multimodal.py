@@ -10,7 +10,7 @@ from unittest.mock import Mock,patch
 from trending.__main__ import load_env_files
 from trending.engine_providers import OpenAI,YouTube,ApifyTikTok,lead_platform,EXTRACTOR
 from trending.engine_store import digest
-from trending.multimodal import normalize_record,validate_extraction,judge_reasons,process,similar_candidates,CHECKS
+from trending.multimodal import normalize_record,validate_extraction,judge_reasons,process,similar_candidates,CHECKS,candidate_from_evidence
 from trending.media import permitted,transcribe
 from trending.providers import ProviderDisabled
 
@@ -47,6 +47,18 @@ class FakeLedger:
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_creator_can_supply_places_but_not_events(self):
+        p=package();p['owner_key']='reviewer'
+        a=dict(publisher_id='reviewer',platform='instagram',owner_key='reviewer',name='Reviewer',authority_type='creator')
+        v=dict(publisher_id='reviewer',id='venue',name='Nhà Gốm',address='12 phố Huế, Hà Nội',city_slug='hanoi',evidence_url='https://example.com/venue')
+        self.assertEqual(candidate_from_evidence(p,claims(),a,v,NOW)[1],'creator_cannot_establish_event')
+        c=claims();c.update(kind='place',occurrences=[])
+        result,reason=candidate_from_evidence(p,c,a,v,NOW)
+        self.assertIsNone(reason)
+        self.assertEqual(result.authority_type,'creator')
+        v['revoked']=True
+        self.assertEqual(candidate_from_evidence(p,c,a,v,NOW)[1],'unreviewed_authority')
+
     def test_valid_fact_extraction_and_same_instant(self):
         c=claims();self.assertEqual(validate_extraction(c,package(),NOW),[])
         c['published_at']='2026-11-08T16:00:00+07:00'

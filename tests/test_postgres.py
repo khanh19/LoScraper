@@ -474,6 +474,27 @@ class Persistence(unittest.TestCase):
         result=self.store.db.execute("SELECT reason,payload FROM discovery_evaluate_all(%s,'hanoi') WHERE item_id=%s::uuid",(NOW,item)).fetchone()
         self.assertEqual(result['reason'],'unresolved_sessions');self.assertIsNone(result['payload'])
 
+    def test_creator_authority_places_only_and_recent(self):
+        c=candidate('place');c.platform='instagram';c.source_slug='instagram'
+        c.source_url='https://www.instagram.com/p/creator';c.owner_key='creator';c.authority_type='creator'
+        self.store.register('instagram','Instagram',True,'instagram')
+        self.store.db.execute("INSERT INTO discovery_publisher_accounts(publisher_id,platform,owner_key,name,ownership_evidence_url,reviewed_at,authority_type,publication_enabled) VALUES('reviewer','instagram','creator','Reviewer','https://example.com/profile',%s,'creator',true)",(NOW,))
+        v=self.store.db.execute("INSERT INTO discovery_verified_venues(publisher_id,name,address,city_slug,evidence_url,reviewed_at) VALUES('reviewer',%s,%s,'hanoi','https://example.com/location',%s) RETURNING id",(c.venue_name,c.address,NOW)).fetchone()['id']
+        c.verified_venue_id=str(v);self.store.upsert(c,NOW)
+        self.assertEqual(self.feed()[0]['authority_type'],'creator')
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET authority_type='organizer'")
+        self.assertEqual(self.feed(),[])
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET authority_type='creator'")
+        self.store.db.execute("UPDATE discovery_observations SET published_at=%s",(NOW-timedelta(days=8),))
+        self.assertEqual(self.feed(),[])
+        self.store.upsert(c,NOW)
+        e=candidate();e.platform='instagram';e.source_slug='instagram';e.source_url='https://www.instagram.com/p/creator-event'
+        e.owner_key=c.owner_key;e.authority_type='creator';e.verified_venue_id=str(v)
+        self.store.upsert(e,NOW)
+        self.assertEqual(self.feed(kind='event'),[])
+        self.store.db.execute('UPDATE discovery_verified_venues SET revoked=true')
+        self.assertEqual(self.feed(),[])
+
     def test_publisher_aliases_do_not_inflate_attention(self):
         c=candidate('place');c.original_text='Original review';self.store.upsert(c,NOW)
         d=copy.deepcopy(c);d.source_slug='sister';d.source_url='https://example.com/sister';d.original_text='Different version of same owner review'

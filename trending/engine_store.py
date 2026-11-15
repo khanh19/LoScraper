@@ -13,7 +13,10 @@ from .providers import ProviderDisabled
 
 CAMPAIGN = 'multimodal-v1'
 CAPS = {'openai': 30_000_000, 'apify': 3_000_000, 'youtube': 0, 'brightdata': 0}
-UNIT_CAPS = {'apify': 90, 'youtube': 1200, 'brightdata': 150, 'openai': 500}
+# 2026-11-15: user requested continued Instagram review within five weeks.
+# Bounded extension of 24 outputs; historical usage and $3 ceiling preserved.
+# User continuation: six additional creators, <=3 outputs each (18 total).
+UNIT_CAPS = {'apify': 132, 'youtube': 1200, 'brightdata': 150, 'openai': 500}
 
 
 def digest(value):

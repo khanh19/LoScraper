@@ -257,6 +257,8 @@ class ApifyTikTok:
                 'date_posted':row.get('createTimeISO'),'profile_url':author.get('profileUrl') or ('https://www.tiktok.com/@'+author.get('name','')),
                 'thumbnail':video.get('coverUrl'),'transcript':row.get('transcript'),
                 '_source_verified_at':job['created_at'].isoformat(),
+                'play_count':row.get('playCount'),'collect_count':row.get('collectCount'),
+                'is_ad':row.get('isAd'),'is_sponsored':row.get('isSponsored'),
                 'digg_count':row.get('diggCount'),'share_count':row.get('shareCount'),'comment_count':row.get('commentCount')})
         self.ledger.update(job['id'],'complete',result=out,usage={'usageTotalUsd':data.get('usageTotalUsd')})
         return out
