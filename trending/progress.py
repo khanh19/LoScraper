@@ -5,7 +5,8 @@ import psycopg
 
 
 class Progress:
-    def __init__(self, store, sources, cities):
+    def __init__(self, store, sources, cities, mode="discovery"):
+        self.mode = mode
         self.store = store
         self.cities = list(cities)
         self.sources = list(sources)
@@ -107,10 +108,10 @@ class Progress:
         if self.source_id:
             s = self.stats[self.source]
             self.call('progress',self.source_id,s['accepted'],s['rejected'],s['failed'],
-                      dict(parent_id=self.run_id,**s),s['status'])
+                      dict(parent_id=self.run_id,mode=self.mode,**s),s['status'])
         a,r,f = self.totals()
         self.call('progress',self.run_id,a,r,f+self.unassigned_failures,
-                  {'sources':self.stats,'persistence_errors':dict(self.errors)},self.status() if final else 'running')
+                  {'mode':self.mode,'sources':self.stats,'persistence_errors':dict(self.errors)},self.status() if final else 'running')
 
     def finish_source(self):
         s = self.stats[self.source]

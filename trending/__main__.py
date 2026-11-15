@@ -37,11 +37,14 @@ def load_env_files(paths):
 
 def run(args):
     now = datetime.now(timezone.utc)
+    refresh = getattr(args, "refresh_existing", False)
     configs = load_sources()
     selected = args.sources.split(',') if args.sources else list(CLASSES)
     if any(s not in CLASSES for s in selected):
         raise ValueError('Unknown source')
     url = os.environ.get('DATABASE_URL')
+    if refresh and (not args.write_db or args.providers or args.supplemental or args.pilot):
+        raise ValueError('Refresh requires --write-db without providers, supplemental discovery or pilot')
     if args.write_db and not url:
         raise ValueError('DATABASE_URL is required for --write-db; omit the flag for a read-only pilot')
     # Unvalidated adapters may only publish into a local test database.
@@ -49,8 +52,9 @@ def run(args):
         raise ValueError('Pilot imports require a local test database')
     store = Store(url) if url and (args.write_db or args.providers) else None
     client = PublicClient(browser=args.browser)
-    progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES))
-    report = {'run_id':progress.run_id,'generated_at':now.isoformat(),'pilot':args.pilot,'sources':{},'accepted':[],'rejected':[], 'providers':{}}
+    progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES),
+                        mode="refresh_existing" if refresh else "discovery")
+    report = {'run_id':progress.run_id,'generated_at':now.isoformat(),'pilot':args.pilot,'mode':'refresh_existing' if refresh else 'discovery','sources':{},'accepted':[],'rejected':[], 'providers':{}}
     try:
         if store and args.write_db:
             from .images import permissions
@@ -87,8 +91,23 @@ def run(args):
                     progress.fail('source_registration_failed')
             try:
                 metrics = {}
-                candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
-                                                      heartbeat=progress.heartbeat,metrics=metrics)
+                known = None
+                if refresh:
+                    ok, targets = progress.call('refresh_targets',slug,now,args.city)
+                    if not ok: raise RuntimeError('refresh_targets_unavailable')
+                    urls = list(dict.fromkeys(t['source_url'] for t in targets))
+                    selected_urls = urls[:200]
+                    known = {(t['source_url'],t['entry_key']) for t in targets if t['source_url'] in selected_urls}
+                    candidates, failures = collect_source(slug,config,client,now,200,selected_urls,
+                        heartbeat=progress.heartbeat,metrics=metrics,existing_only=True)
+                    candidates = [c for c in candidates if (c.source_url,c.entry_key) in known]
+                    found = {(c.source_url,c.entry_key) for c in candidates}
+                    if known-found: failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
+                    if len(urls)>200: failures.append({'stage':'refresh','reason':'refresh_page_limit'})
+                    metrics.update(existing_entries=len(known),deferred_pages=max(0,len(urls)-200))
+                else:
+                    candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
+                                                          heartbeat=progress.heartbeat,metrics=metrics)
                 stats.update(metrics)
             except Exception as exc:
                 candidates, failures = [], [{'stage':'source','reason':type(exc).__name__}]
@@ -201,6 +220,7 @@ def main():
     parser.add_argument('--supplemental',action='store_true')
     parser.add_argument('--providers',action='store_true',help='Opt in to verified-free providers; missing access is skipped')
     parser.add_argument('--write-db',action='store_true')
+    parser.add_argument('--refresh-existing',action='store_true',help='Recheck existing website entries only; no new discovery or providers')
     parser.add_argument('--out',help='Optional local audit report (never committed/uploaded automatically)')
     parser.add_argument('--env-file',action='append',default=[],help='Explicit local credentials file (repeatable; never echoed)')
     args = parser.parse_args()

@@ -40,6 +40,19 @@ class Store:
                     ON CONFLICT(id) DO UPDATE SET policy=excluded.policy,revoked=excluded.revoked""",
                     (p['id'],Jsonb(p),bool(p.get('revoked',False))))
 
+    def refresh_targets(self, slug, now, city=None):
+        """Existing website observations only; oldest checks first, no provider calls."""
+        return self.db.execute("""SELECT o.source_url,o.entry_key,i.city_slug,o.verified_at
+            FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id
+            JOIN discovery_sources s ON s.slug=o.source_slug
+            WHERE o.source_slug=%s AND s.platform='web' AND s.enabled AND o.status='active'
+            AND (%s::text IS NULL OR i.city_slug=%s)
+            AND ((i.kind='place' AND o.published_at BETWEEN %s::timestamptz-interval '7 days' AND %s)
+              OR (i.kind='event' AND EXISTS (SELECT 1 FROM discovery_occurrences x
+                  WHERE x.observation_id=o.id AND x.ends_at>%s AND x.starts_at<%s::timestamptz+interval '30 days')))
+            ORDER BY o.verified_at,o.source_url,o.entry_key""",
+            (slug,city,city,now,now,now,now)).fetchall()
+
     def upsert(self, c: Candidate, now: datetime):
         reasons = c.validate(now)
         if reasons:

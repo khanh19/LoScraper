@@ -305,6 +305,36 @@ class Persistence(unittest.TestCase):
         self.store.reconnect()  # restore the test fixture only, not the run
         self.assertEqual(len(self.feed()),1)
 
+    def test_refresh_existing_filters_new_entries_and_failed_fetch_preserves_time(self):
+        from argparse import Namespace
+        from contextlib import redirect_stdout
+        import io
+        from trending.__main__ import run
+        existing=candidate();self.store.upsert(existing,NOW)
+        before=self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at']
+        self.assertEqual(len(self.store.refresh_targets('ticketbox',NOW)),1)
+        self.assertEqual(self.store.refresh_targets('ticketbox',NOW,'danang'),[])
+        args=Namespace(sources='ticketbox',city=None,pilot=False,write_db=True,browser=False,
+                       supplemental=False,providers=False,refresh_existing=True,limit=12,out=None)
+        class Clock:
+            @staticmethod
+            def now(tz):return NOW+timedelta(hours=1)
+        fresh=copy.deepcopy(existing);fresh.verified_at=(NOW+timedelta(hours=1)).isoformat()
+        sibling=copy.deepcopy(fresh);sibling.source_url='https://ticketbox.vn/new-unrequested'
+        def execute(rows,failures):
+            with patch.dict(os.environ,{'DATABASE_URL':URL}),patch('trending.__main__.datetime',Clock), \
+                 patch('trending.__main__.Store',return_value=self.store),patch.object(self.store,'close'), \
+                 patch('trending.__main__.PublicClient'),patch('trending.__main__.collect_source',return_value=(rows,failures)), \
+                 redirect_stdout(io.StringIO()):
+                return run(args)
+        failed=execute([], [{'stage':'detail','reason':'http_503'}])
+        self.assertNotEqual(failed['status'],'complete')
+        self.assertEqual(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
+        success=execute([fresh,sibling],[])
+        self.assertEqual(success['sources']['ticketbox']['accepted'],1)
+        self.assertEqual(self.store.db.execute('SELECT count(*) AS n FROM discovery_observations').fetchone()['n'],1)
+        self.assertGreater(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
+
     def test_run_continues_after_bad_candidate_failed_write_and_source(self):
         from argparse import Namespace
         from contextlib import redirect_stdout

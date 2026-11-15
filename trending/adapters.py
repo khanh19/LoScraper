@@ -424,13 +424,13 @@ def load_sources():
     return json.loads(Path(__file__).with_name('sources.json').read_text())
 
 
-def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None, metrics=None):
+def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None, metrics=None, existing_only=False):
     adapter = CLASSES[slug](slug, config)
     metrics = metrics if metrics is not None else {}
     metrics.update(listing_pages=0,detail_pages=0,extracted_entries=0)
     links = list(extra_urls)
     failures = []
-    seeds = list(config['seeds'])
+    seeds = [] if existing_only else list(config['seeds'])
     for seed in seeds:
         heartbeat()
         try:
@@ -453,10 +453,10 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
             failures.append({"stage": "listing", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
         heartbeat()
     links = list(dict.fromkeys(links))[:limit]
-    if slug == 'danangfantasticity':
+    if slug == 'danangfantasticity' and not existing_only:
         # Reserve detail capacity for the individual activities linked by campaigns.
         links = links[:max(1,limit-3)]
-    if not links:
+    if not links and not existing_only:
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
     for url in links:
@@ -466,7 +466,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
             metrics['detail_pages']+=1
             # Official campaign pages link to individual activities. Discover
             # those pages within the same total detail-page budget.
-            if slug == 'danangfantasticity':
+            if slug == 'danangfantasticity' and not existing_only:
                 for child in adapter.links(soup,url):
                     if child not in links and len(links) < limit:
                         links.append(child)

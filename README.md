@@ -79,7 +79,7 @@ Optional supplemental discovery follows links from **Life of Da Nang, Saigoneer,
 | Apify | Researched alternative; no Actor integration or automatic fallback. |
 | Daily GitHub collection | Workflow implemented; scheduling disabled pending rollout. |
 
-No additional spending is authorized. Optional providers fail closed when free capacity cannot be verified. The planned schedule is **06:00 Vietnam time**, guarded by `TRENDING_SCHEDULE_ENABLED`; leave it unset/false during onboarding. Manual workflow validation requires the new workflow on the default branch.
+No additional spending is authorized. Optional providers fail closed when free capacity cannot be verified. From **1 December 2026**, the configured cadence is **Tuesday/Friday full updates at 06:00 Vietnam time**, plus existing-website checks on other days ([setup](docs/collection-schedule.md)), guarded by `TRENDING_SCHEDULE_ENABLED`; leave it unset/false during onboarding. Manual workflow validation requires the new workflow on the default branch.
 
 The **[dated status matrix](docs/tool-status.md)** records live results, failed samples, and remaining blockers. A valid API key alone is not permission to incur usage.
 
