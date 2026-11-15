@@ -33,3 +33,16 @@ Review withheld incomplete city-only snapshots in the local database (facts vers
 ## Validation
 
 Scraper unit and real local PostgreSQL tests pass, including exact seven-day expiry, current-month discovery, primary-text isolation, city-only holds, and province conflicts. Encore discovery tests pass. Frontend typecheck, lint (39 existing warnings, zero errors), and 183 Maestro flow definitions pass. All three cities and all weekly kind filters were checked through real HTTP responses; planning was checked per city. iPhone visual confirmation remains with the user. No deployment, merge, or schedule activation.
+
+## Collection coverage follow-up
+
+Adds a pilot-only Hanoi Go adapter with primary-field location evidence, explicit
+sessions, inclusive exhibition date ranges and holds for truncated calendars.
+Cancellations are checked before every early return. TicketGo category listings
+are interleaved before the detail-page bound; Ticketbox reads structured HTML
+before trying browser rendering and prefers explicit street city evidence over
+its sometimes-default locality. `--lead-url` accepts selected-source URLs within
+the existing detail cap; refresh-only runs reject new leads.
+
+Validation after develop synchronization: 115 offline tests and 158 tests with
+isolated PostgreSQL passed. Hanoi Go remains pilot-only pending broader review.

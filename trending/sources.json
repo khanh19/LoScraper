@@ -61,7 +61,11 @@
   "ticketgo": {
     "name": "TicketGo",
     "seeds": [
-      "https://www.ticketgo.vn/"
+      "https://www.ticketgo.vn/",
+      "https://www.ticketgo.vn/event/category/am-nhac",
+      "https://www.ticketgo.vn/event/category/van-hoa-nghe-thuat",
+      "https://www.ticketgo.vn/event/category/giao-duc",
+      "https://www.ticketgo.vn/event/category/the-thao"
     ],
     "hosts": [
       "www.ticketgo.vn",
@@ -125,5 +129,16 @@
     "platform": "instagram",
     "enabled": false,
     "pilot_status": "disabled_trigger_http400"
+  },
+  "hanoigo": {
+    "name": "Hà Nội Go",
+    "seeds": [
+      "https://hanoigo.com.vn/event"
+    ],
+    "hosts": [
+      "hanoigo.com.vn"
+    ],
+    "enabled": false,
+    "pilot_status": "pending_bounded_live_validation"
   }
 }

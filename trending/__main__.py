@@ -50,6 +50,15 @@ def run(args):
     # Unvalidated adapters may only publish into a local test database.
     if args.pilot and args.write_db and urlsplit(url).hostname not in {'localhost','127.0.0.1','::1'}:
         raise ValueError('Pilot imports require a local test database')
+    leads = getattr(args, 'lead_url', []) or []
+    if leads and refresh:
+        raise ValueError('Refresh cannot accept new leads')
+    lead_map = {slug: [] for slug in selected}
+    for lead in leads:
+        matched = [slug for slug in selected if urlsplit(lead).hostname in configs[slug]['hosts']]
+        if len(matched) != 1:
+            raise ValueError('Lead must match exactly one selected source')
+        lead_map[matched[0]].append(lead)
     store = Store(url) if url and (args.write_db or args.providers) else None
     client = PublicClient(browser=args.browser)
     progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES),
@@ -76,6 +85,8 @@ def run(args):
                         extra.setdefault(slug, []).extend(u for u in urls if urlsplit(u).hostname in configs[slug]['hosts'])
                 except ProviderDisabled as exc:
                     report['providers']['serpapi'] = str(exc)
+        for slug, urls in lead_map.items():
+            extra[slug] = urls + extra.get(slug, [])
         primaries = []
         for slug in selected:
             config = configs[slug]
@@ -214,6 +225,7 @@ def main():
     parser = argparse.ArgumentParser(description='Lô free-only trending collectors')
     parser.add_argument('--city',choices=list(CITIES))
     parser.add_argument('--sources',help='Comma-separated source slugs')
+    parser.add_argument('--lead-url',action='append',default=[],help='Public detail URL from a selected source; shares the detail-page limit')
     parser.add_argument('--limit',type=int,default=12,help='Maximum detail pages per source (1–30)')
     parser.add_argument('--pilot',action='store_true',help='Inspect disabled adapters; no production imports')
     parser.add_argument('--browser',action='store_true',help='Enable local Playwright for rendered pages')
