@@ -20,4 +20,10 @@ Both collection workflows are manual-only. Their shared concurrency group preven
 
 All PR targets (including stacked PRs), pushes to `main`, `develop`, and `stephen-*`, and manual dispatch run CI. Jobs have read-only repository permissions, time limits, and cancel superseded runs. They use no provider credentials or live scraping. No deployment, signed iOS build, merge, or schedule activation is configured.
 
-After the parent PRs merge, an administrator should make the job names below required in branch protection/rulesets on the integration branches. Workflow files alone do not enforce merge protection. Keep production deployment as a separate, explicitly approved environment gate.
+After the parent PRs merge, an administrator should make the job name above required in branch protection/rulesets on the integration branches. Workflow files alone do not enforce merge protection. Keep production deployment as a separate, explicitly approved environment gate.
+
+## Verified run — 15 November 2026
+
+[GitHub Actions passed](https://github.com/khanh19/LoScraper/actions/runs/43695310266) at `5d214fb`. This is a dated code-validation receipt, not a live provider or physical-device test.
+
+The runner installs FFmpeg explicitly so the real last-frame decoding test runs; missing FFmpeg must not turn a required test into an accepted skip.
