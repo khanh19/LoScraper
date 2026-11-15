@@ -26,7 +26,7 @@ adapter enrichment may follow venue corroboration links. No provider jobs run.
 A successful parse/write renews verification, never original publication time.
 Failures or disappeared entries retain old observations and verification time;
 missing evidence is not cancellation. Confirmed cancellations use the existing
-cancellation path. Whole-event conflicts and 72-hour expiry still apply.
+cancellation path. Whole-event conflicts and seven-day verification expiry still apply.
 The existing receipts/health command report failures and interrupted work.
 
 Each source checks at most 200 distinct pages, oldest verification first. Exceeding

@@ -58,7 +58,7 @@ def main():
                 primary.occurrences=[Occurrence(**o) for o in raw.get('occurrences',[])]
                 if primary.platform!='web' or primary.validate(now):raise ProviderDisabled('invalid_primary_evidence')
                 # Require an existing freshly collected website observation in this preview.
-                exists=feed.db.execute("SELECT facts FROM discovery_observations WHERE source_slug=%s AND source_url=%s AND entry_key=%s AND verified_at>now()-interval '72 hours'",(primary.source_slug,primary.source_url,primary.entry_key)).fetchone()
+                exists=feed.db.execute("SELECT facts FROM discovery_observations WHERE source_slug=%s AND source_url=%s AND entry_key=%s AND verified_at>now()-interval '168 hours'",(primary.source_slug,primary.source_url,primary.entry_key)).fetchone()
                 if not exists:raise ProviderDisabled('primary_not_imported')
                 facts=exists['facts']
                 expected={'original_title':primary.title,'kind':primary.kind,'city_slug':primary.city_slug,'venue_name':primary.venue_name,'address':primary.address}

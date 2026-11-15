@@ -206,12 +206,12 @@ def process(package, ai, ledger, now, fetch_images=False, media_permissions=(), 
             except (ProviderDisabled,FetchError) as exc:media_errors.append(str(exc))
             break
     reasons=validate_extraction(extraction,package,now)
-    if package['fetched_at']<now-timedelta(hours=72):reasons.append('stale_verification')
+    if package['fetched_at']<=now-timedelta(hours=168):reasons.append('stale_verification')
     if not package['verification_known']:reasons.append('snapshot_verification_time_unknown')
     # The judge receives original evidence + claims, not extraction reasoning,
     # confidence, or the extractor's missing-field explanations.
     judge_input={'original_evidence':data,'claims':{k:v for k,v in extraction.items() if k!='missing'},
-                 'rules':{'weekly_days':7,'planning_days':30,'verification_hours':72}}
+                 'rules':{'weekly_days':7,'planning_days':30,'verification_hours':168}}
     instructions=RULES+'''\nYou are the separate evidence judge. Assess EVERY check. Reject unsupported claims,
     mark unknown when necessary, and cite source IDs. A city hint, creator location, verified badge or model output
     is not independent venue/ownership proof. Unknown authority requires needs_review. If facts disagree, hold

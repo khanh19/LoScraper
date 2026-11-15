@@ -40,8 +40,8 @@ def meta(soup, key):
 
 def category(text):
     value = folded(text)
-    if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball)\b", value): return "sports"
-    if re.search(r"\b(pop up|popup|cho phien|hoi cho|local brand market)\b", value): return "market"
+    if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua)\b", value): return "sports"
+    if re.search(r"\b(pop up|popup|cho phien|phien cho|hoi cho|local brand market)\b", value): return "market"
     text = folded(text)
     for name, pattern in [
         ("workshop", r'workshop|lop hoc|lam gom'),
@@ -50,7 +50,7 @@ def category(text):
         ("nightlife", r'club|nightlife|night club'),
         ("bar", r'\bbar\b|cocktail|beer|bia'),
         ("music", r'concert|nhac|music|live show|dj|jazz'),
-        ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|nghe thuat|trung bay'),
+        ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|nghe thuat|trung bay|kich thieu nhi|dance|ecstatic'),
         ("experience", r'trai nghiem|experience|walking tour|city tour|tham quan')]:
         if re.search(pattern, text):
             return name
@@ -370,7 +370,7 @@ class LifeOfDaNang(Adapter):
     link_pattern = r'^/(?:vi/)?(?:danang/[^/]+|weekly(?:/[^/]+)?)$'
 
     def links(self,soup,base):
-        links=list(super().links(soup,base))
+        links=list(super().links(soup.select_one('main') or soup,base))
         if urlsplit(base).path.rstrip('/') in {'/weekly','/vi/weekly'}:
             links.insert(0,base)
         return iter(dict.fromkeys(links))
@@ -386,6 +386,14 @@ class LifeOfDaNang(Adapter):
         events=[e for e in structured(soup) if is_type(e,'Event')]
         if events and all(e.get('name')==events[0].get('name') and e.get('location')==events[0].get('location') for e in events):
             c.occurrences=[o for e in events if (o:=iso_occurrence(str(e.get('startDate','')),e.get('endDate')))]
+            # Related-event cards in <main> must not supply the primary category
+            # or text evidence. Use only this event's structured description.
+            c.original_text = str(events[0].get('description') or '')
+            c.category = category(c.title) or category(c.original_text)
+            if not re.search(r'\d', c.address):
+                # City-only structured addresses do not resolve a branch or
+                # distinguish a single destination from a citywide listing.
+                c.reasons.append('unverified_street_address')
         return [c]
 
 
@@ -431,6 +439,9 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     links = list(extra_urls)
     failures = []
     seeds = [] if existing_only else list(config['seeds'])
+    if slug == 'lifeofdanang' and not existing_only:
+        from .model import ICT
+        seeds.insert(0, f"https://lifeofdanang.com/vi/danang/thang/{now.astimezone(ICT):%Y-%m}")
     for seed in seeds:
         heartbeat()
         try:
@@ -476,6 +487,8 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     continue
                 try:
                     if hasattr(adapter,'enrich'):c=adapter.enrich(c,soup,client,now)
+                    if reason := config.get('review_holds', {}).get(canonical(c.source_url)):
+                        c.reasons.append(reason)
                     from .images import authorize
                     authorize(c,now)
                     candidates.append(c)

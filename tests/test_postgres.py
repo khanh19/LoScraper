@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import psycopg
 
+from trending.model import Occurrence
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
 from test_trending import candidate, NOW
@@ -73,8 +74,17 @@ class Persistence(unittest.TestCase):
         self.assertEqual([i['kind'] for i in self.feed()],['event','place'])
         self.assertEqual(len(self.feed(kind='event')),1)
         self.assertEqual(self.feed(city='danang'),[])
-        self.assertEqual(self.feed(now=NOW+timedelta(hours=73)),[])
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=169)),[])
         self.assertEqual(self.feed(now=NOW+timedelta(days=3),kind='event'),[])
+
+    def test_verification_lasts_seven_days_without_renewing_evidence(self):
+        c=candidate()
+        c.occurrences=[Occurrence(
+            (NOW+timedelta(days=6)).isoformat(),(NOW+timedelta(days=9)).isoformat())]
+        self.store.upsert(c,NOW)
+        for hours in [73,167]:
+            self.assertEqual(len(self.feed(now=NOW+timedelta(hours=hours))),1)
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=168)),[])
 
     def test_cancel_immediate_and_disabled_source_hidden(self):
         c=candidate();self.store.upsert(c,NOW)
@@ -267,8 +277,8 @@ class Persistence(unittest.TestCase):
         self.store.upsert(candidate('place'),NOW)
         run=self.store.start_run(['ticketbox'],['hanoi'],'ticketbox')
         self.store.db.execute('UPDATE discovery_ingestion_runs SET heartbeat_at=%s WHERE id=%s',(NOW-timedelta(minutes=31),run))
-        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=49))
-        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=49))))
+        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=145))
+        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=145))))
         self.assertEqual(len(health['cities']['hanoi']['losing_last_fresh_evidence_within_24h']),1)
         self.assertTrue(health['cities']['danang']['empty'])
         self.assertEqual(health['runs'][0]['status'],'interrupted')
@@ -482,7 +492,7 @@ class Persistence(unittest.TestCase):
         item=self.store.upsert(c,NOW)
         self.assertEqual(next(x for x in self.feed() if x['id']==item)['timing_status'],'ongoing')
         # A changed evaluation clock must not rejuvenate evidence.
-        self.assertEqual(self.feed(NOW+timedelta(hours=73)),[])
+        self.assertEqual(self.feed(NOW+timedelta(hours=169)),[])
 
     def test_social_authority_requires_reviewed_account_venue_and_gate(self):
         c=candidate();c.platform='instagram';c.source_slug='instagram';c.source_url='https://www.instagram.com/p/sample'

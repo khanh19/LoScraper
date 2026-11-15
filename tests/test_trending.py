@@ -62,7 +62,7 @@ class DatesAndValidation(unittest.TestCase):
         self.assertEqual(c.validate(NOW),[])
         c.published_at=(NOW-timedelta(days=8)).isoformat()
         self.assertIn('no_recent_evidence',c.validate(NOW))
-        c.verified_at=(NOW-timedelta(hours=73)).isoformat()
+        c.verified_at=(NOW-timedelta(hours=169)).isoformat()
         self.assertIn('stale_verification',c.validate(NOW))
 
     def test_window_timezone_cancellation_missing_image(self):
