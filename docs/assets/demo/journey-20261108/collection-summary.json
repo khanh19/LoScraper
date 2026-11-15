@@ -1,0 +1,342 @@
+{
+  "status": "complete",
+  "generated_at": "2026-11-08T06:36:15.115030+00:00",
+  "sources": {
+    "vietnamnightlife": {
+      "accepted": 2,
+      "rejected": 2,
+      "failed": 0,
+      "reasons": {
+        "unverified_city": 2,
+        "unverified_destination": 2,
+        "no_upcoming_occurrence": 1
+      },
+      "failures": [],
+      "cities": {
+        "unclassified": {
+          "accepted": 0,
+          "rejected": 2,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 2,
+              "failed": 0
+            }
+          }
+        },
+        "hcmc": {
+          "accepted": 2,
+          "rejected": 0,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 2,
+              "rejected": 0,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 4,
+      "extracted_entries": 4,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.5
+    },
+    "ticketbox": {
+      "accepted": 1,
+      "rejected": 3,
+      "failed": 0,
+      "reasons": {
+        "no_upcoming_occurrence": 3,
+        "unverified_city": 1
+      },
+      "failures": [],
+      "cities": {
+        "unclassified": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        },
+        "hcmc": {
+          "accepted": 1,
+          "rejected": 2,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 1,
+              "rejected": 2,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 4,
+      "extracted_entries": 4,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.25
+    },
+    "hanoigrapevine": {
+      "accepted": 1,
+      "rejected": 3,
+      "failed": 0,
+      "reasons": {
+        "irrelevant_category": 1,
+        "no_upcoming_occurrence": 2,
+        "unverified_city": 1,
+        "unverified_destination": 1,
+        "unresolved_multiple_destinations": 1
+      },
+      "failures": [],
+      "cities": {
+        "hanoi": {
+          "accepted": 1,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 1,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        },
+        "unclassified": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        },
+        "danang": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 4,
+      "extracted_entries": 4,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.25
+    },
+    "danangfantasticity": {
+      "accepted": 1,
+      "rejected": 3,
+      "failed": 0,
+      "reasons": {
+        "no_upcoming_occurrence": 3,
+        "unverified_city": 1,
+        "unverified_destination": 1
+      },
+      "failures": [],
+      "cities": {
+        "unclassified": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        },
+        "danang": {
+          "accepted": 1,
+          "rejected": 2,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 1,
+              "rejected": 2,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 4,
+      "detail_pages": 4,
+      "extracted_entries": 4,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.25
+    },
+    "vnexpress": {
+      "accepted": 1,
+      "rejected": 3,
+      "failed": 0,
+      "reasons": {
+        "irrelevant_category": 1,
+        "unverified_city": 3,
+        "unverified_destination": 3
+      },
+      "failures": [],
+      "cities": {
+        "hanoi": {
+          "accepted": 1,
+          "rejected": 0,
+          "failed": 0,
+          "by_kind": {
+            "place": {
+              "accepted": 1,
+              "rejected": 0,
+              "failed": 0
+            }
+          }
+        },
+        "unclassified": {
+          "accepted": 0,
+          "rejected": 3,
+          "failed": 0,
+          "by_kind": {
+            "place": {
+              "accepted": 0,
+              "rejected": 3,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 2,
+      "detail_pages": 4,
+      "extracted_entries": 4,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.25
+    },
+    "ticketgo": {
+      "accepted": 0,
+      "rejected": 4,
+      "failed": 0,
+      "reasons": {
+        "no_upcoming_occurrence": 3,
+        "irrelevant_category": 1,
+        "unresolved_individual_sessions": 1
+      },
+      "failures": [],
+      "cities": {
+        "hanoi": {
+          "accepted": 0,
+          "rejected": 3,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 3,
+              "failed": 0
+            }
+          }
+        },
+        "hcmc": {
+          "accepted": 0,
+          "rejected": 1,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 0,
+              "rejected": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 4,
+      "extracted_entries": 4,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.0
+    },
+    "lifeofdanang": {
+      "accepted": 1,
+      "rejected": 8,
+      "failed": 0,
+      "reasons": {
+        "no_upcoming_occurrence": 8,
+        "irrelevant_category": 1
+      },
+      "failures": [],
+      "cities": {
+        "danang": {
+          "accepted": 1,
+          "rejected": 8,
+          "failed": 0,
+          "by_kind": {
+            "event": {
+              "accepted": 1,
+              "rejected": 8,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "status": "complete",
+      "listing_pages": 1,
+      "detail_pages": 4,
+      "extracted_entries": 9,
+      "persistence_errors": 0,
+      "acceptance_yield": 0.1111111111111111
+    }
+  },
+  "eligible": {
+    "hcmc": {
+      "eligible": {
+        "event": 3
+      },
+      "eligible_total": 3,
+      "empty": false,
+      "withheld": {},
+      "losing_last_fresh_evidence_within_24h": []
+    },
+    "hanoi": {
+      "eligible": {
+        "place": 1,
+        "event": 1
+      },
+      "eligible_total": 2,
+      "empty": false,
+      "withheld": {},
+      "losing_last_fresh_evidence_within_24h": []
+    },
+    "danang": {
+      "eligible": {
+        "event": 2
+      },
+      "eligible_total": 2,
+      "empty": false,
+      "withheld": {},
+      "losing_last_fresh_evidence_within_24h": []
+    }
+  },
+  "provider_requests": {
+    "bright_data": 0,
+    "serpapi": 0,
+    "google_places": 0
+  }
+}

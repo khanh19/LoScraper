@@ -117,3 +117,5 @@ The legacy workflow was last observed as `disabled_inactivity`. Use the isolated
 | [LoApp](https://github.com/khanh19/LoApp) | Expo discovery UI, search, and venue navigation. |
 | [LoAppBackend](https://github.com/khanh19/LoAppBackend) | Encore APIs and PostgreSQL access. |
 | **LoScraper** · you are here | Source collection, validation, and ingestion. |
+
+See [Discovery journey validation](docs/discovery-journey.md) for the new app flow, collector fix, setup, screenshots, video, and remaining blockers.

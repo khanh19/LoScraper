@@ -12,11 +12,11 @@ async def main():
   for layout,width,height in [('mobile',430,932),('desktop',1440,1000)]:
    page=await browser.new_page(viewport=dict(width=width,height=height))
    await page.goto(APP+'/tabs/explore');await expect(page.get_by_text('Có gì mới tuần này?',exact=True)).to_be_visible(timeout=90000)
-   for city,name in [('hanoi','Hanoi'),('hcmc','Ho Chi Minh City'),('danang','Da Nang City')]:
+   for city,name in [('hanoi','Hà Nội'),('hcmc','TP. Hồ Chí Minh'),('danang','Đà Nẵng')]:
     await page.get_by_role('button',name='Change location',exact=True).click()
-    await expect(page.get_by_text('Choose your city',exact=True)).to_be_visible()
+    await expect(page.get_by_role('heading',name='Chọn thành phố',exact=True)).to_be_visible()
     await page.get_by_role('button',name=name,exact=True).click()
-    await expect(page.get_by_text('Choose your city',exact=True)).not_to_be_visible()
+    await expect(page.get_by_role('heading',name='Chọn thành phố',exact=True)).not_to_be_visible()
     image=page.locator('img[alt^="Ảnh minh họa:"]').first
     await expect(image).to_be_visible(timeout=20000)
     await page.wait_for_function('()=>{const i=document.querySelector(\'img[alt^="Ảnh minh họa:"]\');return i&&i.complete&&i.naturalWidth>0}')

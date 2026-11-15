@@ -77,3 +77,67 @@ exhausted allowance, zero credentials, ambiguous submission and resumed snapshot
 polling. The live result remains a failed quality pilot; social publication is not
 ready to enable. First improve organizer/venue URL discovery, then authorize a
 new bounded pilot rather than silently resetting this ID's caps.
+
+## Instagram continuation — 8 November 2026
+
+The existing account preflight passed again using the still-valid dashboard
+receipt from 05:18 UTC and fresh billing/account reads. This was not a new dashboard
+inspection or a claim about the precise live free-credit balance. The canonical
+ledger on port 55439 was reused; the existing six-search pilot ceiling was not reset.
+
+Free organizer-page discovery is now available:
+
+```sh
+.venv/bin/python -m trending.social_links
+# Or inspect up to six explicit public organizer pages:
+.venv/bin/python -m trending.social_links --url https://www.saigonoutcast.com/
+```
+
+It reads original social links from nested JSON embeds and visible anchors, keeps
+entry-specific descriptions/publication dates, filters dated posts outside seven
+days, and deduplicates links. It defaults to the reviewed Saigon Outcast organizer
+site. It does not call Bright Data/SerpAPI, publish records, or claim that website
+embeds are independent social corroboration. Unknown-date links require provider
+validation. The live organizer page yielded eight recent Instagram links.
+
+A bounded live Posts request successfully retrieved
+[the organizer's event post](https://www.instagram.com/p/Dfa848qFPwL/), published
+7 November 2026, for Saigon Burger Festival on 14–15 November at 182 Nguyễn Văn
+Hưởng, HCMC. The async job was polled by its existing ID, not resubmitted. This
+establishes successful Instagram post retrieval; it does not identify the earlier
+HTTP 400's exact cause.
+
+**Publication remains held:** the organizer's post says 12:00–23:00, while
+[Vio's ticket sessions](https://vioapp.io/en-vn/event/saigon-burger-festival-2026)
+show 12:00–22:00. No primary or social observation was imported for this event.
+Do not silently select an end time or use date-only evidence to conceal the conflict.
+One snapshot of engagement also does not establish that the event is trending.
+
+The endpoint audit found Reels incorrectly shared the Posts dataset. The collector
+now routes `/reel/` to `gd_lyclm20il4r5helnj`, keeping `/p/` on
+`gd_lk5ns7kz21pck8jpis`, as documented in the
+[Instagram endpoint reference](https://docs.brightdata.com/products/scrapers/instagram/send-first-request).
+A second single-record reservation tests the organizer's
+[recent reel](https://www.instagram.com/reel/DfezjTRTU4a/).
+
+TikTok remains blocked at discovery: public hashtag/search requests failed TLS
+checks and installed-Chrome navigation failed. No certificate checks were disabled,
+no guessed post IDs were submitted, and no proxy or alternative provider was used.
+The organizer website only links to a TikTok hashtag; the reviewed searches yielded
+no relevant original video URL. Automatic discovery therefore still needs broader
+verified organizer sources exposing original TikTok video links or a separately
+bounded, documented discovery endpoint. User-supplied URLs are not the intended
+product workflow.
+
+Tests: 74 collected, 46 passed and 28 PostgreSQL-dependent tests skipped in this
+pass. The new controlled regressions cover nested embeds, stale/future dates,
+deduplication, profile exclusion, and distinct Posts/Reels trigger routing.
+Routine social publication remains disabled.
+
+Final result: Posts **and Reels retrieval passed**, one returned record each. The
+reel was published 8 November but lacks explicit city/address evidence. Neither
+record was published to the feed. Additional usage: **2 Bright Data single-record
+attempts, 0 SerpAPI searches, 0 TikTok submissions**. Including the previous Facebook
+attempt, this fixed pilot now holds 3 of 9 Bright Data attempts (Instagram 2 of 3).
+No reservations were reset. The follow-up PostgreSQL run passed all **74 tests**.
+[Sanitized live receipt](evidence/social-20261108/results.json).

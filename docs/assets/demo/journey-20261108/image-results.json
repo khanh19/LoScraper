@@ -1,0 +1,34 @@
+[
+  {
+    "path": "live-images/mobile/hanoi",
+    "status": "passed"
+  },
+  {
+    "path": "live-images/mobile/hcmc",
+    "status": "passed"
+  },
+  {
+    "path": "live-images/mobile/danang",
+    "status": "passed"
+  },
+  {
+    "path": "live-images/desktop/hanoi",
+    "status": "passed"
+  },
+  {
+    "path": "live-images/desktop/hcmc",
+    "status": "passed"
+  },
+  {
+    "path": "live-images/desktop/danang",
+    "status": "passed"
+  },
+  {
+    "path": "controlled-publisher-image-failure/category-photo",
+    "status": "passed"
+  },
+  {
+    "path": "controlled-image-failure/neutral-placeholder",
+    "status": "passed"
+  }
+]
