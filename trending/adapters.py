@@ -39,6 +39,9 @@ def meta(soup, key):
 
 
 def category(text):
+    value = folded(text)
+    if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball)\b", value): return "sports"
+    if re.search(r"\b(pop up|popup|cho phien|hoi cho|local brand market)\b", value): return "market"
     text = folded(text)
     for name, pattern in [
         ("workshop", r'workshop|lop hoc|lam gom'),

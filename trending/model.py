@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 CITIES = {"hcmc": "TP. Hồ Chí Minh", "hanoi": "Hà Nội", "danang": "Đà Nẵng"}
-CATEGORIES = {"restaurant", "cafe", "bar", "nightlife", "workshop", "culture", "music", "experience"}
+CATEGORIES = {"restaurant", "cafe", "bar", "nightlife", "workshop", "culture", "music", "experience", "sports", "market"}
 
 
 def folded(text: str) -> str:
@@ -43,7 +43,7 @@ def city_from_address(address: str) -> str | None:
     # These nearby destinations are not the three urban destinations in this feed.
     if re.search(r"\b(hoi an|vung tau|binh duong|nha trang|phu quoc)\b", text) or text == 'hue' or text.endswith(' hue'):
         return None
-    aliases = {"hcmc": r"\b(ho chi minh|hcmc|tp hcm|tphcm|sai gon|saigon)\b",
+    aliases = {"hcmc": r"\b(ho chi minh|hcmc|hcm|tp hcm|tphcm|sai gon|saigon)\b",
                "hanoi": r"\b(ha noi|hanoi)\b", "danang": r"\b(da nang|danang)\b"}
     matches = [city for city, pattern in aliases.items() if re.search(pattern, text)]
     return matches[0] if len(matches) == 1 else None
@@ -78,6 +78,8 @@ class Candidate:
     status: str = "active"
     reasons: list[str] = field(default_factory=list)
     platform: str = "web"
+    authority_type: str = "website"
+    verified_venue_id: str = ""
     owner_key: str = ""
     metrics: dict[str, int] = field(default_factory=dict)
 
@@ -127,7 +129,7 @@ class Candidate:
                 start, end = parse_time(occurrence.starts_at), parse_time(occurrence.ends_at)
                 if not start or not end or end <= start or occurrence.precision not in {'date','time'}:
                     reasons.append("invalid_occurrence")
-                elif start < now + timedelta(days=7) and end > now:
+                elif start < now + timedelta(days=30) and end > now:
                     valid.append(occurrence)
             if not valid:
                 reasons.append("no_upcoming_occurrence")

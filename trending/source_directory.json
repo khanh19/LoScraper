@@ -1,0 +1,8 @@
+[
+ {"id":"hanoigrapevine","publisher_id":"hanoigrapevine","url":"https://hanoigrapevine.com/vi/","cities":["hanoi"],"categories":["culture","workshop","music"],"review_evidence":"https://hanoigrapevine.com/vi/","accounts":[]},
+ {"id":"danangfantasticity","publisher_id":"danang-tourism","url":"https://danangfantasticity.com/vi","cities":["danang"],"categories":["experience","culture","sports"],"review_evidence":"https://danangfantasticity.com/vi","accounts":[]},
+ {"id":"lifeofdanang","publisher_id":"lifeofdanang","url":"https://lifeofdanang.com/weekly","cities":["danang"],"categories":["experience","music","workshop"],"review_evidence":"https://lifeofdanang.com/weekly","accounts":[]},
+ {"id":"vietnamnightlife","publisher_id":"vietnamnightlife","url":"https://vietnamnightlife.com/en/upcoming-events-1-11.html","cities":["hcmc","hanoi","danang"],"categories":["nightlife","bar","music"],"review_evidence":"https://vietnamnightlife.com/en/","accounts":[]},
+ {"id":"ticketbox","publisher_id":"ticketbox","url":"https://ticketbox.vn/","cities":["hcmc","hanoi","danang"],"categories":["music","sports","workshop"],"review_evidence":"https://ticketbox.vn/","accounts":[]},
+ {"id":"saigonoutcast","publisher_id":"saigon-outcast","url":"https://www.saigonoutcast.com/","cities":["hcmc"],"categories":["market","restaurant","music"],"review_evidence":"https://www.saigonoutcast.com/","accounts":[{"platform":"instagram","url":"https://www.instagram.com/saigonoutcast/","publication_enabled":false}]}
+]

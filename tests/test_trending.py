@@ -70,6 +70,8 @@ class DatesAndValidation(unittest.TestCase):
         self.assertEqual(c.validate(NOW),[])
         self.assertIsNone(c.payload()['image_url'])
         c.occurrences=[Occurrence((NOW+timedelta(days=8)).isoformat(),(NOW+timedelta(days=9)).isoformat())]
+        self.assertEqual(c.validate(NOW),[])
+        c.occurrences=[Occurrence((NOW+timedelta(days=31)).isoformat(),(NOW+timedelta(days=32)).isoformat())]
         self.assertIn('no_upcoming_occurrence',c.validate(NOW))
         c.status='cancelled'
         self.assertIn('cancelled',c.validate(NOW))

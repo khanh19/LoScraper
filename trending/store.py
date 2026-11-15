@@ -66,7 +66,7 @@ class Store:
                   AND lower(trim(p.address))=lower(trim(%s)) LIMIT 2""",(c.city_slug,c.venue_name,c.address)).fetchall()
             place_id = places[0]['id'] if len(places)==1 else None
             values = (c.kind,c.city_slug,c.category,p['title_vi'],p['description_vi'],c.title,c.venue_name,c.address,place_id)
-            facts = dict(version=1, image_association_verified=c.image_association_verified, image_permission_id=(c.image_permission or {}).get('id'), evidence_locator=c.evidence_locator, kind=c.kind, city_slug=c.city_slug, category=c.category,
+            facts = dict(version=1, authority_type=c.authority_type, verified_venue_id=c.verified_venue_id, image_association_verified=c.image_association_verified, image_permission_id=(c.image_permission or {}).get('id'), evidence_locator=c.evidence_locator, kind=c.kind, city_slug=c.city_slug, category=c.category,
                          title_vi=p['title_vi'], description_vi=p['description_vi'], original_title=c.title,
                          venue_name=c.venue_name, address=c.address, price_text=c.price_text,
                          place_id=str(place_id) if place_id else None)
@@ -166,6 +166,11 @@ class Store:
     def pending(self, provider, url):
         return self.db.execute("""SELECT * FROM discovery_provider_jobs WHERE provider=%s AND input_data->>'url'=%s
             AND status IN ('reserved','unknown','submitted') ORDER BY created_at DESC LIMIT 1""",(provider,url)).fetchone()
+
+    def pilot_job_for_url(self, provider, url, pilot_id):
+        # Reuse legacy trailing-slash URLs without resetting reservations.
+        return self.db.execute("""SELECT * FROM discovery_provider_jobs WHERE provider=%s AND pilot_id=%s
+            AND rtrim(input_data->>'url','/')=rtrim(%s,'/') ORDER BY created_at DESC LIMIT 1""",(provider,pilot_id,url)).fetchone()
 
     def submitted(self, provider):
         return self.db.execute("SELECT * FROM discovery_provider_jobs WHERE provider=%s AND status='submitted' ORDER BY created_at LIMIT 20",(provider,)).fetchall()
