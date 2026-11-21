@@ -334,6 +334,12 @@ class Nightlife(Adapter):
     link_pattern = r"-\d+-15\.html$"
 
     def parse(self, soup, url, now):
+        # Related-event cards share the outer container. They are not evidence
+        # for this event's destination, schedule, or images.
+        from copy import deepcopy
+        soup = deepcopy(soup)
+        for related in soup.select('.p-detail-1 .p_other, .p-detail-1 .p_social'):
+            related.decompose()
         c = super().parse(soup, url, now)
         c.category = "nightlife"
         body = soup.select_one(self.content_selector)
@@ -348,8 +354,21 @@ class Nightlife(Adapter):
                 schedule = value.split(":", 1)[-1].strip()
             elif re.match(r"Place\s*:", value, re.I):
                 a = p.select_one('a[href]')
-                if a:
-                    c.venue_name = a.get_text(" ", strip=True)
+                c.venue_name = a.get_text(" ", strip=True) if a else value.split(':', 1)[-1].strip()
+        # Publishers often put Address after a venue heading and <br>, so the
+        # entire paragraph does not start with Address. Use explicit lines only.
+        addresses = set()
+        for line in body.get_text('\n', strip=True).splitlines():
+            if re.match(r'^Address\s*:', line, re.I):
+                address = line.split(':', 1)[-1].strip()
+                if city_from_address(address):
+                    addresses.add(address)
+        if len(addresses) == 1:
+            c.address = addresses.pop()
+            c.city_slug = city_from_address(c.address)
+            c.location_evidence = url
+        elif len(addresses) > 1:
+            c.reasons.append('ambiguous_event_addresses')
         c.occurrences = schedule_occurrences(schedule, now) or weekly(schedule, now)
         return c
 

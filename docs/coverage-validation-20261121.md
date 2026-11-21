@@ -22,7 +22,7 @@ local preview; the original preview and canonical accounting ledger were preserv
 Fresh website collection used Life of Da Nang, TicketGo, and Vietnam Nightlife.
 Hanoi Go was tested in local pilot mode. Reimports retain existing stable IDs.
 
-Final shared-evaluator counts: **Hanoi 11** (8 weekly, 3 planning), **HCMC 4**
+Initial shared-evaluator counts: **Hanoi 11** (8 weekly, 3 planning), **HCMC 4**
 (3 weekly, 1 planning), **Da Nang 8** (weekly). These totals include still-eligible
 existing records as well as this run's imports. All eligible supporting sources
 in this database are websites. Mixed social coverage and the Hanoi/HCMC targets
@@ -59,3 +59,36 @@ DATABASE_URL=postgresql://macbook@127.0.0.1:55443/lo_setup_check_coverage_202611
 Remaining: restore sufficient build space, validate real API/UI output, resolve
 rendered-source failures and HCMC session extraction, and run bounded social
 collection only after fresh allowance checks and explicit output reservations.
+
+## Follow-up: destination extraction and real API verification
+
+The Vietnam Nightlife adapter now reads plain-text `Place:` values and explicit
+`Address:` lines separated by `<br>`. Related-event cards are excluded before
+parsing; multiple primary addresses hold the candidate for review. This fixes
+missing evidence extraction without guessing a location or relaxing eligibility.
+
+On the same 20 source pages, accepted candidates increased from **2 to 8**.
+The completed follow-up run was `49a3a10b-f9dc-48c4-9e29-f46124f23692`.
+Live API checks at `http://127.0.0.1:4105` now return:
+
+| City | Weekly | Planning | Unique total | Soft target |
+| --- | ---: | ---: | ---: | ---: |
+| Hanoi | 9 | 3 | 12 | 15 |
+| HCMC | 6 | 1 | 7 | 15 |
+| Da Nang | 10 | 0 | 10 | 5–10 |
+
+All three weekly filters were exercised for all three cities. Event and all
+filters return real stored events; place filters correctly return empty lists.
+No Instagram/TikTok item is eligible in this isolated database yet. Coverage
+remains narrow in activity mix; the additional records are recurring nightlife.
+
+**172 tests passed**, including PostgreSQL tests. Two new regression tests cover
+plain-text venues, line-break addresses, related-card contamination, and ambiguous
+primary addresses. Backend compilation and HTTP checks now pass after disk space
+became available; browser/physical-device checks were not repeated in this slice.
+The original preview database is unchanged. Point a local backend explicitly at
+`lo_setup_check_coverage_20261121` to inspect these results; restarting against the
+older preview does not reveal these imports automatically.
+
+API payload evidence: [follow-up results](evidence/coverage-20261121/api-followup.json).
+Tracking and outstanding work: [roadmap](https://github.com/khanh19/LoScraper/issues/12).
