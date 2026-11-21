@@ -112,9 +112,10 @@ class Store:
                     VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",(observation_id,o.starts_at,o.ends_at,o.precision))
         return str(item_id)
 
-    def cancel(self, source_slug, url, now, entry_key=""):
-        self.db.execute("""UPDATE discovery_observations SET status='cancelled',verified_at=%s
-            WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",(now,source_slug,url,entry_key))
+    def cancel(self, source_slug, url, now, entry_key="", confirmed=False):
+        self.db.execute("""UPDATE discovery_observations SET status='cancelled',verified_at=%s,
+            facts=facts || jsonb_build_object('publisher_confirmed_cancellation',%s::boolean)
+            WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",(now,confirmed,source_slug,url,entry_key))
 
     def start_run(self, sources, cities, source='__run__', parent_id=None):
         run_id = str(uuid4())

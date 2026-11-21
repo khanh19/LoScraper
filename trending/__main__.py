@@ -138,7 +138,8 @@ def run(args):
                             'sample': {k:c.payload().get(k) for k in
                                 ('source_url','title','city_slug','published_at','verified_at','venue_name','kind')}})
                         if c.status == 'cancelled' and store and args.write_db:
-                            ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key)
+                            ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key,
+                                                 'publisher_confirmed_cancellation' in c.reasons)
                             if not ok:
                                 progress.count('failed',city,['cancellation_write_failed'])
                         continue

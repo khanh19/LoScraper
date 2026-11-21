@@ -145,8 +145,11 @@ class Adapter:
                 c.price_text='Giá niêm yết: '+' – '.join(amounts)+' ₫'
             occ = iso_occurrence(str(event.get("startDate", "")), event.get("endDate"))
             c.occurrences = [occ] if occ else []
-            if event.get("eventStatus", "").endswith(("EventCancelled", "EventPostponed")):
+            event_status = event.get("eventStatus", "")
+            if event_status.endswith(("EventCancelled", "EventPostponed")):
                 c.status = "cancelled"
+                if event_status.endswith("EventCancelled"):
+                    c.reasons.append("publisher_confirmed_cancellation")
         # Only address-labelled lines in the primary article; never the footer/sidebar.
         if not address:
             lines = paragraphs or [line.strip() for line in text.splitlines() if line.strip()]
