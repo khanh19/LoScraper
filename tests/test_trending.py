@@ -104,6 +104,21 @@ class Parsers(unittest.TestCase):
         self.assertEqual(c.price_text,'Giá niêm yết: 300.000 ₫')
         self.assertEqual(datetime.fromisoformat(c.occurrences[0].ends_at).day,10)
 
+    def test_only_structured_cancellation_supplies_notification_evidence(self):
+        for status, confirmed in (("EventCancelled", True), ("EventPostponed", False)):
+            with self.subTest(status=status):
+                event = {
+                    "@type": "Event",
+                    "name": "Baking Workshop",
+                    "eventStatus": "https://schema.org/" + status,
+                }
+                candidate = self.parse(
+                    "ticketbox",
+                    f'<main><script type="application/ld+json">{json.dumps(event)}</script></main>',
+                )
+                self.assertEqual(candidate.status, "cancelled")
+                self.assertEqual("publisher_confirmed_cancellation" in candidate.reasons, confirmed)
+
     def test_article_publication_is_not_an_event(self):
         c=self.parse('danangfantasticity','''<h1>Lễ hội ẩm thực</h1><article><time datetime="2026-11-07"></time>
            Địa điểm: Nhà văn hóa<br>Địa chỉ: 12 Trần Phú, Đà Nẵng</article>''')
