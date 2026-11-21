@@ -52,6 +52,7 @@ def social_sessions(text, published_at):
 
 def announcement(row, account, venue, now):
     """Inputs account/venue must be fetched from reviewed operator registry, not a post."""
+    if account.get('authority_type','organizer')!='organizer':return None,'creator_cannot_establish_event'
     if account.get('revoked') or venue.get('revoked'):return None,'revoked_authority'
     if account.get('publisher_id')!=venue.get('publisher_id'):return None,'publisher_venue_mismatch'
     platform=post_platform(row.get('url',''))

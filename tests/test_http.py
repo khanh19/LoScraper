@@ -18,7 +18,7 @@ class WebsiteFetching(unittest.TestCase):
 
     def test_permanent_failure_not_retried(self):
         client=PublicClient()
-        for code in ['http_403','http_404','host_not_allowed','page_too_large']:
+        for code in ['http_403','http_404','host_not_allowed','page_too_large','tls_handshake_failed']:
             with patch.object(client,'_get_once',side_effect=FetchError(code)) as fetch:
                 with self.assertRaises(FetchError):client.get('https://vnexpress.net/',{'vnexpress.net'})
                 self.assertEqual(fetch.call_count,1)

@@ -27,6 +27,7 @@ def report(db, cities, now=None):
         feeds = {}
         coverage = []
         for city in cities:
+            from .coverage import summarize
             evaluated = db.execute('SELECT * FROM public.discovery_evaluate(%s,%s)',(now,city)).fetchall()
             eligible = [r for r in evaluated if r['reason']=='eligible']
             feeds[city] = dict(eligible=dict(Counter(r['kind'] for r in eligible)),
@@ -34,6 +35,11 @@ def report(db, cities, now=None):
                 withheld=dict(Counter(r['reason'] for r in evaluated if r['reason']!='eligible')),
                 losing_last_fresh_evidence_within_24h=[str(r['item_id']) for r in eligible
                     if r['evidence_expires_at'] and r['evidence_expires_at']<=now+timedelta(hours=24)])
+            planning = db.execute("SELECT * FROM public.discovery_evaluate_all(%s,%s) WHERE reason='eligible' AND payload->>'section'='planning'",(now,city)).fetchall()
+            feeds[city]['planning_total'] = len(planning)
+            all_evaluated=db.execute('SELECT * FROM public.discovery_evaluate_all(%s,%s)',(now,city)).fetchall()
+            feeds[city]['coverage']=summarize(all_evaluated,city)
+            feeds[city]['planning_nearing_expiry'] = [str(r['item_id']) for r in planning if r['evidence_expires_at'] and r['evidence_expires_at'] <= now+timedelta(hours=24)]
             for source in sources:
                 attempts = [r for r in runs if r['source_slug']==source['slug']
                     and (city in r['requested_cities'] or r['city_slug']==city or
@@ -61,7 +67,12 @@ def report(db, cities, now=None):
             entry['reasons'] = r['diagnostics'].get('reasons',{})
             entry['persistence_errors'] = r['diagnostics'].get('persistence_errors',{})
             safe_runs.append(entry)
-        return dict(generated_at=now,cities=feeds,source_city_coverage=coverage,runs=safe_runs,
+        engine = None
+        if db.execute("SELECT to_regclass('public.discovery_engine_requests') AS relation").fetchone()['relation']:
+            from .engine_store import EngineStore
+            from types import SimpleNamespace
+            engine = EngineStore(SimpleNamespace(db=db)).health()
+        return dict(generated_at=now,cities=feeds,source_city_coverage=coverage,runs=safe_runs,multimodal=engine,
                     provider_accounting=dict(label='Persisted local reservations; NOT a live provider balance',
                                              reservations=reservations,unresolved_jobs=unresolved))
 
@@ -86,6 +97,8 @@ def main():
         else:
             for city, feed in result['cities'].items():
                 print(f"{city}: {feed['eligible_total']} eligible ({feed['eligible']}); empty={feed['empty']}; withheld={feed['withheld']}")
+                coverage=feed['coverage']
+                print(f"  Weekly + planning: {coverage['eligible_unique_items']}/{coverage['target']} soft target; shortfall={coverage['shortfall']}; platforms={coverage['items_by_supporting_platform']}; missing social={coverage['missing_social_platforms']}")
                 print('  Last fresh evidence expires within 24h:',len(feed['losing_last_fresh_evidence_within_24h']))
             for row in result['source_city_coverage']:
                 print(f"{row['source']} / {row['city']}: {row['last_status']}; attempted={row['last_attempt']}; completed={row['last_completed']}; counts={row['source_counts']}; reasons={row['reasons']}; quality={row['quality']}")

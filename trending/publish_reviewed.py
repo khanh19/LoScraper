@@ -30,7 +30,7 @@ def import_reviewed(ledger,feed,review,now):
                 raise ValueError('review_does_not_match_claims')
             if row['reasons'] or (row['judgment'] or {}).get('verdict')!='accept':raise ValueError('held_evidence')
             package=row['record'];package['fetched_at']=row['fetched_at']
-            if row['fetched_at']<now-timedelta(hours=72) or not package.get('verification_known'):
+            if row['fetched_at']<=now-timedelta(hours=168) or not package.get('verification_known'):
                 raise ValueError('unverified_source')
             account=feed.db.execute('SELECT * FROM discovery_publisher_accounts WHERE platform=%s AND owner_key=%s AND NOT revoked',
                 (package['platform'],package['owner_key'])).fetchone()

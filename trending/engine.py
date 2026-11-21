@@ -13,9 +13,10 @@ from .engine_store import EngineStore,CAMPAIGN
 from .http import PublicClient
 from .intent import queries,ACTIVITIES
 from .model import CITIES,ICT
-from .multimodal import normalize_record,process
+from .multimodal import normalize_record,process_destinations
 from .providers import BrightSocial,ProviderDisabled
 from .store import Store
+from .resilience import ProviderCircuit, deterministic_evidence, safe_reason
 
 
 def local_store(url):
@@ -29,16 +30,24 @@ def run(args):
     now=datetime.now(timezone.utc);cities=[args.city] if args.city else list(CITIES)
     report={'campaign':CAMPAIGN,'generated_at':now.isoformat(),'live':args.live,'cities':{},'providers':{},
             'routine_social_publication':False,'human_calibration':'pending','published':0}
-    ledger_store=feed=legacy=None;ledger=None
+    ledger_store=feed=legacy=None;ledger=None;client=None
+    circuit=ProviderCircuit()
     try:
         if args.live or args.health:
-            ledger_store=local_store(os.environ.get('OPENAI_DATABASE_URL'))
-            ledger=EngineStore(ledger_store)
-            if args.health:return ledger.health()
-            ledger.expire_content(now)
+            try:
+                ledger_store=local_store(os.environ.get('OPENAI_DATABASE_URL'))
+                ledger=EngineStore(ledger_store)
+                if args.health:return ledger.health()
+                ledger.expire_content(now)
+            except Exception:
+                ledger=None
+                report['providers']['accounting']={'status':'blocked','reason':'canonical_ledger_unavailable'}
+                if args.health:return report
+        live = args.live and ledger is not None
         if os.environ.get('DATABASE_URL'):
-            feed=local_store(os.environ['DATABASE_URL'])
-        if 'brightdata' in args.providers and args.live:
+            try:feed=local_store(os.environ['DATABASE_URL'])
+            except Exception:report['providers']['feed']={'status':'blocked','reason':'feed_database_unavailable'}
+        if 'brightdata' in args.providers and live:
             try:
                 legacy=local_store(os.environ.get('QUOTA_DATABASE_URL'))
                 if not legacy.db.execute('SELECT 1 FROM discovery_provider_jobs LIMIT 1').fetchone():
@@ -47,38 +56,50 @@ def run(args):
                 if legacy:legacy.close();legacy=None
                 report['providers']['brightdata']={'status':'blocked','reason':'canonical_ledger_unavailable'}
         client=PublicClient()
-        ai=OpenAI(ledger) if ledger else None
+        ai=circuit.wrap("openai",OpenAI(ledger)) if ledger else None
+        youtube=circuit.wrap("youtube",YouTube(ledger)) if ledger else None
+        apify=circuit.wrap("apify",ApifyTikTok(ledger)) if ledger else None
         for city in cities:
             counts={}
             if feed:
-                counts={r['category']:r['n'] for r in feed.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,city)).fetchall()}
-            selection=[q for q in queries(city,counts) if not args.category or q['category']==args.category][:args.queries_per_city]
+                try:
+                    counts={r['category']:r['n'] for r in feed.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,city)).fetchall()}
+                except Exception:
+                    report['providers']['feed']={'status':'blocked','reason':'feed_database_unavailable'}
+                    feed.close();feed=None
+            selection=[q for q in queries(city,counts,now.astimezone(ICT).date()) if not args.category or q['category']==args.category][:args.queries_per_city]
             for q in selection:q['query']+=f' tháng {now.astimezone(ICT).month} năm {now.astimezone(ICT).year}'
             city_report={'queries':selection,'leads':[],'results':[],'errors':[]}
             report['cities'][city]=city_report
             leads={};rows={}
-            if args.websites:
-                discovered=discover(city,client,now,counts)
-                city_report['website_pages']=discovered['pages']
-                leads.update({r['url']:r for r in discovered['posts']})
-            if not args.live:continue
+            if args.websites or args.live:
+                try:
+                    discovered=discover(city,client,now,counts)
+                    city_report['website_pages']=discovered['pages']
+                    leads.update({r['url']:r for r in discovered['posts']})
+                except Exception as exc:
+                    city_report['errors'].append({'provider':'website','reason':type(exc).__name__,'stage':'discovery'})
+            city_report['leads']=list(leads.values())
+            if not live:
+                city_report['counts']={'leads':len(leads),'retrieved':0,'processed':0,'published':0}
+                continue
             for q in selection:
                 for provider in args.providers:
                     try:
                         if provider=='openai':
                             for lead in ai.search(q['query'],city,now):leads.setdefault(lead['url'],lead)
                         elif provider=='youtube':
-                            for row in YouTube(ledger).search(q['query'],city,now):rows.setdefault(row['url'],row)
+                            for row in youtube.search(q['query'],city,now):rows.setdefault(row['url'],row)
                         elif provider=='apify':
-                            for row in ApifyTikTok(ledger).discover(q['query'],city,now):rows.setdefault(row['url'],row)
-                    except ProviderDisabled as exc:
-                        city_report['errors'].append({'provider':provider,'reason':str(exc),'stage':'discovery'})
+                            for row in apify.discover(q['query'],city,now):rows.setdefault(row['url'],row)
+                    except (ProviderDisabled,KeyError,TypeError,ValueError) as exc:
+                        city_report['errors'].append({'provider':provider,'reason':safe_reason(exc),'stage':'discovery'})
             if args.youtube_channels and 'youtube' in args.providers:
                 channels=[a for seed in json.loads(DIRECTORY.read_text()) if city in seed['cities']
                           for a in seed.get('accounts',[]) if a.get('platform')=='youtube' and a.get('ownership_evidence')]
                 for channel in channels[:3]:
                     try:
-                        for row in YouTube(ledger).uploads(channel['channel_id'],city,now):rows.setdefault(row['url'],row)
+                        for row in youtube.uploads(channel['channel_id'],city,now):rows.setdefault(row['url'],row)
                     except (ProviderDisabled,KeyError,ValueError) as exc:
                         city_report['errors'].append({'provider':'youtube','stage':'reviewed_uploads','reason':type(exc).__name__})
             if args.snapshots:
@@ -87,7 +108,7 @@ def run(args):
                     try:
                         row=resume_snapshot(receipt);rows.setdefault(row['url'],row)
                     except (ProviderDisabled,ValueError) as exc:
-                        city_report['errors'].append({'provider':'brightdata','reason':str(exc),'stage':'snapshot_read'})
+                        city_report['errors'].append({'provider':'brightdata','reason':safe_reason(exc),'stage':'snapshot_read'})
             if args.web_evidence:
                 for lead in [l for l in leads.values() if lead_platform(l['url'])=='web'][:2]:
                     try:
@@ -99,8 +120,9 @@ def run(args):
                             'date_posted':published.get('content') if published else None})
                     except Exception as exc:city_report['errors'].append({'provider':'website','reason':type(exc).__name__,'stage':'retrieval'})
             if legacy:
-                social=BrightSocial(legacy)
+                social=circuit.wrap("brightdata",BrightSocial(legacy))
                 for lead in list(leads.values())[:args.max_candidates]:
+                    if 'brightdata' in circuit.blocked:break
                     if lead_platform(lead['url']) not in {'instagram','facebook','tiktok'}:continue
                     try:
                         request,created=ledger.reserve('brightdata','post',{'url':lead['url']},0)
@@ -114,18 +136,25 @@ def run(args):
                                 found=[{**r,'_source_verified_at':original['created_at'].isoformat()} for r in found]
                             ledger.update(request['id'],'complete',result=found)
                         for row in found:rows.setdefault(row['url'],row)
-                    except ProviderDisabled as exc:city_report['errors'].append({'provider':'brightdata','reason':str(exc),'stage':'retrieval'})
+                    except ProviderDisabled as exc:city_report['errors'].append({'provider':'brightdata','reason':safe_reason(exc),'stage':'retrieval'})
             city_report['leads']=list(leads.values())
             from .model import parse_time,folded
             def priority(row):
                 published=parse_time(row.get('date_posted'))
                 text=folded(str(row.get('description','')))
                 local=any(folded(alias) in text for alias in [CITIES[city],{'hcmc':'Sài Gòn','hanoi':'Hanoi','danang':'Danang'}[city]])
-                return (not local,not bool(published and (now-published).days<=7),-(published.timestamp() if published else 0),row['url'])
+                from .social_quality import triage
+                from .engagement import assess
+                # Absolute counts triage extraction only; they never confer a
+                # trend badge or override eligibility. Avoid comparing raw
+                # counts across platforms with different metric semantics.
+                popular=assess(row)['popularity_candidate']
+                return (-triage(text)['priority'],not local,not popular,not bool(published and (now-published).days<=7),-(published.timestamp() if published else 0),row['url'])
             # Website leads are still collected by dedicated adapters. Search
             # snippets and invented synthetic posts never become evidence here.
             for row in sorted(rows.values(),key=priority)[:args.max_candidates]:
                 outcome={'url':row['url'],'platform':lead_platform(row['url']),'retrieval':'passed','published':False}
+                package=None
                 try:
                     package=normalize_record(row,outcome['platform'],city,now)
                     if feed:
@@ -137,20 +166,40 @@ def run(args):
                                     (account['publisher_id'],city)).fetchall()
                     ledger.evidence(package)
                     permissions=json.loads(args.media_permissions.read_text()) if args.media_permissions else []
-                    outcome.update(process(package,ai,ledger,now,fetch_images=args.images,media_permissions=permissions))
+                    if 'openai' in circuit.blocked:raise ProviderDisabled('provider_circuit_open')
+                    children=process_destinations(package,ai,ledger,now,fetch_images=args.images,media_permissions=permissions)
+                    outcome['destinations']=children
+                    outcome['reasons']=sorted({r for child in children for r in child.get('reasons',[child.get('reason','destination_failed')])})
+                    if not children:outcome['reasons']=['no_identifiable_destination']
                     outcome['extraction_status']='passed'
                     outcome['validation_status']='passed' if not outcome['reasons'] else 'held'
-                except ProviderDisabled as exc:outcome.update(extraction_status='blocked',reason=str(exc))
+                    if 'openai' in circuit.blocked:
+                        outcome['fallback']=deterministic_evidence(package)
+                        outcome['validation_status']='held'
+                except ProviderDisabled as exc:
+                    outcome.update(extraction_status='blocked',reason=safe_reason(exc),validation_status='held')
+                    if package:
+                        outcome['fallback']=deterministic_evidence(package)
+                        outcome['extraction_status']='deterministic_review_only'
                 except Exception as exc:outcome.update(extraction_status='failed',reason=type(exc).__name__)
                 city_report['results'].append(outcome)
             city_report['counts']={'leads':len(leads),'retrieved':len(rows),'processed':len(city_report['results']),
                                     'published':0,'publication_status':'blocked_pending_human_calibration'}
-        client.close()
-        if ledger:report['accounting']=ledger.health()
+        report['provider_circuits']=circuit.blocked
+        if ledger:
+            try:report['accounting']=ledger.health()
+            except Exception:report['providers']['accounting']={'status':'blocked','reason':'accounting_health_unavailable'}
         return report
     finally:
+        if client:client.close()
         for store in (feed,legacy,ledger_store):
             if store:store.close()
+
+
+def degraded(report):
+    return bool(report.get('providers') or report.get('provider_circuits') or any(
+        c.get('errors') or any(p.get('status')=='failed' for p in c.get('website_pages',[])) or any(r.get('extraction_status') in {'blocked','failed','deterministic_review_only'}
+        for r in c.get('results',[])) for c in report.get('cities',{}).values()))
 
 
 def main():
@@ -180,7 +229,7 @@ def main():
         if args.out:
             args.out.parent.mkdir(parents=True,exist_ok=True);args.out.write_text(output)
         print(output)
-        return 2 if result.get('providers') or any(c.get('errors') for c in result.get('cities',{}).values()) else 0
+        return 2 if degraded(result) else 0
     except Exception as exc:
         print(json.dumps({'status':'failed','reason':type(exc).__name__}));return 1
 

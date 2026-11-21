@@ -17,7 +17,10 @@
     "hosts": [
       "ticketbox.vn"
     ],
-    "enabled": true
+    "enabled": true,
+    "review_holds": {
+      "https://ticketbox.vn/chillpark-da-quang-26736": "unresolved_cross_source_end_time"
+    }
   },
   "hanoigrapevine": {
     "name": "Hanoi Grapevine",
@@ -58,13 +61,20 @@
   "ticketgo": {
     "name": "TicketGo",
     "seeds": [
-      "https://www.ticketgo.vn/"
+      "https://www.ticketgo.vn/",
+      "https://www.ticketgo.vn/event/category/am-nhac",
+      "https://www.ticketgo.vn/event/category/van-hoa-nghe-thuat",
+      "https://www.ticketgo.vn/event/category/giao-duc",
+      "https://www.ticketgo.vn/event/category/the-thao"
     ],
     "hosts": [
       "www.ticketgo.vn",
       "ticketgo.vn"
     ],
-    "enabled": true
+    "enabled": true,
+    "review_holds": {
+      "https://www.ticketgo.vn/event/da-quang-chill-park-2026": "unresolved_cross_source_end_time"
+    }
   },
   "lifeofdanang": {
     "name": "Life of Da Nang",
@@ -119,5 +129,16 @@
     "platform": "instagram",
     "enabled": false,
     "pilot_status": "disabled_trigger_http400"
+  },
+  "hanoigo": {
+    "name": "Hà Nội Go",
+    "seeds": [
+      "https://hanoigo.com.vn/event"
+    ],
+    "hosts": [
+      "hanoigo.com.vn"
+    ],
+    "enabled": false,
+    "pilot_status": "pending_bounded_live_validation"
   }
 }

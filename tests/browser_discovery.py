@@ -30,7 +30,7 @@ async def main():
                 assert item['city_slug']==city['slug']
                 assert kind=='all' or item['kind']==kind
                 assert item['sources'] and all(s['url'].startswith('https://') for s in item['sources'])
-                assert datetime.fromisoformat(item['verified_at'])>now-timedelta(hours=72)
+                assert datetime.fromisoformat(item['verified_at'])>now-timedelta(hours=168)
                 if item['kind']=='event':
                     o=item['next_occurrence'];assert datetime.fromisoformat(o['starts_at'])<now+timedelta(days=7)
                     assert datetime.fromisoformat(o['ends_at'])>now

@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import psycopg
 
+from trending.model import Occurrence
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
 from test_trending import candidate, NOW
@@ -73,8 +74,17 @@ class Persistence(unittest.TestCase):
         self.assertEqual([i['kind'] for i in self.feed()],['event','place'])
         self.assertEqual(len(self.feed(kind='event')),1)
         self.assertEqual(self.feed(city='danang'),[])
-        self.assertEqual(self.feed(now=NOW+timedelta(hours=73)),[])
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=169)),[])
         self.assertEqual(self.feed(now=NOW+timedelta(days=3),kind='event'),[])
+
+    def test_verification_lasts_seven_days_without_renewing_evidence(self):
+        c=candidate()
+        c.occurrences=[Occurrence(
+            (NOW+timedelta(days=6)).isoformat(),(NOW+timedelta(days=9)).isoformat())]
+        self.store.upsert(c,NOW)
+        for hours in [73,167]:
+            self.assertEqual(len(self.feed(now=NOW+timedelta(hours=hours))),1)
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=168)),[])
 
     def test_cancel_immediate_and_disabled_source_hidden(self):
         c=candidate();self.store.upsert(c,NOW)
@@ -267,8 +277,8 @@ class Persistence(unittest.TestCase):
         self.store.upsert(candidate('place'),NOW)
         run=self.store.start_run(['ticketbox'],['hanoi'],'ticketbox')
         self.store.db.execute('UPDATE discovery_ingestion_runs SET heartbeat_at=%s WHERE id=%s',(NOW-timedelta(minutes=31),run))
-        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=49))
-        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=49))))
+        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=145))
+        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=145))))
         self.assertEqual(len(health['cities']['hanoi']['losing_last_fresh_evidence_within_24h']),1)
         self.assertTrue(health['cities']['danang']['empty'])
         self.assertEqual(health['runs'][0]['status'],'interrupted')
@@ -304,6 +314,36 @@ class Persistence(unittest.TestCase):
         self.assertFalse(progress.available)
         self.store.reconnect()  # restore the test fixture only, not the run
         self.assertEqual(len(self.feed()),1)
+
+    def test_refresh_existing_filters_new_entries_and_failed_fetch_preserves_time(self):
+        from argparse import Namespace
+        from contextlib import redirect_stdout
+        import io
+        from trending.__main__ import run
+        existing=candidate();self.store.upsert(existing,NOW)
+        before=self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at']
+        self.assertEqual(len(self.store.refresh_targets('ticketbox',NOW)),1)
+        self.assertEqual(self.store.refresh_targets('ticketbox',NOW,'danang'),[])
+        args=Namespace(sources='ticketbox',city=None,pilot=False,write_db=True,browser=False,
+                       supplemental=False,providers=False,refresh_existing=True,limit=12,out=None)
+        class Clock:
+            @staticmethod
+            def now(tz):return NOW+timedelta(hours=1)
+        fresh=copy.deepcopy(existing);fresh.verified_at=(NOW+timedelta(hours=1)).isoformat()
+        sibling=copy.deepcopy(fresh);sibling.source_url='https://ticketbox.vn/new-unrequested'
+        def execute(rows,failures):
+            with patch.dict(os.environ,{'DATABASE_URL':URL}),patch('trending.__main__.datetime',Clock), \
+                 patch('trending.__main__.Store',return_value=self.store),patch.object(self.store,'close'), \
+                 patch('trending.__main__.PublicClient'),patch('trending.__main__.collect_source',return_value=(rows,failures)), \
+                 redirect_stdout(io.StringIO()):
+                return run(args)
+        failed=execute([], [{'stage':'detail','reason':'http_503'}])
+        self.assertNotEqual(failed['status'],'complete')
+        self.assertEqual(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
+        success=execute([fresh,sibling],[])
+        self.assertEqual(success['sources']['ticketbox']['accepted'],1)
+        self.assertEqual(self.store.db.execute('SELECT count(*) AS n FROM discovery_observations').fetchone()['n'],1)
+        self.assertGreater(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
 
     def test_run_continues_after_bad_candidate_failed_write_and_source(self):
         from argparse import Namespace
@@ -452,7 +492,7 @@ class Persistence(unittest.TestCase):
         item=self.store.upsert(c,NOW)
         self.assertEqual(next(x for x in self.feed() if x['id']==item)['timing_status'],'ongoing')
         # A changed evaluation clock must not rejuvenate evidence.
-        self.assertEqual(self.feed(NOW+timedelta(hours=73)),[])
+        self.assertEqual(self.feed(NOW+timedelta(hours=169)),[])
 
     def test_social_authority_requires_reviewed_account_venue_and_gate(self):
         c=candidate();c.platform='instagram';c.source_slug='instagram';c.source_url='https://www.instagram.com/p/sample'
@@ -473,6 +513,27 @@ class Persistence(unittest.TestCase):
         self.assertEqual(self.feed(),[])
         result=self.store.db.execute("SELECT reason,payload FROM discovery_evaluate_all(%s,'hanoi') WHERE item_id=%s::uuid",(NOW,item)).fetchone()
         self.assertEqual(result['reason'],'unresolved_sessions');self.assertIsNone(result['payload'])
+
+    def test_creator_authority_places_only_and_recent(self):
+        c=candidate('place');c.platform='instagram';c.source_slug='instagram'
+        c.source_url='https://www.instagram.com/p/creator';c.owner_key='creator';c.authority_type='creator'
+        self.store.register('instagram','Instagram',True,'instagram')
+        self.store.db.execute("INSERT INTO discovery_publisher_accounts(publisher_id,platform,owner_key,name,ownership_evidence_url,reviewed_at,authority_type,publication_enabled) VALUES('reviewer','instagram','creator','Reviewer','https://example.com/profile',%s,'creator',true)",(NOW,))
+        v=self.store.db.execute("INSERT INTO discovery_verified_venues(publisher_id,name,address,city_slug,evidence_url,reviewed_at) VALUES('reviewer',%s,%s,'hanoi','https://example.com/location',%s) RETURNING id",(c.venue_name,c.address,NOW)).fetchone()['id']
+        c.verified_venue_id=str(v);self.store.upsert(c,NOW)
+        self.assertEqual(self.feed()[0]['authority_type'],'creator')
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET authority_type='organizer'")
+        self.assertEqual(self.feed(),[])
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET authority_type='creator'")
+        self.store.db.execute("UPDATE discovery_observations SET published_at=%s",(NOW-timedelta(days=8),))
+        self.assertEqual(self.feed(),[])
+        self.store.upsert(c,NOW)
+        e=candidate();e.platform='instagram';e.source_slug='instagram';e.source_url='https://www.instagram.com/p/creator-event'
+        e.owner_key=c.owner_key;e.authority_type='creator';e.verified_venue_id=str(v)
+        self.store.upsert(e,NOW)
+        self.assertEqual(self.feed(kind='event'),[])
+        self.store.db.execute('UPDATE discovery_verified_venues SET revoked=true')
+        self.assertEqual(self.feed(),[])
 
     def test_publisher_aliases_do_not_inflate_attention(self):
         c=candidate('place');c.original_text='Original review';self.store.upsert(c,NOW)

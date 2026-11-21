@@ -73,13 +73,39 @@ def analyze_media(url,platform,records,now,ledger):
             subprocess.run(['ffmpeg','-v','error','-protocol_whitelist','file,pipe','-i',str(source),'-vn','-ac','1','-ar','16000',
                 '-t','180',str(audio)],capture_output=True,timeout=30,check=True)
             transcript=transcribe(audio,duration,ledger)
-            subprocess.run(['ffmpeg','-v','error','-protocol_whitelist','file,pipe','-i',str(source),'-vf',
-                f'fps=1/{max(1,duration/12)},scale=1024:1024:force_original_aspect_ratio=decrease',
-                '-frames:v','12',str(Path(tmp)/'frame-%02d.jpg')],capture_output=True,timeout=30,check=True)
-            frames=[]
-            for n,path in enumerate(sorted(Path(tmp).glob('frame-*.jpg'))[:12]):
-                frames.append({'id':f'frame_{n}','data_url':'data:image/jpeg;base64,'+base64.b64encode(path.read_bytes()).decode(),
-                               'time_seconds':round(n*max(1,duration/12),3)})
+            frames=sample_frames(source,tmp)
             return {'transcript':transcript,'frames':frames,'duration':duration,'coverage':'sampled_frames_full_audio'}
         except (OSError,subprocess.SubprocessError,ValueError,KeyError):
             raise ProviderDisabled('media_decode_unavailable') from None
+
+
+def sample_frames(source, output_dir):
+    """Sample <=12 actual decoded frames, including opening and closing cards.
+
+    Local files only. Frame indexes/PTS come from the same decoded stream; do not
+    label synthetic fps output with guessed n*interval timestamps.
+    """
+    import base64, math
+    source=Path(source)
+    if not source.is_file() or source.stat().st_size>20_000_000:
+        raise ProviderDisabled('media_byte_limit')
+    probe=subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,pipe',
+        '-select_streams','v:0','-show_frames','-show_entries','frame=best_effort_timestamp_time',
+        '-of','json',str(source)],capture_output=True,timeout=30,check=True)
+    timestamps=[float(f['best_effort_timestamp_time']) for f in json.loads(probe.stdout)['frames']]
+    if not timestamps or len(timestamps)>54000 or any(not math.isfinite(t) for t in timestamps):
+        raise ProviderDisabled('invalid_frame_timestamps')
+    if any(b<a for a,b in zip(timestamps,timestamps[1:])):raise ProviderDisabled('nonmonotonic_frames')
+    if timestamps[-1]-timestamps[0]>180:raise ProviderDisabled('media_duration_limit')
+    fractions=(0,.08,.18,.3,.42,.54,.66,.78,.88,.94,.98,1)
+    indexes=sorted({round(f*(len(timestamps)-1)) for f in fractions})
+    expression='+'.join(f'eq(n\\,{n})' for n in indexes)
+    pattern=str(Path(output_dir)/'selected-%02d.jpg')
+    subprocess.run(['ffmpeg','-v','error','-protocol_whitelist','file,pipe','-i',str(source),
+        '-map','0:v:0','-vf',f'select={expression},scale=1024:1024:force_original_aspect_ratio=decrease',
+        '-fps_mode','vfr','-frames:v','12',pattern],capture_output=True,timeout=30,check=True)
+    paths=sorted(Path(output_dir).glob('selected-*.jpg'))
+    if len(paths)!=len(indexes):raise ProviderDisabled('frame_count_mismatch')
+    return [{'id':f'frame_{n}','frame_index':n,'time_seconds':timestamps[n]-timestamps[0],
+             'stream_timestamp_seconds':timestamps[n],'data_url':'data:image/jpeg;base64,'+
+             base64.b64encode(path.read_bytes()).decode()} for n,path in zip(indexes,paths)]

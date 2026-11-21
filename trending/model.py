@@ -43,6 +43,9 @@ def city_from_address(address: str) -> str | None:
     # These nearby destinations are not the three urban destinations in this feed.
     if re.search(r"\b(hoi an|vung tau|binh duong|nha trang|phu quoc)\b", text) or text == 'hue' or text.endswith(' hue'):
         return None
+    # Some publishers append a default supported city after another province.
+    if re.search(r'\b(tinh quang ninh|yen tu|tinh lam dong|tinh khanh hoa)\b', text):
+        return None
     aliases = {"hcmc": r"\b(ho chi minh|hcmc|hcm|tp hcm|tphcm|sai gon|saigon)\b",
                "hanoi": r"\b(ha noi|hanoi)\b", "danang": r"\b(da nang|danang)\b"}
     matches = [city for city, pattern in aliases.items() if re.search(pattern, text)]
@@ -119,7 +122,7 @@ class Candidate:
             except ValueError:
                 self.image_url = None  # Missing/unsafe artwork never prevents publication.
         verified = parse_time(self.verified_at)
-        if not verified or not now - timedelta(hours=72) <= verified <= now + timedelta(minutes=5):
+        if not verified or not now - timedelta(hours=168) < verified <= now + timedelta(minutes=5):
             reasons.append("stale_verification")
         if self.status != "active":
             reasons.append(self.status)

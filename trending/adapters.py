@@ -40,8 +40,8 @@ def meta(soup, key):
 
 def category(text):
     value = folded(text)
-    if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball)\b", value): return "sports"
-    if re.search(r"\b(pop up|popup|cho phien|hoi cho|local brand market)\b", value): return "market"
+    if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua)\b", value): return "sports"
+    if re.search(r"\b(pop up|popup|cho phien|phien cho|hoi cho|local brand market)\b", value): return "market"
     text = folded(text)
     for name, pattern in [
         ("workshop", r'workshop|lop hoc|lam gom'),
@@ -49,9 +49,9 @@ def category(text):
         ("restaurant", r'quan an|nha hang|am thuc|restaurant|eatery|quan pho|quan bun|banh mi|bot chien|banh cuon'),
         ("nightlife", r'club|nightlife|night club'),
         ("bar", r'\bbar\b|cocktail|beer|bia'),
-        ("music", r'concert|nhac|music|live show|dj|jazz'),
-        ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|nghe thuat|trung bay'),
-        ("experience", r'trai nghiem|experience|walking tour|city tour|tham quan')]:
+        ("music", r'concert|nhac|music|live show|birthday show|dj|jazz'),
+        ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|nghe thuat|trung bay|kich thieu nhi|dance|ecstatic'),
+        ("experience", r'trai nghiem|experience|walking tour|city tour|tham quan|fanmeeting')]:
         if re.search(pattern, text):
             return name
     return ""
@@ -175,11 +175,30 @@ class Adapter:
 
 
 class Ticketbox(Adapter):
+    def fetch(self, client, url):
+        # Event details are server-rendered even when homepage hydration fails.
+        page = client.get(url, self.hosts)
+        if any(is_type(obj, 'Event') for obj in structured(page)):
+            return page
+        return client.get(url, self.hosts, render=True)
+
     content_selector = "main"
     link_pattern = r"^/(?!search|customer|organizer)[a-z0-9-]+-\d{4,}$"
 
     def parse(self, soup, url, now):
         c = super().parse(soup, url, now)
+        # Ticketbox fills addressLocality/Region with HCMC even on Hanoi
+        # events. A complete streetAddress containing an explicit supported
+        # city is the more precise location field; do not use URL/title guesses.
+        for obj in structured(soup):
+            if not is_type(obj, 'Event'):continue
+            loc=obj.get('location') or {}
+            addr=loc.get('address') if isinstance(loc,dict) else None
+            street=addr.get('streetAddress','') if isinstance(addr,dict) else ''
+            if city_from_address(street):
+                c.address=street;c.city_slug=city_from_address(street)
+                c.location_evidence=url
+            break
         text = soup.get_text("\n", strip=True)
         c.venue_name = re.sub(r'^Địa điểm\s*:\s*','',c.venue_name,flags=re.I).strip()
         c.venue_name = re.split(r'\s+-\s+(?=\d)',c.venue_name,maxsplit=1)[0]
@@ -187,7 +206,7 @@ class Ticketbox(Adapter):
         sessions = ticketbox_sessions(text)
         if sessions:
             c.occurrences = sessions
-        elif re.search(r"\+\s*\d+\s*ngày khác", text, re.I):
+        elif re.search(r"\+\s*\d+\s*ngày khác|\d+\s*suất diễn", text, re.I):
             c.reasons.append("unresolved_individual_sessions")
         # Only the event's own intro, not recommendations/footer.
         intro = text.split("Giới thiệu", 1)[-1].split("Lịch diễn", 1)[0] if "Giới thiệu" in text else ""
@@ -315,6 +334,12 @@ class Nightlife(Adapter):
     link_pattern = r"-\d+-15\.html$"
 
     def parse(self, soup, url, now):
+        # Related-event cards share the outer container. They are not evidence
+        # for this event's destination, schedule, or images.
+        from copy import deepcopy
+        soup = deepcopy(soup)
+        for related in soup.select('.p-detail-1 .p_other, .p-detail-1 .p_social'):
+            related.decompose()
         c = super().parse(soup, url, now)
         c.category = "nightlife"
         body = soup.select_one(self.content_selector)
@@ -329,8 +354,21 @@ class Nightlife(Adapter):
                 schedule = value.split(":", 1)[-1].strip()
             elif re.match(r"Place\s*:", value, re.I):
                 a = p.select_one('a[href]')
-                if a:
-                    c.venue_name = a.get_text(" ", strip=True)
+                c.venue_name = a.get_text(" ", strip=True) if a else value.split(':', 1)[-1].strip()
+        # Publishers often put Address after a venue heading and <br>, so the
+        # entire paragraph does not start with Address. Use explicit lines only.
+        addresses = set()
+        for line in body.get_text('\n', strip=True).splitlines():
+            if re.match(r'^Address\s*:', line, re.I):
+                address = line.split(':', 1)[-1].strip()
+                if city_from_address(address):
+                    addresses.add(address)
+        if len(addresses) == 1:
+            c.address = addresses.pop()
+            c.city_slug = city_from_address(c.address)
+            c.location_evidence = url
+        elif len(addresses) > 1:
+            c.reasons.append('ambiguous_event_addresses')
         c.occurrences = schedule_occurrences(schedule, now) or weekly(schedule, now)
         return c
 
@@ -370,7 +408,7 @@ class LifeOfDaNang(Adapter):
     link_pattern = r'^/(?:vi/)?(?:danang/[^/]+|weekly(?:/[^/]+)?)$'
 
     def links(self,soup,base):
-        links=list(super().links(soup,base))
+        links=list(super().links(soup.select_one('main') or soup,base))
         if urlsplit(base).path.rstrip('/') in {'/weekly','/vi/weekly'}:
             links.insert(0,base)
         return iter(dict.fromkeys(links))
@@ -386,6 +424,14 @@ class LifeOfDaNang(Adapter):
         events=[e for e in structured(soup) if is_type(e,'Event')]
         if events and all(e.get('name')==events[0].get('name') and e.get('location')==events[0].get('location') for e in events):
             c.occurrences=[o for e in events if (o:=iso_occurrence(str(e.get('startDate','')),e.get('endDate')))]
+            # Related-event cards in <main> must not supply the primary category
+            # or text evidence. Use only this event's structured description.
+            c.original_text = str(events[0].get('description') or '')
+            c.category = category(c.title) or category(c.original_text)
+            if not re.search(r'\d', c.address):
+                # City-only structured addresses do not resolve a branch or
+                # distinguish a single destination from a citywide listing.
+                c.reasons.append('unverified_street_address')
         return [c]
 
 
@@ -416,7 +462,78 @@ class Saigoneer(VnExpress):
         return c
 
 
-CLASSES = {"vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
+class HanoiGo(Adapter):
+    """Official city listings; only primary venue and explicit individual sessions."""
+    content_selector = '[data-testid="article-section-intro"]'
+    link_pattern = r'^/event/[^/?]+$'
+
+    def parse(self, soup, url, now):
+        from datetime import datetime, timedelta
+        from .model import ICT, Occurrence
+        title=soup.select_one('h1')
+        intro=soup.select_one(self.content_selector)
+        venue=soup.select_one('[data-testid="detail-info-venue"]')
+        timing=soup.select_one('[data-testid="detail-info-time"]')
+        extras=soup.select_one('[data-testid="article-section-extras"]')
+        text=intro.get_text(' ',strip=True) if intro else ''
+        name=title.get_text(' ',strip=True) if title else ''
+        location=re.sub(r'^Địa điểm\s*','',venue.get_text(' ',strip=True)) if venue else ''
+        c=Candidate(self.slug,self.config['name'],url,name,'event',
+            category=category(name) or category(text[:500]),original_text=text[:12000],
+            verified_at=now.isoformat())
+        # Prefer the explicit location field. Otherwise take a short address
+        # sentence from this event's introduction, never related-event cards.
+        address=location if city_from_address(location) else ''
+        if not address:
+            for match in re.finditer(r'(?:Địa điểm\s*:|\btại\s+)([^.!?]{5,240}Hà\s+Nội)',text,re.I):
+                proposed=match[1].strip()
+                if folded(location) in folded(proposed):
+                    address=proposed;break
+        c.venue_name=location
+        c.address=address
+        c.city_slug=city_from_address(address)
+        c.location_evidence=url if c.city_slug and location else ''
+        if re.search(r'\b(da huy|huy su kien|cancelled)\b',folded(name+' '+text[:500])):
+            c.status='cancelled'
+        time_text=timing.get_text(' ',strip=True) if timing else ''
+        full=re.search(r'(\d{1,2})/(\d{1,2})/(20\d{2})',time_text)
+        if not full:return c
+        year=int(full[3])
+        session_text=extras.get_text(' ',strip=True) if extras else time_text
+        pattern=r'(\d{1,2})/(\d{1,2})\s*·\s*(\d{2}):(\d{2})\s*[–-]\s*(\d{2}):(\d{2})'
+        sessions=set()
+        for d,m,ah,am,bh,bm in re.findall(pattern,session_text):
+            a=datetime(year,int(m),int(d),int(ah),int(am),tzinfo=ICT)
+            b=a.replace(hour=int(bh),minute=int(bm))
+            if b<=a:b+=timedelta(days=1)
+            sessions.add((a,b))
+        # Publisher all-day exhibitions use a single first-day ticket entry
+        # and an explicit inclusive date range in their primary facts panel.
+        # This is date-only evidence, not inferred daily performance hours.
+        if '00:00' in time_text and '23:59' in time_text and folded(name).startswith('trien lam'):
+            ranges=[]
+            for dt in soup.select('dt'):
+                if dt.get_text(' ',strip=True) != 'Thời gian':continue
+                dd=dt.find_next_sibling('dd')
+                if not dd:continue
+                match=re.search(r'(\d{1,2})\s*[–-]\s*(\d{1,2})/(\d{1,2})/(20\d{2})',dd.get_text(' ',strip=True))
+                if match:
+                    d1,d2,m,y=map(int,match.groups())
+                    ranges.append((datetime(y,m,d1,tzinfo=ICT),datetime(y,m,d2,tzinfo=ICT)+timedelta(days=1)))
+            if len(set(ranges)) == 1:
+                a,b=ranges[0]
+                c.occurrences=[Occurrence(a.isoformat(),b.isoformat(),'date')]
+                return c
+        more=re.search(r'\+(\d+)\s*suất khác',time_text)
+        expected=int(more[1])+1 if more else 1
+        # A streamed preview can truncate the schedule to three sessions.
+        # Never turn its overall date range into invented daily performances.
+        if len(sessions)<expected:
+            c.reasons.append('unresolved_individual_sessions')
+        c.occurrences=[Occurrence(a.isoformat(),b.isoformat()) for a,b in sorted(sessions)]
+        return c
+
+CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang, "saigoneer": Saigoneer}
 
 
@@ -424,13 +541,17 @@ def load_sources():
     return json.loads(Path(__file__).with_name('sources.json').read_text())
 
 
-def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None, metrics=None):
+def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None, metrics=None, existing_only=False):
     adapter = CLASSES[slug](slug, config)
     metrics = metrics if metrics is not None else {}
     metrics.update(listing_pages=0,detail_pages=0,extracted_entries=0)
     links = list(extra_urls)
     failures = []
-    seeds = list(config['seeds'])
+    seeds = [] if existing_only else list(config['seeds'])
+    if slug == 'lifeofdanang' and not existing_only:
+        from .model import ICT
+        seeds.insert(0, f"https://lifeofdanang.com/vi/danang/thang/{now.astimezone(ICT):%Y-%m}")
+    seed_groups = []
     for seed in seeds:
         heartbeat()
         try:
@@ -444,7 +565,9 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                 parent=node.find_parent('a',href=True)
                 if parent:
                     dated.extend(adapter.links(BeautifulSoup(str(parent),'html.parser'),seed))
-            links.extend(found if slug=='danangfantasticity' else dated+found)
+            ordered = found if slug=='danangfantasticity' else dated+found
+            seed_groups.append(ordered)
+            links.extend(ordered)
             next_page=listing.select_one('a[rel="next"][href]')
             if next_page and len(seeds)<len(config['seeds'])*2:
                 target=canonical(urljoin(seed,next_page['href']))
@@ -452,21 +575,28 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
         except Exception as exc:
             failures.append({"stage": "listing", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
         heartbeat()
+    if len(seed_groups)>1 and slug!='danangfantasticity' and not existing_only:
+        # Give category listings a share of the bounded detail-page budget.
+        # Homepage ordering must not consume every slot before sports/workshops.
+        from itertools import zip_longest
+        links = list(extra_urls) + [u for row in zip_longest(*seed_groups) for u in row if u]
     links = list(dict.fromkeys(links))[:limit]
-    if slug == 'danangfantasticity':
+    if slug == 'danangfantasticity' and not existing_only:
         # Reserve detail capacity for the individual activities linked by campaigns.
         links = links[:max(1,limit-3)]
-    if not links:
+    if not links and not existing_only:
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
+    consecutive_fetch_failures = 0
     for url in links:
         heartbeat()
         try:
             soup = adapter.fetch(client, url)
+            consecutive_fetch_failures = 0
             metrics['detail_pages']+=1
             # Official campaign pages link to individual activities. Discover
             # those pages within the same total detail-page budget.
-            if slug == 'danangfantasticity':
+            if slug == 'danangfantasticity' and not existing_only:
                 for child in adapter.links(soup,url):
                     if child not in links and len(links) < limit:
                         links.append(child)
@@ -476,6 +606,8 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     continue
                 try:
                     if hasattr(adapter,'enrich'):c=adapter.enrich(c,soup,client,now)
+                    if reason := config.get('review_holds', {}).get(canonical(c.source_url)):
+                        c.reasons.append(reason)
                     from .images import authorize
                     authorize(c,now)
                     candidates.append(c)
@@ -484,6 +616,11 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     failures.append({'stage':'entry','reason':type(exc).__name__})
         except Exception as exc:
             failures.append({"stage": "detail", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
+            if isinstance(exc,FetchError):
+                consecutive_fetch_failures += 1
+                if consecutive_fetch_failures >= 3:
+                    failures.append({'stage':'detail','reason':'source_fetch_circuit_open'})
+                    break
         heartbeat()
     return candidates, failures
 
