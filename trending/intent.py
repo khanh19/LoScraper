@@ -19,11 +19,15 @@ ALIASES = {
  'danang': ['Đà Nẵng','Hải Châu','Sơn Trà','An Hải'],
 }
 
-def queries(city, counts=None):
+def queries(city, counts=None, evaluation_date=None):
     counts=counts or {}
     out=[]
     for category in sorted(ACTIVITIES,key=lambda c:(counts.get(c,0),c)):
-        phrase=f'{ACTIVITIES[category][0]} {CITIES[city]} cuối tuần này'
+        # Rotate deterministically across discovery intentions; the same day's
+        # retries retain the same query/cache key. Counts still prioritize gaps.
+        offset=evaluation_date.toordinal() if evaluation_date else 0
+        activity=ACTIVITIES[category][offset % len(ACTIVITIES[category])]
+        phrase=f'{activity} {CITIES[city]} cuối tuần này'
         out.append({'city':city,'category':category,'query':phrase,
                     'variants':list(dict.fromkeys([folded(phrase)]+[f'{activity} {CITIES[city]}' for activity in ACTIVITIES[category]]+[f'{ACTIVITIES[category][0]} {a}' for a in ALIASES[city]])),
                     'eligible_count':counts.get(category,0)})

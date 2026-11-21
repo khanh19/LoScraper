@@ -67,7 +67,7 @@ def run(args):
                 except Exception:
                     report['providers']['feed']={'status':'blocked','reason':'feed_database_unavailable'}
                     feed.close();feed=None
-            selection=[q for q in queries(city,counts) if not args.category or q['category']==args.category][:args.queries_per_city]
+            selection=[q for q in queries(city,counts,now.astimezone(ICT).date()) if not args.category or q['category']==args.category][:args.queries_per_city]
             for q in selection:q['query']+=f' tháng {now.astimezone(ICT).month} năm {now.astimezone(ICT).year}'
             city_report={'queries':selection,'leads':[],'results':[],'errors':[]}
             report['cities'][city]=city_report

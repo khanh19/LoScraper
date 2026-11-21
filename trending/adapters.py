@@ -556,7 +556,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
         except Exception as exc:
             failures.append({"stage": "listing", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
         heartbeat()
-    if slug == 'ticketgo' and seed_groups and not existing_only:
+    if len(seed_groups)>1 and slug!='danangfantasticity' and not existing_only:
         # Give category listings a share of the bounded detail-page budget.
         # Homepage ordering must not consume every slot before sports/workshops.
         from itertools import zip_longest
@@ -568,10 +568,12 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     if not links and not existing_only:
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
+    consecutive_fetch_failures = 0
     for url in links:
         heartbeat()
         try:
             soup = adapter.fetch(client, url)
+            consecutive_fetch_failures = 0
             metrics['detail_pages']+=1
             # Official campaign pages link to individual activities. Discover
             # those pages within the same total detail-page budget.
@@ -595,6 +597,11 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     failures.append({'stage':'entry','reason':type(exc).__name__})
         except Exception as exc:
             failures.append({"stage": "detail", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
+            if isinstance(exc,FetchError):
+                consecutive_fetch_failures += 1
+                if consecutive_fetch_failures >= 3:
+                    failures.append({'stage':'detail','reason':'source_fetch_circuit_open'})
+                    break
         heartbeat()
     return candidates, failures
 

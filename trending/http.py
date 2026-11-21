@@ -92,6 +92,8 @@ class PublicClient:
                     raise FetchError("redirect_limit")
             except requests.RequestException as exc:
                 # Do not log exception URLs or response bodies.
+                if isinstance(exc, requests.exceptions.SSLError):
+                    raise FetchError('tls_handshake_failed') from None
                 raise FetchError(type(exc).__name__) from None
         self.cache[key] = soup
         return soup

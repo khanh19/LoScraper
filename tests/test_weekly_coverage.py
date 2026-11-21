@@ -1,13 +1,48 @@
 """Coverage discovery uses current Vietnam month and primary-event evidence."""
 import json
 import unittest
+from unittest.mock import patch
 from datetime import timedelta
 from bs4 import BeautifulSoup
 from trending.adapters import LifeOfDaNang, collect_source, load_sources
 from test_trending import NOW, candidate
 from trending.model import city_from_address
+from trending.http import FetchError
 
 class WeeklyCoverage(unittest.TestCase):
+    def test_repeated_fetch_failures_stop_source_without_erasing_success(self):
+        fetched=[]
+        class Adapter:
+            hosts={'example.com'}
+            def __init__(self,*args):pass
+            def fetch(self,client,url):
+                fetched.append(url)
+                if '/detail' in url:raise FetchError('http_503')
+                return BeautifulSoup('<main></main>','html.parser')
+            def links(self,*args):return [f'https://example.com/detail{i}' for i in range(10)]
+            def parse_many(self,*args):return []
+        with patch.dict('trending.adapters.CLASSES',{'test':Adapter}):
+            candidates,failures=collect_source('test',{'seeds':['https://example.com/']},None,NOW,10)
+        self.assertEqual(len(fetched),4)
+        self.assertEqual(candidates,[])
+        self.assertEqual(failures[-1]['reason'],'source_fetch_circuit_open')
+
+    def test_multiple_listings_share_detail_budget(self):
+        fetched=[]
+        class Adapter:
+            hosts={'example.com'}
+            def __init__(self,*args):pass
+            def fetch(self,client,url):
+                fetched.append(url)
+                return BeautifulSoup('<main></main>','html.parser')
+            def links(self,soup,base):
+                return [base+'/one',base+'/two']
+            def parse_many(self,*args):return []
+        config={'seeds':['https://example.com/food','https://example.com/culture']}
+        with patch.dict('trending.adapters.CLASSES',{'test':Adapter}):
+            collect_source('test',config,None,NOW,2)
+        self.assertEqual(fetched[2:],['https://example.com/food/one','https://example.com/culture/one'])
+
     def test_conflicting_publisher_default_city_is_rejected(self):
         self.assertIsNone(city_from_address('Phường Yên Tử, Tỉnh Quảng Ninh, Ho Chi Minh'))
 

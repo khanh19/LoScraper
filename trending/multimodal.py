@@ -221,6 +221,7 @@ def process(package, ai, ledger, now, fetch_images=False, media_permissions=(), 
     reasons+=judge_reasons(judgment,package)
     if package['media_incomplete']:reasons.append('media_coverage_incomplete')
     reasons+=media_errors
+    reasons+=package.get('collection_holds',[])
     result={'extraction':extraction,'judgment':judgment,'reasons':sorted(set(reasons)),
             'image_count':len(package['image_inputs']),'published':False,'human_calibration':'pending'}
     package['analyzed_images']=[{'id':i['id'],'sha256':i.get('sha256',digest(i['data_url'])),'time_seconds':i.get('time_seconds')} for i in package['image_inputs']]
@@ -287,12 +288,53 @@ def process_destinations(package, ai, ledger, now, fetch_images=False, media_per
     destinations=output.get('destinations')
     if not isinstance(destinations,list) or len(destinations)>6:
         raise ProviderDisabled('invalid_destination_bundle')
+    # A full page is not proof that a roundup ends there. Continue with an
+    # explicit exclusion list; every page still uses the provider's durable
+    # reservations and cache. Never restart or silently discard an overflow.
+    def identity(item):
+        if not isinstance(item,dict):
+            raise ProviderDisabled('invalid_destination_bundle')
+        return (folded(str(item.get('venue_name') or '')),
+                folded(str(item.get('address') or '')))
+    seen={identity(item) for item in destinations}
+    page_size=len(destinations)
+    while page_size==6 and len(destinations)<30:
+        page_data={**data,'already_extracted_destinations':[
+            {'venue_name':item.get('venue_name'),'address':item.get('address')}
+            for item in destinations]}
+        page=ai.structured('extract_destinations_continue_v2',schema,RULES+
+            '\nExtract up to six ADDITIONAL destinations not in already_extracted_destinations. '
+            'Return an empty array when no more are supported. Never invent stops to fill the page.',
+            page_data,images).get('destinations')
+        if not isinstance(page,list) or len(page)>6:
+            raise ProviderDisabled('invalid_destination_bundle')
+        page_size=len(page)
+        additions=[]
+        for item in page:
+            key=identity(item)
+            if key in seen:
+                # Repeated or changed claims need review, not an automatic merge.
+                image_errors.append('destination_pagination_overlap')
+                continue
+            seen.add(key);additions.append(item)
+        remaining=30-len(destinations)
+        if len(additions)>remaining:
+            image_errors.append('destination_limit_reached')
+        destinations.extend(additions[:remaining])
+        if page and not additions:
+            image_errors.append('destination_coverage_unresolved')
+            break
+    if page_size==6 and len(destinations)>=30:
+        image_errors.append('destination_limit_reached')
     results=[]
     # Keep the original complete source available; destination names distinguish
     # evidence identities without depending on article order or mutable dates.
     for extraction in destinations:
         child=copy.deepcopy(prepared)
-        child['content_hash']=digest([prepared['content_hash'], extraction.get('venue_name'), extraction.get('address'),'destinations-v1'])
+        child['content_hash']=digest([prepared['content_hash'], extraction.get('venue_name'), extraction.get('address'),'destinations-v2'])
+        child['destination_coverage']={'extracted':len(destinations),'limit':30,
+            'complete':not any(r.startswith('destination_') for r in image_errors)}
+        child['collection_holds']=sorted(set(image_errors))
         child['_prepared_images']=images
         child['analyzed_images']=[{'id':i['id'],'sha256':i.get('sha256')} for i in images]
         try:
