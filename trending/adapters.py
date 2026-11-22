@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
 from .http import FetchError, PublicClient
-from .model import ICT, Candidate, canonical, city_from_address, folded, parse_time
+from .model import CONFIRMED_SCHEDULE_CONFLICT, ICT, Candidate, canonical, city_from_address, folded, parse_time
 
 
 def structured(soup):
@@ -550,11 +550,13 @@ class LifeOfDaNang(Adapter):
         elif folded(c.address) != folded(address):
             c.reasons.append('unresolved_reviewed_address')
             return c
-        schedule = self._corroborated_schedule(c, review, client, now)
+        schedule, conflict = self._corroborated_schedule(c, review, client, now)
         if schedule:
             c.occurrences = schedule
         else:
             c.reasons.append('unresolved_cross_source_session_times')
+            if conflict:
+                c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
         return c
 
     def _corroborated_schedule(self, c, review, client, now):
@@ -570,25 +572,28 @@ class LifeOfDaNang(Adapter):
         publisher_text = c.original_text.partition('\n')[0]
         ranges = re.findall(r'\b(\d{1,2})h(\d{2})?\s+(?:den|toi)\s+(\d{1,2})h(\d{2})?\b', plain(publisher_text))
         if (len(rows), len(ranges), len(c.occurrences)) != (1, 1, 1):
-            return []
+            return [], False
         day, _, time_text = rows[0]
         start_hour, start_minute, end_hour, end_minute = ranges[0]
         publisher_time = f'{int(start_hour):02}:{start_minute or "00"}-{int(end_hour):02}:{end_minute or "00"}'
         listed_time = re.match(r'\d{2}:\d{2}\s*-\s*\d{2}:\d{2}\b', plain(time_text))
-        if (not listed_time or re.sub(r'\s', '', listed_time[0]) != publisher_time
-                or not re.fullmatch(r'\d{2}/\d{2}/20\d{2}', day)):
-            return []
-        occurrences = schedule_occurrences(f'{day} {publisher_time}', now)
-        if len(occurrences) != 1:
-            return []
-        previous, scheduled = c.occurrences[0], occurrences[0]
-        start, end = parse_time(scheduled.starts_at), parse_time(scheduled.ends_at)
-        previous_start, previous_end = parse_time(previous.starts_at), parse_time(previous.ends_at)
-        if previous.precision == 'date' and previous_start <= start < end <= previous_end:
-            return occurrences
-        if previous.precision == 'time' and (start, end) == (previous_start, previous_end):
-            return occurrences
-        return []
+        if not listed_time or not re.fullmatch(r'\d{2}/\d{2}/20\d{2}', day):
+            return [], False
+        previous = c.occurrences[0]
+        bounds = parse_time(previous.starts_at), parse_time(previous.ends_at)
+        source_day = bounds[0].astimezone(ICT).strftime('%d/%m/%Y')
+        source_sessions = schedule_occurrences(f'{source_day} {publisher_time}', now)
+        listed_sessions = schedule_occurrences(f'{day} {listed_time[0]}', now)
+        if len(source_sessions) != 1 or len(listed_sessions) != 1:
+            return [], False
+        start, end = parse_time(source_sessions[0].starts_at), parse_time(source_sessions[0].ends_at)
+        if previous.precision == 'date' and not bounds[0] <= start < end <= bounds[1]:
+            return [], False
+        if previous.precision == 'time' and (start, end) != bounds:
+            return [], False
+        if source_sessions != listed_sessions:
+            return [], True
+        return source_sessions, False
 
 
 class HoGuomOpera(Adapter):
@@ -813,6 +818,8 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     if hasattr(adapter,'enrich'):c=adapter.enrich(c,soup,client,now)
                     if reason := config.get('review_holds', {}).get(canonical(c.source_url)):
                         c.reasons.append(reason)
+                        if reason in {'unresolved_cross_source_session_times', 'unresolved_cross_source_end_time'}:
+                            c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
                     from .images import authorize
                     authorize(c,now)
                     candidates.append(c)

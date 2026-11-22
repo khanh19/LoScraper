@@ -6,7 +6,7 @@ from datetime import timedelta
 from bs4 import BeautifulSoup
 from trending.adapters import HoGuomOpera, LifeOfDaNang, category, collect_source, load_sources
 from test_trending import NOW, candidate
-from trending.model import city_from_address
+from trending.model import CONFIRMED_SCHEDULE_CONFLICT, city_from_address
 from trending.http import FetchError
 
 class WeeklyCoverage(unittest.TestCase):
@@ -171,8 +171,13 @@ class WeeklyCoverage(unittest.TestCase):
                          [('2026-12-03T17:30:00+07:00', '2026-12-03T19:00:00+07:00', 'time')])
         self.assertIn('unresolved_reviewed_venue', enrich(links=venue_link + venue_link).reasons)
         self.assertIn('unresolved_reviewed_address', enrich(address='<p>Đà Nẵng</p>').reasons)
-        for conflicting in (row.replace('19:00', '20:00'), row.replace('03/12', '04/12'), row + row):
+        for conflicting in (row.replace('19:00', '20:00'), row.replace('03/12', '04/12')):
             with self.subTest(schedule=conflicting):
-                self.assertIn('unresolved_cross_source_session_times', enrich(schedule=conflicting).reasons)
+                self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, enrich(schedule=conflicting).reasons)
+        for incomplete in (row + row, row.replace('19:00', '99:00'), ''):
+            with self.subTest(schedule=incomplete):
+                reasons = enrich(schedule=incomplete).reasons
+                self.assertIn('unresolved_cross_source_session_times', reasons)
+                self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, reasons)
         event['description'] = 'Lễ thắp sáng cây thông.\nTiệc tối riêng từ 17h30 đến 19h.'
-        self.assertIn('unresolved_cross_source_session_times', enrich().reasons)
+        self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, enrich().reasons)

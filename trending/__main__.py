@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from .adapters import CLASSES, collect_source, load_sources, supplemental_links
 from .http import PublicClient
-from .model import CITIES
+from .model import CITIES, CONFIRMED_SCHEDULE_CONFLICT
 from .providers import BrightSocial, ProviderDisabled, SerpDiscovery, post_platform, social_evidence
 from .store import Store
 from .progress import Progress
@@ -141,11 +141,15 @@ def run(args):
                             ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key)
                             if not ok:
                                 progress.count('failed',city,['cancellation_write_failed'])
+                        elif CONFIRMED_SCHEDULE_CONFLICT in invalid and store and args.write_db:
+                            ok,_ = progress.call('hold_schedule',c,now)
+                            if not ok:
+                                progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
                         continue
                     payload = c.payload()
                     if store and args.write_db:
                         ok,result = progress.call('upsert',c,now)
-                        if result in {'identity_conflict','stale_roundup_evidence'}:
+                        if result in {'identity_conflict','stale_roundup_evidence','stale_observation'}:
                             progress.count('rejected',city,[result])
                             continue
                         if not ok:

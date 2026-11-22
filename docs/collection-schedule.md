@@ -53,6 +53,14 @@ street address, and the city's matching schedule. Its December 3 session is
 The collector checks these pages again before renewing evidence.
 [Life of Da Nang](https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-furama-resort-2026-12-03) · [Resort address](https://team.furamavietnam.com/khach-san.html) · [City tourism calendar](https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027)
 
+When both sources give complete and different schedules for an existing event,
+the collector records a hold on the reviewed observation. The shared evaluator
+withholds the event and its pending reminder until a later successful check
+clears the hold. The hold preserves the last successful verification time.
+Incomplete schedules and failed fetches leave the existing observation alone.
+Apply backend migration `20261122110000_discovery_confirmed_schedule_holds.sql`
+before running the updated collector.
+
 ## Activation checklist — not yet active
 
 1. Review PR #6 with its parent stack. Confirm the reviewed workflow reaches the

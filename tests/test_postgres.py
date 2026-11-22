@@ -1,6 +1,9 @@
 """Real Postgres tests; run only against our dedicated disposable local database."""
+from argparse import Namespace
 import copy
+from contextlib import redirect_stdout
 from datetime import timedelta
+from io import StringIO
 import os
 from pathlib import Path
 import re
@@ -10,7 +13,8 @@ from urllib.parse import urlsplit
 
 import psycopg
 
-from trending.model import Occurrence
+from trending.model import CONFIRMED_SCHEDULE_CONFLICT, Occurrence
+from trending.__main__ import run
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
 from test_trending import candidate, NOW
@@ -104,6 +108,53 @@ class Persistence(unittest.TestCase):
             o.ends_at=(datetime.fromisoformat(o.ends_at)+timedelta(days=2)).isoformat()
         self.store.upsert(d,NOW)
         self.assertEqual(self.feed(),[])
+
+    def test_confirmed_schedule_conflict_withholds_existing_item_until_verified(self):
+        c = candidate()
+        item_id = self.store.upsert(c, NOW)
+        self.store.register('ticketgo', 'TicketGo', True)
+        other = copy.deepcopy(c)
+        other.source_slug, other.source_url = 'ticketgo', 'https://ticketgo.vn/event/test'
+        self.assertEqual(self.store.upsert(other, NOW), item_id)
+        held_at = NOW + timedelta(minutes=2)
+        rejected = copy.deepcopy(c)
+        rejected.reasons.append('unresolved_cross_source_session_times')
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        self.assertEqual(self.feed(held_at)[0]['id'], item_id)
+        rejected.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+        rejected.city_slug = 'danang'
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        rejected.city_slug = 'hanoi'
+        rejected.verified_at = held_at.isoformat()
+        args = Namespace(sources='ticketbox', city='hanoi', write_db=True, providers=False,
+                         browser=False, pilot=False, supplemental=False, refresh_existing=True, out=None)
+        with (patch.dict(os.environ, {'DATABASE_URL': URL}),
+              patch('trending.__main__.datetime') as clock,
+              patch('trending.__main__.collect_source', return_value=([rejected], [])),
+              redirect_stdout(StringIO())):
+            clock.now.return_value = held_at
+            report = run(args)
+        self.assertEqual(report['status'], 'complete')
+        self.assertEqual(report['sources']['ticketbox']['reasons'][CONFIRMED_SCHEDULE_CONFLICT], 1)
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        observation = self.store.db.execute("""SELECT id,verified_at,status,schedule_held_at
+            FROM discovery_observations WHERE source_slug='ticketbox'""").fetchone()
+        self.assertEqual((observation['verified_at'], observation['status'], observation['schedule_held_at']),
+                         (NOW, 'active', held_at))
+        self.assertEqual(self.feed(held_at), [])
+        visibility = self.store.db.execute("""SELECT reason,payload FROM discovery_evaluate_all(%s,'hanoi')
+            WHERE item_id=%s""", (held_at, item_id)).fetchone()
+        self.assertEqual(visibility, {'reason': 'unresolved_sessions', 'payload': None})
+        self.assertEqual(len(self.store.refresh_targets('ticketbox', NOW + timedelta(days=2), 'hanoi')), 1)
+        with self.assertRaisesRegex(ValueError, 'stale_observation'):
+            self.store.upsert(c, held_at)
+        c.verified_at = (held_at + timedelta(minutes=1)).isoformat()
+        self.assertEqual(self.store.upsert(c, held_at + timedelta(minutes=1)), item_id)
+        resolved = self.store.db.execute("""SELECT id,schedule_held_at FROM discovery_observations
+            WHERE source_slug='ticketbox'""").fetchone()
+        self.assertEqual(resolved, {'id': observation['id'], 'schedule_held_at': None})
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        self.assertEqual(self.feed(held_at + timedelta(minutes=1))[0]['id'], item_id)
 
     def test_reservations_persist_no_refund_and_monthly_cap(self):
         first=self.store.reserve('serpapi','search-a',1,2,10,{},NOW)
