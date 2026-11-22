@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
 from .http import FetchError, PublicClient
-from .model import ICT, Candidate, canonical, city_from_address, folded
+from .model import ICT, Candidate, canonical, city_from_address, folded, parse_time
 
 
 def structured(soup):
@@ -520,6 +520,75 @@ class LifeOfDaNang(Adapter):
                 # distinguish a single destination from a citywide listing.
                 c.reasons.append('unverified_street_address')
         return [c]
+
+    def enrich(self, c, soup, client, now):
+        review = self.config.get('reviewed_events', {}).get(canonical(c.source_url))
+        if not review or c.status != 'active' or c.kind != 'event':
+            return c
+        event_id = urlsplit(c.source_url).path.rstrip('/').rsplit('/', 1)[-1]
+        venue_links = [
+            canonical(urljoin(c.source_url, link['href']))
+            for link in soup.select('main a[data-ev=venue][data-ev-id][href]')
+            if link['data-ev-id'] == event_id
+        ]
+        address = review['address']
+        if (venue_links != [review['venue_url']]
+                or folded(c.venue_name) != folded(review['location'])
+                or city_from_address(address) != c.city_slug):
+            c.reasons.append('unresolved_reviewed_venue')
+            return c
+        if 'unverified_street_address' in c.reasons:
+            evidence = review['address_url']
+            page = client.get(evidence, {urlsplit(evidence).hostname})
+            address_text = folded(address)
+            if not any(folded(p.get_text(' ', strip=True)).removesuffix(' viet nam') == address_text
+                       for p in page.select('p, address')):
+                c.reasons.append('unresolved_reviewed_address')
+                return c
+            c.address, c.location_evidence = address, evidence
+            c.reasons.remove('unverified_street_address')
+        elif folded(c.address) != folded(address):
+            c.reasons.append('unresolved_reviewed_address')
+            return c
+        schedule = self._corroborated_schedule(c, review, client, now)
+        if schedule:
+            c.occurrences = schedule
+        else:
+            c.reasons.append('unresolved_cross_source_session_times')
+        return c
+
+    def _corroborated_schedule(self, c, review, client, now):
+        evidence = review['schedule_url']
+        page = client.get(evidence, {urlsplit(evidence).hostname})
+        # These reviewed listings have one dated row per venue. Administrative
+        # or related-event text elsewhere on either page must not supply times.
+        rows = [
+            cells for row in page.select('tr')
+            if len(cells := [cell.get_text(' ', strip=True) for cell in row.select(':scope > td')]) == 3
+            and folded(cells[1]) == folded(review['venue_name'])
+        ]
+        publisher_text = c.original_text.partition('\n')[0]
+        ranges = re.findall(r'\b(\d{1,2})h(\d{2})?\s+(?:den|toi)\s+(\d{1,2})h(\d{2})?\b', plain(publisher_text))
+        if (len(rows), len(ranges), len(c.occurrences)) != (1, 1, 1):
+            return []
+        day, _, time_text = rows[0]
+        start_hour, start_minute, end_hour, end_minute = ranges[0]
+        publisher_time = f'{int(start_hour):02}:{start_minute or "00"}-{int(end_hour):02}:{end_minute or "00"}'
+        listed_time = re.match(r'\d{2}:\d{2}\s*-\s*\d{2}:\d{2}\b', plain(time_text))
+        if (not listed_time or re.sub(r'\s', '', listed_time[0]) != publisher_time
+                or not re.fullmatch(r'\d{2}/\d{2}/20\d{2}', day)):
+            return []
+        occurrences = schedule_occurrences(f'{day} {publisher_time}', now)
+        if len(occurrences) != 1:
+            return []
+        previous, scheduled = c.occurrences[0], occurrences[0]
+        start, end = parse_time(scheduled.starts_at), parse_time(scheduled.ends_at)
+        previous_start, previous_end = parse_time(previous.starts_at), parse_time(previous.ends_at)
+        if previous.precision == 'date' and previous_start <= start < end <= previous_end:
+            return occurrences
+        if previous.precision == 'time' and (start, end) == (previous_start, previous_end):
+            return occurrences
+        return []
 
 
 class HoGuomOpera(Adapter):

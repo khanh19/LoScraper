@@ -132,3 +132,47 @@ class WeeklyCoverage(unittest.TestCase):
         self.assertEqual(c.validate(NOW), [])
         event['location']['name'] = 'Xưởng Mây, 12 Trần Phú, 16 Lê Duẩn'
         self.assertIn('unverified_street_address', parse().validate(NOW))
+
+    def test_reviewed_da_nang_event_requires_matching_venue_and_complete_session(self):
+        config = load_sources()['lifeofdanang']
+        url, review = next(iter(config['reviewed_events'].items()))
+        adapter = LifeOfDaNang('lifeofdanang', config)
+        event = {
+            '@type': 'Event',
+            'name': 'Lễ thắp sáng cây thông Giáng sinh',
+            'description': 'Lễ thắp sáng từ 17h30 đến 19h.\nTiệc tối riêng từ 18h30 đến 22h.',
+            'startDate': '2026-12-03',
+            'endDate': '2026-12-03',
+            'location': {'name': review['location'], 'address': {'addressLocality': 'Da Nang'}},
+        }
+        venue_link = (f'<a data-ev="venue" data-ev-id="{url.rsplit("/", 1)[-1]}" '
+                      f'href="{review["venue_url"]}">Địa điểm</a>')
+        address_html = f'<p>{review["address"]}, Việt Nam</p>'
+        row = '<tr><td>03/12/2026</td><td>Furama Resort Danang</td><td>17:30–19:00 in the main lobby</td></tr>'
+
+        class Client:
+            def __init__(self, address, schedule):
+                self.pages = {review['address_url']: address, review['schedule_url']: f'<table>{schedule}</table>'}
+
+            def get(self, url, hosts):
+                return BeautifulSoup(self.pages[url], 'html.parser')
+
+        def enrich(links=venue_link, address=address_html, schedule=row):
+            soup = BeautifulSoup(f'<main>{links}</main><script type="application/ld+json">{json.dumps(event)}</script>',
+                                 'html.parser')
+            parsed = adapter.parse_many(soup, url, NOW)[0]
+            return adapter.enrich(parsed, soup, Client(address, schedule), NOW)
+
+        c = enrich()
+        self.assertEqual(c.validate(NOW), [])
+        self.assertEqual(c.address, review['address'])
+        self.assertEqual(c.location_evidence, review['address_url'])
+        self.assertEqual([(o.starts_at, o.ends_at, o.precision) for o in c.occurrences],
+                         [('2026-12-03T17:30:00+07:00', '2026-12-03T19:00:00+07:00', 'time')])
+        self.assertIn('unresolved_reviewed_venue', enrich(links=venue_link + venue_link).reasons)
+        self.assertIn('unresolved_reviewed_address', enrich(address='<p>Đà Nẵng</p>').reasons)
+        for conflicting in (row.replace('19:00', '20:00'), row.replace('03/12', '04/12'), row + row):
+            with self.subTest(schedule=conflicting):
+                self.assertIn('unresolved_cross_source_session_times', enrich(schedule=conflicting).reasons)
+        event['description'] = 'Lễ thắp sáng cây thông.\nTiệc tối riêng từ 17h30 đến 19h.'
+        self.assertIn('unresolved_cross_source_session_times', enrich().reasons)

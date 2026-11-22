@@ -47,9 +47,16 @@ Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
 Market publications disagree on the start day and opening hour. Pullman's official
 pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
 
+The Furama tree lighting is corroborated by the exact venue link, the resort's
+street address, and the city's matching schedule. Its December 3 session is
+17:30–19:00 Vietnam time. The separately booked dinner is outside that session.
+The collector checks these pages again before renewing evidence.
+[Life of Da Nang](https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-furama-resort-2026-12-03) · [Resort address](https://team.furamavietnam.com/khach-san.html) · [City tourism calendar](https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027)
+
 ## Activation checklist — not yet active
 
-1. Review and merge PR #6 into the default branch (`main`). No merge was performed.
+1. Review PR #6 with its parent stack. Confirm the reviewed workflow reaches the
+   default branch (`main`) before using manual Actions dispatch.
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. Never point this job at the local accounting ledger.
 3. Run manual `mode=full`, `pilot=true`; inspect source coverage.
@@ -69,8 +76,18 @@ refresh path and allowance checks before inclusion in unattended collection.
 
 ## Verification
 
-Local scraper/PostgreSQL suite: 141 tests passed, including Vietnam-time start and
-weekday boundaries, no-listing refresh, empty targets, existing-entry filtering,
-and failed fetch preserving the prior verification timestamp. Workflow YAML parsed
-successfully. No live collection, production write, default-branch merge or scheduled
-run was performed during implementation.
+The isolated staging database's shared eligibility evaluator returned these
+website-backed counts on 23 November 2026 Vietnam time. They describe a
+point-in-time feed with expiring evidence.
+
+| City | Weekly / target | Planning / target |
+| --- | ---: | ---: |
+| Hanoi | 16 / 14 | 8 / 7 |
+| Ho Chi Minh City | 19 / 18 | 10 / 7 |
+| Da Nang | 13 / 12 | 5 / 5 |
+
+The manual Furama run imported one eligible event without a failed fetch or
+provider usage. Controlled tests cover matching dates and times, competing
+sessions, missing address evidence, and venue ambiguity. Hosted app validation
+requires the staging deployment to include the release branch. Scheduling remains
+disabled.

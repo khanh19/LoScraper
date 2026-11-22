@@ -89,6 +89,16 @@
     ],
     "enabled": true,
     "pilot_status": "validated_20261108_single_destination_event",
+    "reviewed_events": {
+      "https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-furama-resort-2026-12-03": {
+        "venue_url": "https://lifeofdanang.com/vi/danang/dia-diem/furama-resort-danang",
+        "venue_name": "Furama Resort Danang",
+        "location": "Sảnh chính, Furama Resort Danang",
+        "address": "103 - 105 đường Võ Nguyên Giáp, Phường Ngũ Hành Sơn, TP Đà Nẵng",
+        "address_url": "https://team.furamavietnam.com/khach-san.html",
+        "schedule_url": "https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027"
+      }
+    },
     "review_holds": {
       "https://lifeofdanang.com/vi/danang/city-da-nang-christmas-market-2026-2026-12-03": "unresolved_cross_source_session_times",
       "https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-pullman-2026-12-04": "unresolved_cross_source_session_times"
