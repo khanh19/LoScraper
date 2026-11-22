@@ -177,7 +177,7 @@ class FreeProviderGuards(unittest.TestCase):
                 with patch.dict(os.environ,{'BRIGHTDATA_API_KEY':'test-placeholder'}),patch('trending.providers.bright_preflight',return_value=(3,NOW.isoformat())):
                     with self.assertRaisesRegex(ProviderDisabled,'brightdata_job_pending'):
                         BrightSocial(store,request).collect('https://www.facebook.com/venue/posts/title/123',NOW)
-                self.assertEqual(request.call_args_list[0].kwargs['params']['limit_per_input'],1)
+                self.assertEqual(request.call_args_list[0].kwargs['json']['limit_per_input'],1)
                 self.assertEqual(request.call_args_list[1].args[0],'GET')
                 self.assertTrue(any(c.kwargs.get('provider_id')==snapshot for c in store.update_job.call_args_list))
 
@@ -256,16 +256,35 @@ class FreeProviderGuards(unittest.TestCase):
             calls.append((method,url,kwargs['headers']['Authorization']))
             if url.endswith('/balance'):
                 return dict(balance=0,credit=0,prepayment=0,pending_costs=0)
+            if url.endswith('/free_tier'):
+                return dict(is_enabled=True,included_credits=5000,used_credits=4992,left_credits=8)
+            if url.endswith('/autorecharge'):
+                return {'regular': {'enabled': False}, 'dataset': {'enabled': False}}
             return {'customer':'hl_test'}
         with patch.dict(os.environ,env,clear=True):
-            self.assertEqual(bright_preflight(NOW,request)[0],10)
+            self.assertEqual(bright_preflight(NOW,request)[0],7)
         self.assertEqual(calls[0][2],'Bearer finance-test')
-        self.assertEqual([c[2] for c in calls[1:]],['Bearer scraping-test','Bearer finance-test'])
+        self.assertEqual([c[2] for c in calls[1:]],
+                         ['Bearer scraping-test','Bearer finance-test','Bearer finance-test','Bearer finance-test'])
         self.assertTrue(all(c[0]=='GET' for c in calls))
         def mismatch(method,url,**kwargs):
             return request(method,url,**kwargs) if url.endswith('/balance') else {'customer':'hl_other'}
         with patch.dict(os.environ,env,clear=True),self.assertRaisesRegex(ProviderDisabled,'account_mismatch'):
             bright_preflight(NOW,mismatch)
+        for suffix, result, reason in (
+            ('/free_tier', dict(is_enabled=True,included_credits=5000,used_credits=5000,left_credits=0),
+             'no_verified_free_allowance'),
+            ('/free_tier', dict(is_enabled=True,included_credits=5000,used_credits=4999,left_credits=True),
+             'no_verified_free_allowance'),
+            ('/autorecharge', {'regular': {'enabled': False}, 'dataset': {'enabled': True}},
+             'auto_recharge_not_verified_off'),
+            ('/autorecharge', {'regular': {'enabled': False}}, 'auto_recharge_not_verified_off'),
+        ):
+            def current(method,url,**kwargs):
+                return result if url.endswith(suffix) else request(method,url,**kwargs)
+            with self.subTest(suffix=suffix,result=result),patch.dict(os.environ,env,clear=True):
+                with self.assertRaisesRegex(ProviderDisabled,reason):
+                    bright_preflight(NOW,current)
 
     def test_billing_403_and_exhausted_allowance_never_submit(self):
         from unittest.mock import Mock

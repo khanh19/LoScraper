@@ -41,8 +41,9 @@ into a new preview and treat that as a fresh allowance.
    Re-inspect the same account's shared free-credit pool, promotional-only balance,
    transaction history (no deposits), and both auto-recharge controls. Update the
    existing `BRIGHTDATA_FREE_VERIFICATION_JSON` receipt only after those checks.
-   `python -m trending.preflight --env-file .env` verifies billing and matching
-   credential account IDs; it does not initiate scraping.
+   `python -m trending.preflight --env-file .env` verifies billing, matching
+   credential account IDs, live shared credits and both auto-recharge switches.
+   It performs read-only account calls.
 4. Provide a local JSON manifest with `queries` (at most six strings) and `posts`
    (at most nine objects containing `url` and the collected `primary` candidate
    payload). The primary must already be imported and fresh in the isolated feed.
@@ -210,3 +211,37 @@ These remain review samples. No image reuse or public social publication was
 approved. TikTok returned no fresh original lead and its official public player
 failed TLS hostname verification on this machine. There were zero metered
 provider requests and the campaign reservation total stayed at 132.
+
+## Bounded TikTok profile discovery
+
+Use the manual dry run to find a reviewed publisher's public profile automatically.
+The publisher's current site must link to the exact profile. Ticketbox is a lead
+for Hanoi and HCMC, and the Da Nang tourism site links to its own profile. The city
+of the publisher is only a search hint.
+
+```sh
+python -m trending.social_collect --city danang --tiktok-profile
+```
+
+An explicit `--providers --env-file .env` switches this command to collection.
+It requires the existing canonical `QUOTA_DATABASE_URL` ledger with recorded
+history for the fixed pilot. Each profile shares the pilot's existing limits and
+can reserve one record. Profiles used for multiple cities reuse the same job.
+The request limits `num_of_posts` and the provider's response cap to one. The
+provider documents one free credit per delivered Web Scraper API record.
+[Profile input schema](https://docs.brightdata.com/scrapers/gd_m7n5v2gq296pex2f5m.json) ·
+[Async request limit](https://docs.brightdata.com/api-reference/rest-api/scraper/asynchronous-requests) ·
+[Free credit units](https://docs.brightdata.com/general/account/billing-and-pricing/free-tier)
+
+The command returns a matching fresh post for review, with its original URL and
+available engagement counts. It leaves publication to the existing review process.
+Re-running the command polls a known snapshot or checks cached publication time.
+
+Bright Data's Finance API now exposes [shared credits](https://docs.brightdata.com/api-reference/account-management-api/Get_free_tier_credits)
+and [both auto-recharge settings](https://docs.brightdata.com/api-reference/account-management-api/Get_auto_recharge_settings).
+The free-only check uses the smaller of the dashboard receipt and live allowance,
+with one credit left unreserved because the API rounds fractional usage. A fresh
+dashboard transaction check still reconciles the source of a positive wallet
+balance. At the November 23 Vietnam-time check both switches were off and the
+provider returned 4,996 credits left. The wallet had $5 and the prior receipt
+recorded $7 promotional. The collector did not spend credits.

@@ -1,8 +1,10 @@
 import json
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
+from bs4 import BeautifulSoup
+from trending.discover import reviewed_tiktok_profile
 from trending.social_links import extract_posts, remember_lead
 from trending.providers import BrightSocial, ProviderDisabled
 
@@ -70,6 +72,54 @@ class SocialDiscoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ProviderDisabled,'job_pending'):
                     BrightSocial(store,request).collect(f'https://www.instagram.com/{path}/example/',NOW)
             self.assertEqual(request.call_args_list[0].kwargs['params']['dataset_id'],dataset)
-            self.assertEqual(request.call_args_list[0].kwargs['json'],[{'url':f'https://www.instagram.com/{path}/example/'}])
+            self.assertEqual(request.call_args_list[0].kwargs['json'], {
+                'input': [{'url': f'https://www.instagram.com/{path}/example/'}], 'limit_per_input': 1,
+            })
+
+    def test_profile_requires_current_ownership_link(self):
+        client = Mock()
+        client.get.return_value = BeautifulSoup('<a href="https://www.tiktok.com/@danangfantasic/">TikTok</a>', 'html.parser')
+        self.assertEqual(reviewed_tiktok_profile('danang', client)['publisher_id'], 'danang-tourism')
+        client.get.return_value = BeautifulSoup('<a href="https://www.tiktok.com/tag/danangfantasic">TikTok</a>', 'html.parser')
+        self.assertIsNone(reviewed_tiktok_profile('danang', client))
+        account = {'@type': 'Organization', 'url': 'https://ticketbox.vn/',
+                   'sameAs': ['https://www.tiktok.com/@ticketbox.vn']}
+        client.get.return_value = BeautifulSoup(
+            '<script type="application/ld+json">' + json.dumps(account) + '</script>', 'html.parser')
+        self.assertEqual(reviewed_tiktok_profile('hanoi', client)['publisher_id'], 'ticketbox')
+        account['url'] = 'https://elsewhere.example/'
+        client.get.return_value = BeautifulSoup(
+            '<script type="application/ld+json">' + json.dumps(account) + '</script>', 'html.parser')
+        self.assertIsNone(reviewed_tiktok_profile('hanoi', client))
+
+    def test_tiktok_profile_reserves_one_and_keeps_only_fresh_matching_posts(self):
+        profile = 'https://www.tiktok.com/@verified_venue'
+        post = profile + '/photo/123'
+        original = {'url': post + '?share=x', 'post_id': '123', 'create_time': NOW.isoformat(),
+                    'description': 'Bài ảnh của địa điểm', 'video_url': 'https://example.com/signed-media'}
+        store = Mock()
+        store.pending.return_value = None
+        store.job.side_effect = [None, {'status': 'submitted', 'provider_job_id': 'sd_sample'}]
+        store.reserve.return_value = {'created_now': True}
+        request = Mock(side_effect=[{'snapshot_id': 'sd_sample'}, {'status': 'ready'}, [original]])
+        with patch.dict(os.environ, {'BRIGHTDATA_API_KEY': 'test'}, clear=True), patch(
+            'trending.providers.bright_preflight', return_value=(3, NOW.isoformat())
+        ):
+            social = BrightSocial(store, request, pilot_id='coverage-20261108')
+            row, = social.collect_tiktok_profile(profile, NOW)
+            self.assertEqual(row['url'], post)
+            self.assertNotIn('video_url', row)
+            self.assertEqual(store.reserve.call_args.args[2], 1)
+            self.assertEqual(request.call_args_list[0].kwargs['params']['dataset_id'], social.TIKTOK_PROFILE_DATASET)
+            self.assertEqual(request.call_args_list[0].kwargs['json'], {
+                'input': [{'url': profile, 'num_of_posts': 1, 'start_date': '2026-11-01', 'end_date': '2026-11-08'}],
+                'limit_per_input': 1,
+            })
+            store.pending.return_value = {'job_key': 'existing', 'status': 'complete', 'input_data': {'result': [row]}}
+            self.assertEqual(social.collect_tiktok_profile(profile, NOW + timedelta(days=8)), [])
+            store.pending.return_value['input_data']['result'] = [{**row, 'url': 'https://www.tiktok.com/@other/photo/123'}]
+            with self.assertRaisesRegex(ProviderDisabled, 'invalid_tiktok_profile_post'):
+                social.collect_tiktok_profile(profile, NOW)
+        self.assertEqual(request.call_count, 3)
 
 if __name__ == '__main__':unittest.main()
