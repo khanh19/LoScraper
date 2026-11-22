@@ -41,7 +41,7 @@ def meta(soup, key):
 def category(text):
     value = folded(text)
     if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua)\b", value): return "sports"
-    if re.search(r"\b(pop up|popup|cho phien|phien cho|hoi cho|local brand market)\b", value): return "market"
+    if re.search(r"\b(pop up|popup|cho phien|phien cho|hoi cho|cho giang sinh|local brand market)\b", value): return "market"
     text = folded(text)
     for name, pattern in [
         ("workshop", r'workshop|lop hoc|lam gom'),
@@ -50,7 +50,7 @@ def category(text):
         ("nightlife", r'club|nightlife|night club'),
         ("bar", r'\bbar\b|cocktail|beer|bia'),
         ("music", r'concert|nhac|music|live show|birthday show|dj|jazz'),
-        ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|nghe thuat|trung bay|kich thieu nhi|dance|ecstatic'),
+        ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|thap sang cay thong|nghe thuat|trung bay|kich thieu nhi|dance|ecstatic'),
         ("experience", r'trai nghiem|experience|walking tour|city tour|tham quan|fanmeeting')]:
         if re.search(pattern, text):
             return name
@@ -184,6 +184,41 @@ class Ticketbox(Adapter):
 
     content_selector = "main"
     link_pattern = r"^/(?!search|customer|organizer)[a-z0-9-]+-\d{4,}$"
+
+    def enrich(self, c, soup, client, now):
+        match = re.search(r"-(\d+)/?$", urlsplit(c.source_url).path)
+        if not match:
+            c.reasons.append("unresolved_individual_sessions")
+            return c
+        event_id = match[1]
+        api = "https://api-v2.ticketbox.vn/gin/api/v2/events/" + event_id
+        data = client.get(api, {"api-v2.ticketbox.vn"}, json_response=True)["data"]["result"]
+        if str(data.get("id")) != event_id:
+            c.reasons.append("event_identity_conflict")
+            return c
+        if data.get("status") in {"cancelled", "canceled", "postponed"}:
+            c.status = "cancelled"
+            if data["status"] != "postponed":
+                c.reasons.append("publisher_confirmed_cancellation")
+            return c
+        sessions = []
+        for row in data.get("showings") or []:
+            start, end = row.get("startTime"), row.get("endTime")
+            occurrence = iso_occurrence(start, end) if start and end else None
+            if not occurrence or row.get("status") in {"cancelled", "canceled", "postponed"}:
+                c.reasons.append("unresolved_individual_sessions")
+                return c
+            sessions.append(occurrence)
+        if not sessions:
+            c.reasons.append("unresolved_individual_sessions")
+            return c
+        c.occurrences = sessions
+        categories = {"music": "music", "sport": "sports", "theatersandart": "culture",
+                      "attractionsexperiences": "experience", "seminarsworkshops": "workshop"}
+        if not c.category:
+            c.category = next((categories[value] for value in (data.get("categoriesV2") or [])
+                               if value in categories), "")
+        return c
 
     def parse(self, soup, url, now):
         c = super().parse(soup, url, now)
@@ -428,6 +463,14 @@ class LifeOfDaNang(Adapter):
             # or text evidence. Use only this event's structured description.
             c.original_text = str(events[0].get('description') or '')
             c.category = category(c.title) or category(c.original_text)
+            # Some pages put the street in the Place name and only the city in PostalAddress.
+            # Require a single, numbered street suffix in this event's own location.
+            venue, separator, street = c.venue_name.rpartition(",")
+            if (separator and c.city_slug and not re.search(r"\d", c.address)
+                    and re.fullmatch(r"\s*\d+[A-Za-z]?(?:[-/]\d+)*\s+[^,;]+", street)
+                    and not re.search(r"\b(?:và|and)\b|\d+\s", street.strip().split(" ", 1)[-1], re.I)):
+                c.venue_name = venue.strip()
+                c.address = f"{street.strip()}, {c.address}"
             if not re.search(r'\d', c.address):
                 # City-only structured addresses do not resolve a branch or
                 # distinguish a single destination from a citywide listing.

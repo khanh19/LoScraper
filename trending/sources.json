@@ -19,7 +19,10 @@
     ],
     "enabled": true,
     "review_holds": {
-      "https://ticketbox.vn/chillpark-da-quang-26736": "unresolved_cross_source_end_time"
+      "https://ticketbox.vn/chillpark-da-quang-26736": "unresolved_cross_source_end_time",
+      "https://ticketbox.vn/hanoi-firebeat-worldfest-26838": "unresolved_cross_source_session_times",
+      "https://ticketbox.vn/xuan-phat-tai-26863": "unresolved_performance_schedule",
+      "https://ticketbox.vn/khu-vui-choi-nha-chen-uoc-mo-xanh-26396": "unresolved_daily_opening_hours"
     }
   },
   "hanoigrapevine": {
@@ -139,6 +142,9 @@
       "hanoigo.com.vn"
     ],
     "enabled": false,
-    "pilot_status": "pending_bounded_live_validation"
+    "pilot_status": "pending_bounded_live_validation",
+    "review_holds": {
+      "https://hanoigo.com.vn/event/hanoi-firebeat-world-festival-2026": "unresolved_cross_source_session_times"
+    }
   }
 }
