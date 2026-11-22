@@ -15,14 +15,24 @@ class Store:
         self.url = url
         self.initial_reconnect = False
         try:
-            self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+            self.db = self._connect()
         except (psycopg.OperationalError, psycopg.InterfaceError):
             self.initial_reconnect = True
-            self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+            self.db = self._connect()
+
+    def _connect(self):
+        db = psycopg.connect(self.url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+        try:
+            # A pooled session may retain older role defaults. Set the guard for each connection.
+            db.execute("SET idle_in_transaction_session_timeout = '60s'")
+        except psycopg.Error:
+            db.close()
+            raise
+        return db
 
     def reconnect(self):
         self.db.close()
-        self.db = psycopg.connect(self.url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+        self.db = self._connect()
 
     def close(self):
         self.db.close()
