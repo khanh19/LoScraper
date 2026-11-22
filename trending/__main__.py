@@ -110,7 +110,7 @@ def run(args):
                     selected_urls = urls[:200]
                     known = {(t['source_url'],t['entry_key']) for t in targets if t['source_url'] in selected_urls}
                     candidates, failures = collect_source(slug,config,client,now,200,selected_urls,
-                        heartbeat=progress.heartbeat,metrics=metrics,existing_only=True)
+                        heartbeat=progress.collection_heartbeat,metrics=metrics,existing_only=True)
                     candidates = [c for c in candidates if (c.source_url,c.entry_key) in known]
                     found = {(c.source_url,c.entry_key) for c in candidates}
                     if known-found: failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
@@ -118,7 +118,7 @@ def run(args):
                     metrics.update(existing_entries=len(known),deferred_pages=max(0,len(urls)-200))
                 else:
                     candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
-                                                          heartbeat=progress.heartbeat,metrics=metrics)
+                                                          heartbeat=progress.collection_heartbeat,metrics=metrics)
                 stats.update(metrics)
             except Exception as exc:
                 candidates, failures = [], [{'stage':'source','reason':type(exc).__name__}]
