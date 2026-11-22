@@ -57,6 +57,13 @@ class Persistence(unittest.TestCase):
         rows=self.store.db.execute(sql,args).fetchall()
         return [list(row.values())[0] for row in rows]
 
+    def test_idle_transaction_guard_is_set_when_reconnecting(self):
+        setting = 'idle_in_transaction_session_timeout'
+        self.assertEqual(self.store.db.execute(f'SHOW {setting}').fetchone()[setting], '1min')
+        self.store.db.execute(f'SET {setting} = 0')
+        self.store.reconnect()
+        self.assertEqual(self.store.db.execute(f'SHOW {setting}').fetchone()[setting], '1min')
+
     def test_stable_ids_cross_source_dedupe_and_partial_import(self):
         c=candidate();first=self.store.upsert(c,NOW)
         c.title='Workshop thử nghiệm (cập nhật)'

@@ -35,6 +35,9 @@ complete result. Missing known entries produce `existing_entry_not_recovered`.
 Full discovery retains the bounded 20 detail pages per source plus existing checks;
 “full” means all enabled sources/cities, not unlimited scraping or a minimum feed size.
 The workflow has a 25-minute timeout; inspect interrupted receipts if it is reached.
+Collector connections enforce a one-minute idle-in-transaction timeout so an
+abandoned pooled session cannot retain the import lock. Run staging imports
+serially when validating outside GitHub Actions.
 
 Life of Da Nang collection reads the Vietnamese calendars through the end of the
 30-day horizon. It shares the same detail-page cap across calendar and weekly

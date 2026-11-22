@@ -47,6 +47,7 @@ class ScheduleTests(unittest.TestCase):
         with patch('trending.store.psycopg.connect') as connect:
             store = Store('test-only')
             execute = connect.return_value.execute
+            execute.reset_mock()
             store.cleanup()
             self.assertEqual(execute.call_count, 2)
             self.assertFalse(any('discovery_provider_jobs' in call.args[0] for call in execute.call_args_list))
