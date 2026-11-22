@@ -41,13 +41,13 @@ The workflow has a 25-minute timeout; inspect interrupted receipts if it is reac
 1. Review and merge PR #6 into the default branch (`main`). No merge was performed.
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. Never point this job at the local accounting ledger.
-3. Run manual `mode=full`, `pilot=true`, `providers=false`; inspect source coverage.
-4. Verify `DATABASE_URL` for manual writes; run `pilot=false`, then `mode=refresh`
+3. Run manual `mode=full`, `pilot=true`; inspect source coverage.
+4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging feed; run `pilot=false`, then `mode=refresh`
    with `pilot=false`. Check stable IDs, timestamps and health without erasing data.
 5. Store that verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
    secrets. Automated writes never fall back to the existing legacy DATABASE_URL.
 6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
-   Both gates are currently unconfigured; no remote database was contacted or changed.
+   Keep both database secrets separate from the legacy workflow target.
 
 To pause, set the variable false or disable the workflow. No raw payload uploads.
 Provider/social automation is still gated: this cadence covers website adapters.
