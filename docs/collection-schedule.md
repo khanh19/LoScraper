@@ -34,7 +34,10 @@ that bound produces `refresh_page_limit` and a deferred-page count, not a false
 complete result. Missing known entries produce `existing_entry_not_recovered`.
 Full discovery retains the bounded 20 detail pages per source plus existing checks;
 “full” means all enabled sources/cities, not unlimited scraping or a minimum feed size.
-The workflow has a 25-minute timeout; inspect interrupted receipts if it is reached.
+The workflow allows 25 minutes for a recheck alone and 45 minutes for a full
+run, including setup and its recheck. The staging recheck and discovery passes
+previously took more than 25 minutes combined. Inspect interrupted receipts if
+either timeout is reached.
 Collector connections enforce a one-minute idle-in-transaction timeout so an
 abandoned pooled session cannot retain the import lock. Run staging imports
 serially when validating outside GitHub Actions.
