@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlsplit
 from bs4 import BeautifulSoup
 
 from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
-from .http import FetchError, PublicClient
+from .http import FetchError, PublicClient, fetch_failure_reason
 from .model import (
     CONFIRMED_SCHEDULE_CONFLICT, ICT, Candidate, canonical, city_from_address, folded,
     outside_supported_cities, parse_time,
@@ -800,8 +800,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                 links.extend(public_links)
                 seeds = []
         except Exception as exc:
-            reason = str(exc) if isinstance(exc, FetchError) and re.fullmatch(r'[a-z_0-9]{1,64}', str(exc)) else type(exc).__name__
-            failures.append({'stage': 'listing', 'reason': reason})
+            failures.append({'stage': 'listing', 'reason': fetch_failure_reason(exc)})
     if slug == 'lifeofdanang' and not existing_only:
         seeds = [*adapter.calendar_seeds(now), *seeds]
     seed_groups = []
@@ -829,7 +828,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                 target=canonical(urljoin(seed,next_page['href']))
                 if urlsplit(target).hostname in adapter.hosts and target not in seeds:seeds.append(target)
         except Exception as exc:
-            failures.append({"stage": "listing", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
+            failures.append({"stage": "listing", "reason": fetch_failure_reason(exc)})
         heartbeat()
     if len(seed_groups)>1 and slug!='danangfantasticity' and not existing_only:
         # Give category listings a share of the bounded detail-page budget.
@@ -870,9 +869,9 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                     candidates.append(c)
                     metrics['extracted_entries']+=1
                 except Exception as exc:
-                    failures.append({'stage':'entry','reason':type(exc).__name__})
+                    failures.append({'stage':'entry','reason':fetch_failure_reason(exc)})
         except Exception as exc:
-            failures.append({"stage": "detail", "reason": str(exc) if isinstance(exc,FetchError) and re.fullmatch(r"[a-z_0-9]{1,64}",str(exc)) else type(exc).__name__})
+            failures.append({"stage": "detail", "reason": fetch_failure_reason(exc)})
             if isinstance(exc,FetchError):
                 consecutive_fetch_failures += 1
                 if consecutive_fetch_failures >= 3:

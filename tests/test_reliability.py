@@ -2,11 +2,17 @@ import unittest
 from unittest.mock import Mock, patch
 
 from trending.adapters import collect_source
+from trending.http import FetchError, fetch_failure_reason
 from trending.progress import Progress
 from test_trending import NOW, candidate
 
 
 class CollectionFailures(unittest.TestCase):
+    def test_fetch_reasons_keep_timeout_codes_and_omit_urls(self):
+        self.assertEqual(fetch_failure_reason(FetchError('ReadTimeout')), 'ReadTimeout')
+        self.assertEqual(fetch_failure_reason(FetchError('http_429')), 'http_429')
+        self.assertEqual(fetch_failure_reason(FetchError('rejected https://example.org/')), 'FetchError')
+
     def test_parser_exception_does_not_stop_remaining_pages_and_heartbeats(self):
         adapter=Mock()
         adapter.links.return_value=['https://example.org/bad','https://example.org/good']

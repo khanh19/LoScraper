@@ -50,7 +50,7 @@ jobs:
     if: needs.policy.outputs.mode != 'disabled'
     runs-on: ubuntu-latest
     # Full runs include a recheck before discovering new events.
-    timeout-minutes: ${{ needs.policy.outputs.mode == 'full' && 45 || 25 }}
+    timeout-minutes: ${{ needs.policy.outputs.mode == 'full' && 75 || 25 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

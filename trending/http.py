@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import ipaddress
 import os
+import re
 import socket
 import time
 from urllib.parse import urlsplit, urlunsplit
@@ -16,6 +17,14 @@ from .model import canonical
 
 class FetchError(Exception):
     pass
+
+
+def fetch_failure_reason(error: Exception) -> str:
+    if isinstance(error, FetchError):
+        reason = str(error)
+        if re.fullmatch(r'[A-Za-z_0-9]{1,64}', reason):
+            return reason
+    return type(error).__name__
 
 
 def public_url(url: str) -> str:
