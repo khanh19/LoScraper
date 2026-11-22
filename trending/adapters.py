@@ -47,17 +47,17 @@ def category(text):
     value = folded(text)
     if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua)\b", value): return "sports"
     if re.search(r"\b(pop up|popup|cho phien|phien cho|hoi cho|cho giang sinh|local brand market)\b", value): return "market"
-    text = folded(text)
+    if re.search(r"\b(book club|cau lac bo doc sach|clb doc sach)\b", value): return "culture"
     for name, pattern in [
         ("workshop", r'workshop|lop hoc|lam gom'),
         ("cafe", r'ca phe|cafe|coffee|brunch'),
-        ("restaurant", r'quan an|nha hang|am thuc|restaurant|eatery|quan pho|quan bun|banh mi|bot chien|banh cuon|\bbuffet\b'),
+        ("restaurant", r'\b(?:quan an|nha hang|am thuc|restaurants?|eatery|quan pho|quan bun|banh mi|bot chien|banh cuon|buffet)\b'),
         ("nightlife", r'club|nightlife|night club'),
         ("bar", r'\bbar\b|cocktail|beer|bia'),
         ("music", r'concert|nhac|music|live show|birthday show|dj|jazz'),
         ("culture", r'trien lam|exhibition|gallery|bao tang|museum|film|phim|nha hat|theater|le hoi|festival|phong doc|thap sang cay thong|nghe thuat|trung bay|kich thieu nhi|\b(?:san khau kich|vo kich|kich noi|ballet)\b|dance|ecstatic'),
         ("experience", r'trai nghiem|experience|walking tour|city tour|tham quan|fanmeeting')]:
-        if re.search(pattern, text):
+        if re.search(pattern, value):
             return name
     return ""
 
@@ -121,7 +121,7 @@ class Adapter:
         if not published and time_node:
             published = time_node.get("datetime")
         c = Candidate(self.slug, self.config["name"], url, title, self.kind,
-                      venue_name=venue, address=address, category=category(title + " " + text[:300]),
+                      venue_name=venue, address=address, category=category(title) or category(text[:300]),
                       original_text=text[:2000], published_at=published or None,
                       verified_at=now.isoformat(), image_url=meta(soup, "og:image") or None,
                       image_permitted=False)
@@ -282,7 +282,7 @@ class Ticketbox(Adapter):
         # Only the event's own intro, not recommendations/footer.
         intro = text.split("Giới thiệu", 1)[-1].split("Lịch diễn", 1)[0] if "Giới thiệu" in text else ""
         c.original_text = intro[:2000]
-        c.category = category(c.title + " " + intro[:300])
+        c.category = category(c.title) or category(intro[:300])
         return c
 
 

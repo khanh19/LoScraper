@@ -10,7 +10,7 @@ from contextlib import redirect_stdout
 
 from bs4 import BeautifulSoup
 
-from trending.adapters import CLASSES, load_sources
+from trending.adapters import CLASSES, category, load_sources
 from trending.dates import schedule_occurrences, ticketbox_sessions, weekly
 from trending.model import Candidate, Occurrence, city_from_address, ICT
 from trending.providers import bright_allowance, bright_preflight, serp_allowance, SerpDiscovery, BrightSocial, ProviderDisabled, social_evidence, post_platform
@@ -39,6 +39,14 @@ class DatesAndValidation(unittest.TestCase):
         self.assertTrue(all(datetime.fromisoformat(s.starts_at).weekday()!=0 for s in sessions))
         self.assertTrue(all(datetime.fromisoformat(s.starts_at).hour==10 for s in sessions))
         self.assertTrue(all(datetime.fromisoformat(s.ends_at).hour==18 for s in sessions))
+
+    def test_compact_date_range_preserves_both_dates(self):
+        session, = schedule_occurrences('10:00 – 18:00, 13 – 28/11/2026', NOW)
+        self.assertEqual(session, Occurrence('2026-11-13T00:00:00+07:00', '2026-11-29T00:00:00+07:00', 'date'))
+
+        recurring = schedule_occurrences('Hằng ngày, 10:00 – 18:00, 07 – 09/11/2026', NOW)
+        self.assertEqual([o.starts_at for o in recurring], [f'2026-11-0{day}T10:00:00+07:00' for day in (7, 8, 9)])
+        self.assertTrue(all(o.precision == 'time' for o in recurring))
 
     def test_explicit_sessions_keep_published_hours(self):
         sessions=schedule_occurrences('09:00 – 10:30, ngày 01/11/2026 và 08/11/2026',NOW)
@@ -92,6 +100,30 @@ class Parsers(unittest.TestCase):
             <div class="td-post-text-content"><h4>10:00 – 18:00, thứ Ba – Chủ nhật, 07/11 – 27/12/2026<br>
             Sóng Mây Gallery.S<br>48 Đường 5, An Dương, Hà Nội</h4></div><footer>Đà Nẵng</footer>''')
         self.assertEqual(c.city_slug,'hanoi');self.assertEqual(c.validate(NOW),[])
+
+    def test_exhibition_title_takes_precedence_over_sports_in_venue_name(self):
+        c = self.parse('hanoigrapevine', '''<h1>Triển lãm Mây</h1>
+            <div class="td-post-text-content"><h4>10:00 – 18:00, 08/11/2026<br>
+            Trung tâm Văn hóa và Thể thao<br>48 Đường 5, Hà Nội</h4></div>''')
+        self.assertEqual(c.category, 'culture')
+        self.assertEqual(c.venue_name, 'Trung tâm Văn hóa và Thể thao')
+        self.assertEqual(c.validate(NOW), [])
+
+    def test_structured_book_club_title_is_culture(self):
+        source = 'lifeofdanang'
+        adapter = CLASSES[source](source, load_sources()[source])
+        event = {'@type': 'Event', 'name': 'Da Nang Book Club',
+                 'startDate': '2026-11-08T13:00:00+07:00', 'endDate': '2026-11-08T15:00:00+07:00',
+                 'description': 'Gặp gỡ và thảo luận tại quán cà phê.',
+                 'location': {'name': 'Café Mây', 'address': {'streetAddress': '31 Trần Phú', 'addressLocality': 'Đà Nẵng'}}}
+        soup = BeautifulSoup(f'<script type="application/ld+json">{json.dumps(event)}</script>', 'html.parser')
+        c, = adapter.parse_many(soup, 'https://lifeofdanang.com/vi/danang/book-club', NOW)
+        self.assertEqual(c.category, 'culture')
+        self.assertEqual(c.validate(NOW), [])
+
+    def test_category_matches_whole_food_terms(self):
+        self.assertEqual(category('Triển lãm Thực vật trong đời sống'), 'culture')
+        self.assertEqual(category('Lễ hội ẩm thực địa phương'), 'restaurant')
 
     def test_ticketbox_sessions_override_aggregate(self):
         event={'@type':'Event','name':'Baking Workshop','startDate':'2026-11-10T07:00:00Z','endDate':'2026-11-24T09:00:00Z',
