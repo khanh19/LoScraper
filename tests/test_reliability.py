@@ -8,6 +8,26 @@ from test_trending import NOW, candidate
 
 
 class CollectionFailures(unittest.TestCase):
+    def test_page_heartbeats_are_debounced_without_delaying_candidate_progress(self):
+        store = Mock()
+        with patch('trending.progress.monotonic', return_value=0) as clock:
+            progress = Progress(store, ['ticketbox'], ['hanoi'])
+            progress.start_source('ticketbox')
+            store.progress.reset_mock()
+
+            clock.return_value = 29
+            progress.collection_heartbeat()
+            progress.collection_heartbeat()
+            store.progress.assert_not_called()
+
+            clock.return_value = 30
+            progress.collection_heartbeat()
+            self.assertEqual(store.progress.call_count, 2)
+            progress.collection_heartbeat()
+            self.assertEqual(store.progress.call_count, 2)
+            progress.count('accepted', 'hanoi', kind='event')
+            self.assertEqual(store.progress.call_count, 4)
+
     def test_fetch_reasons_keep_timeout_codes_and_omit_urls(self):
         self.assertEqual(fetch_failure_reason(FetchError('ReadTimeout')), 'ReadTimeout')
         self.assertEqual(fetch_failure_reason(FetchError('http_429')), 'http_429')

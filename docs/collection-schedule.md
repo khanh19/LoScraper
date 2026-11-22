@@ -42,6 +42,8 @@ interrupted receipts if either timeout is reached.
 Collector connections enforce a one-minute idle-in-transaction timeout so an
 abandoned pooled session cannot retain the import lock. Run staging imports
 serially when validating outside GitHub Actions.
+Page fetches write at most one heartbeat every 30 seconds. The collector still
+records each candidate outcome and the final run status as they happen.
 
 Life of Da Nang collection reads the Vietnamese calendars through the end of the
 30-day horizon. It shares the same detail-page cap across calendar and weekly

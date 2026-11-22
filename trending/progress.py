@@ -1,7 +1,11 @@
 """Run receipts and bounded recovery; never replay a failed database operation."""
 from collections import Counter
+from time import monotonic
 
 import psycopg
+
+
+COLLECTION_HEARTBEAT_SECONDS = 30
 
 
 class Progress:
@@ -23,6 +27,7 @@ class Progress:
         self.run_id = None
         self.source_id = None
         self.stats = {}
+        self.last_heartbeat = None
         if store:
             ok,self.run_id = self.call('start_run',sources,self.cities)
             if not ok:
@@ -102,9 +107,14 @@ class Progress:
             return 'partial' if any(s['accepted'] or s['status']=='complete' for s in self.stats.values()) else 'failed'
         return 'complete'
 
+    def collection_heartbeat(self):
+        if self.last_heartbeat is None or monotonic() - self.last_heartbeat >= COLLECTION_HEARTBEAT_SECONDS:
+            self.heartbeat()
+
     def heartbeat(self, final=False):
         if not self.store or not self.available:
             return
+        self.last_heartbeat = monotonic()
         if self.source_id:
             s = self.stats[self.source]
             self.call('progress',self.source_id,s['accepted'],s['rejected'],s['failed'],
