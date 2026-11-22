@@ -195,7 +195,7 @@ def run(args):
         elif args.providers:
             report['providers']['status'] = 'disabled_without_persistent_quota_store'
         if store and args.write_db:
-            progress.call('cleanup')
+            progress.call('cleanup', include_provider_jobs=args.providers)
         progress.heartbeat(final=True)
         report['status'] = progress.status()
         report['persistence_errors'] = dict(progress.errors)

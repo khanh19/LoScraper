@@ -197,7 +197,8 @@ class Store:
             updated_at=now() WHERE job_key=%s""",(status,provider_id,Jsonb(result) if result is not None else None,
                                                Jsonb(result) if result is not None else None,key))
 
-    def cleanup(self):
+    def cleanup(self, *, include_provider_jobs=False):
         self.db.execute("DELETE FROM discovery_ingestion_runs WHERE started_at < now() - interval '30 days'")
-        self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete' AND pilot_id IS NULL")
+        if include_provider_jobs:
+            self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete' AND pilot_id IS NULL")
         self.db.execute("DELETE FROM discovery_items WHERE updated_at < now() - interval '90 days' AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.item_id=discovery_items.id AND o.verified_at > now() - interval '90 days')")

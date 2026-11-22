@@ -4,6 +4,7 @@ from unittest.mock import patch, Mock
 from bs4 import BeautifulSoup
 from trending.schedule import scheduled_mode
 from trending.adapters import collect_source
+from trending.store import Store
 from test_trending import candidate, NOW
 
 class ScheduleTests(unittest.TestCase):
@@ -41,3 +42,15 @@ class ScheduleTests(unittest.TestCase):
             Mock(),NOW,metrics=metrics,existing_only=True)
         self.assertEqual((rows,errors),([],[]))
         self.assertEqual(metrics['detail_pages'],0)
+
+    def test_website_cleanup_does_not_touch_provider_reservations(self):
+        with patch('trending.store.psycopg.connect') as connect:
+            store = Store('test-only')
+            execute = connect.return_value.execute
+            store.cleanup()
+            self.assertEqual(execute.call_count, 2)
+            self.assertFalse(any('discovery_provider_jobs' in call.args[0] for call in execute.call_args_list))
+
+            execute.reset_mock()
+            store.cleanup(include_provider_jobs=True)
+            self.assertEqual(sum('discovery_provider_jobs' in call.args[0] for call in execute.call_args_list), 1)

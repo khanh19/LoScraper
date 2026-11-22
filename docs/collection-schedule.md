@@ -51,6 +51,7 @@ The workflow has a 25-minute timeout; inspect interrupted receipts if it is reac
 
 To pause, set the variable false or disable the workflow. No raw payload uploads.
 Provider/social automation is still gated: this cadence covers website adapters.
+Website-only runs can use a scoped database role without access to provider jobs.
 It does not make TikTok/Instagram posts verified, renew social evidence, or run
 OpenAI/Apify/Bright Data/SerpAPI automatically. Those need a separate validated
 refresh path and allowance checks before inclusion in unattended collection.
