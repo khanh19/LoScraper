@@ -39,3 +39,22 @@ class TicketboxPublicSchedule(unittest.TestCase):
         self.assertNotIn(PUBLISHER_CONFIRMED_CANCELLATION, postponed.reasons)
         confirmed = self.enrich([], status="cancelled")
         self.assertEqual(confirmed.reasons.count(PUBLISHER_CONFIRMED_CANCELLATION), 1)
+
+    def test_conflicting_and_nonlocal_venues_are_rejected(self):
+        examples = [
+            ("VINPALACE OCEAN CITY", "Vincom Mega Mall, Thành phố Hà Nội", "hanoi", "outside_supported_cities"),
+            ("VINHOMES OCEAN PARK 3", "Xã Nghĩa Trụ, Tỉnh Hưng Yên", "hcmc", "outside_supported_cities"),
+            ("Online Event", "", "hcmc", "online_only_event"),
+            ("Garden Art", "12 Tràng Tiền, Hà Nội", "hcmc", "venue_city_conflict"),
+        ]
+        for venue, address, city, reason in examples:
+            with self.subTest(venue=venue, reason=reason):
+                candidate = Candidate("ticketbox", "Ticketbox", self.candidate.source_url, "Workshop", "event",
+                                      venue_name="Venue from listing", address="Address from listing", city_slug=city)
+                self.client.get.return_value = {"data": {"result": {
+                    "id": 23330, "venue": venue, "address": address,
+                    "showings": [{"startTime": "2026-11-22T02:30:00Z", "endTime": "2026-11-22T04:30:00Z"}],
+                }}}
+                result = self.adapter.enrich(candidate, None, self.client, None)
+                self.assertIn(reason, result.reasons)
+                self.assertNotEqual(result.status, "cancelled")

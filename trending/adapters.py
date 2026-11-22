@@ -13,7 +13,7 @@ from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessio
 from .http import FetchError, PublicClient
 from .model import (
     CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION, ICT,
-    Candidate, canonical, city_from_address, folded, parse_time,
+    Candidate, canonical, city_from_address, folded, outside_supported_cities, parse_time,
 )
 
 
@@ -217,6 +217,14 @@ class Ticketbox(Adapter):
             if data["status"] != "postponed":
                 c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
             return c
+        venue = data.get("venue") or c.venue_name
+        address = data.get("address") or ""
+        if folded(venue) in {"online event", "su kien truc tuyen", "truc tuyen"}:
+            c.reasons.append("online_only_event")
+        elif outside_supported_cities(f"{venue}, {address}") or outside_supported_cities(f"{c.venue_name}, {c.address}"):
+            c.reasons.append("outside_supported_cities")
+        elif (api_city := city_from_address(address)) and c.city_slug and api_city != c.city_slug:
+            c.reasons.append("venue_city_conflict")
         sessions = []
         for row in data.get("showings") or []:
             start, end = row.get("startTime"), row.get("endTime")
