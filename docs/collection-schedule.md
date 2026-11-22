@@ -42,10 +42,10 @@ The workflow has a 25-minute timeout; inspect interrupted receipts if it is reac
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. Never point this job at the local accounting ledger.
 3. Run manual `mode=full`, `pilot=true`; inspect source coverage.
-4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging feed; run `pilot=false`, then `mode=refresh`
+4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging feed. For Supabase, use `sslmode=verify-full` and set `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published database root certificate. Run `pilot=false`, then `mode=refresh`
    with `pilot=false`. Check stable IDs, timestamps and health without erasing data.
-5. Store that verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
-   secrets. Automated writes never fall back to the existing legacy DATABASE_URL.
+5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
+   secrets. Use **TRENDING_DATABASE_ROOT_CA** when the scheduled target uses its own CA. Scheduled writes use these dedicated settings.
 6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
    Keep both database secrets separate from the legacy workflow target.
 

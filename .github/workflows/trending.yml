@@ -61,22 +61,33 @@ jobs:
       - name: Collect and validate
         env:
           STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
+          STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}
           SCHEDULE_DATABASE_URL: ${{ secrets.TRENDING_DATABASE_URL }}
+          SCHEDULE_DATABASE_ROOT_CA: ${{ secrets.TRENDING_DATABASE_ROOT_CA }}
           EVENT_NAME: ${{ github.event_name }}
           MODE: ${{ needs.policy.outputs.mode }}
           INPUT_CITY: ${{ inputs.city }}
           INPUT_PILOT: ${{ inputs.pilot }}
         run: |
+          database_root_ca=
           if [ "$EVENT_NAME" = "schedule" ]; then
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
+            database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
           elif [ "$INPUT_PILOT" = "true" ]; then
             unset DATABASE_URL
           else
             export DATABASE_URL="$STAGING_DATABASE_URL"
+            database_root_ca="$STAGING_DATABASE_ROOT_CA"
           fi
           if [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
             echo "Missing collection database configuration" >&2
             exit 1
+          fi
+          if [ -n "$database_root_ca" ]; then
+            database_ca_path=$(mktemp)
+            trap 'rm -f "$database_ca_path"' EXIT
+            printf '%s\n' "$database_root_ca" > "$database_ca_path"
+            export PGSSLROOTCERT="$database_ca_path"
           fi
           if [ "$MODE" = "refresh" ]; then
             if [ "$INPUT_PILOT" = "true" ]; then
