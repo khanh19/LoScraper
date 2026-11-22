@@ -50,6 +50,13 @@ the health report's stale-heartbeat detection.
 The collector writes all verified sessions for an event in one database statement
 inside that candidate's transaction. This keeps repeated shows from paying a
 separate database round trip for every session.
+An explicit activity in the title takes priority over words in the venue or
+article body when assigning a category. For example, the Hanoi lacquer and
+woodcraft exhibitions belong under culture even though the venue name contains
+“Thể thao”. [Lacquer exhibition](https://hanoigrapevine.com/vi/2026/11/trien-lam-con-duong-son-mai-viet-nhat/) ·
+[Woodcraft exhibition](https://hanoigrapevine.com/vi/2026/11/trien-lam-luu-dau-thu-moc/)
+Compact date ranges such as `13–28/11/2026` retain both endpoints. A range
+without an explicit recurrence rule remains date-only.
 
 Life of Da Nang collection reads the Vietnamese calendars through the end of the
 30-day horizon. It shares the same detail-page cap across calendar and weekly

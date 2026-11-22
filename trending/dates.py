@@ -21,6 +21,9 @@ def schedule_occurrences(text: str, now: datetime) -> list[Occurrence]:
     text = re.sub(r'(?<=\d)\.(?=\d)', '/', text)
     for month, number in MONTHS.items():
         text = re.sub(rf'\b{month}\b', f'/{number}/', text)
+    # A compact range shares the month and year of its last date.
+    text = re.sub(r'(?<![\d/:])(\d{1,2})\s*(?:-|den|to|until)\s*(\d{1,2})/(\d{1,2})/(20\d{2})(?!\d)',
+                  r'\1/\3/\4 - \2/\3/\4', text)
     range_match = re.search(r'(\d{1,2})/(\d{1,2})(?:/(20\d{2}))?\s*(?:-|den|to|until)\s*(\d{1,2})/(\d{1,2})/(20\d{2})', text)
     if range_match:
         ad, am, ay, bd, bm, by = range_match.groups()
