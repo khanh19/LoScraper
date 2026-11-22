@@ -187,6 +187,29 @@ class Adapter:
 
 
 class Ticketbox(Adapter):
+    def public_listing_links(self, client):
+        host = "api-v2.ticketbox.vn"
+        url = f"https://{host}/gin/api/v2/discovery/onsale-sections/newly-on-sale"
+        data = client.get(url, {host}, json_response=True).get("data")
+        results = data.get("results") if isinstance(data, dict) else None
+        if not isinstance(results, list):
+            raise FetchError("invalid_public_listing")
+        links = []
+        for item in results:
+            if not isinstance(item, dict) or item.get("saleStage") != "on_sale":
+                continue
+            raw_url = item.get("deeplink")
+            if not isinstance(raw_url, str):
+                continue
+            try:
+                event_url = canonical(raw_url)
+            except ValueError:
+                continue
+            parts = urlsplit(event_url)
+            if parts.hostname in self.hosts and re.fullmatch(self.link_pattern, parts.path):
+                links.append(event_url)
+        return links
+
     def fetch(self, client, url):
         # Event details are server-rendered even when homepage hydration fails.
         page = client.get(url, self.hosts)
@@ -779,6 +802,17 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     links = list(extra_urls)
     failures = []
     seeds = [] if existing_only else list(config['seeds'])
+    if slug == 'ticketbox' and not existing_only:
+        heartbeat()
+        try:
+            public_links = adapter.public_listing_links(client)
+            metrics['listing_pages'] += 1
+            if public_links:
+                links.extend(public_links)
+                seeds = []
+        except Exception as exc:
+            reason = str(exc) if isinstance(exc, FetchError) and re.fullmatch(r'[a-z_0-9]{1,64}', str(exc)) else type(exc).__name__
+            failures.append({'stage': 'listing', 'reason': reason})
     if slug == 'lifeofdanang' and not existing_only:
         seeds = [*adapter.calendar_seeds(now), *seeds]
     seed_groups = []

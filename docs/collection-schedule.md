@@ -113,6 +113,12 @@ fact snapshots without deleting records or creating cancellation alerts.
 [YeaH1 venue announcement](https://www.yeah1group.com/concert-anh-trai-vuot-ngan-chong-gai-2026-completely-sold-out-in-88-minutes-of-ticket-sales?locale=en) ·
 [Ticketbox online listing](https://ticketbox.vn/combo-khongxinhe-kosmik-2026-26880)
 
+Ticketbox discovery uses the public on-sale listings when they supply event
+links. The collector still checks each detail page and its individual sessions.
+The live on-sale check fetched six detail pages, accepted five and rejected one
+with no fetch failures. The pre-sale section returned three event links that
+were still HTTP 404. The daily recheck continues to use stored event URLs.
+
 The manual Furama run imported one eligible event without a failed fetch or
 provider usage. Controlled tests cover matching dates and times, competing
 sessions, missing address evidence, and venue ambiguity. Hosted app validation

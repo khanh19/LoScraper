@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from trending.adapters import Ticketbox
+from trending.http import FetchError
 from trending.model import Candidate, PUBLISHER_CONFIRMED_CANCELLATION
 
 
@@ -58,3 +59,17 @@ class TicketboxPublicSchedule(unittest.TestCase):
                 result = self.adapter.enrich(candidate, None, self.client, None)
                 self.assertIn(reason, result.reasons)
                 self.assertNotEqual(result.status, "cancelled")
+
+    def test_public_listing_requires_first_party_event_links(self):
+        self.client.get.return_value = {"data": {"results": [
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/art-23330?utm_source=home"},
+            {"saleStage": "on_sale", "deeplink": "https://example.org/art-23330"},
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/search-23330"},
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/search"},
+            {"saleStage": "on_sale", "deeplink": None},
+            {"saleStage": "coming_soon", "deeplink": "https://ticketbox.vn/art-23332"},
+        ]}}
+        self.assertEqual(self.adapter.public_listing_links(self.client), ["https://ticketbox.vn/art-23330"])
+        self.client.get.return_value = {"data": {}}
+        with self.assertRaisesRegex(FetchError, "invalid_public_listing"):
+            self.adapter.public_listing_links(self.client)
