@@ -125,9 +125,15 @@ class Store:
                                  c.published_at,c.verified_at,p['image_url'],Jsonb(c.metrics),Jsonb(facts))).fetchone()['id']
             # Replace occurrences for THIS successfully parsed page only, inside its transaction.
             self.db.execute("DELETE FROM discovery_occurrences WHERE observation_id=%s",(observation_id,))
-            for o in c.occurrences:
+            if c.occurrences:
                 self.db.execute("""INSERT INTO discovery_occurrences(observation_id,starts_at,ends_at,precision)
-                    VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",(observation_id,o.starts_at,o.ends_at,o.precision))
+                    SELECT %s, starts_at, ends_at, precision
+                    FROM unnest(%s::timestamptz[], %s::timestamptz[], %s::text[])
+                        AS sessions(starts_at, ends_at, precision)
+                    ON CONFLICT DO NOTHING""", (observation_id,
+                    [session.starts_at for session in c.occurrences],
+                    [session.ends_at for session in c.occurrences],
+                    [session.precision for session in c.occurrences]))
         return str(item_id)
 
     def cancel(self, source_slug, url, now, entry_key=""):

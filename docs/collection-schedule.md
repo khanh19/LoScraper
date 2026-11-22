@@ -47,6 +47,9 @@ records each candidate outcome and the final run status as they happen.
 A handled interruption ends the active source receipt as partial if it already
 accepted candidates, or failed otherwise. An abrupt process kill still relies on
 the health report's stale-heartbeat detection.
+The collector writes all verified sessions for an event in one database statement
+inside that candidate's transaction. This keeps repeated shows from paying a
+separate database round trip for every session.
 
 Life of Da Nang collection reads the Vietnamese calendars through the end of the
 30-day horizon. It shares the same detail-page cap across calendar and weekly

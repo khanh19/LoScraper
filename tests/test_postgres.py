@@ -378,6 +378,27 @@ class Persistence(unittest.TestCase):
         self.assertEqual(self.store.db.execute('SELECT verified_at,facts FROM discovery_observations').fetchone(),old)
         self.assertEqual(len(self.feed()),1)
 
+    def test_multi_session_import_deduplicates_and_replaces_sessions(self):
+        event = candidate()
+        timed_start = NOW + timedelta(hours=2)
+        timed_end = timed_start + timedelta(hours=2)
+        date_start = NOW + timedelta(days=5)
+        date_end = date_start + timedelta(days=1)
+        timed = Occurrence(timed_start.isoformat(), timed_end.isoformat(), 'time')
+        day = Occurrence(date_start.isoformat(), date_end.isoformat(), 'date')
+        event.occurrences = [timed, timed, day]
+        item_id = self.store.upsert(event, NOW)
+
+        def sessions():
+            return self.store.db.execute('''SELECT starts_at,ends_at,precision
+                FROM discovery_occurrences ORDER BY starts_at''').fetchall()
+
+        self.assertEqual(sessions(), [dict(starts_at=timed_start, ends_at=timed_end, precision='time'),
+                                      dict(starts_at=date_start, ends_at=date_end, precision='date')])
+        event.occurrences = [day]
+        self.assertEqual(self.store.upsert(event, NOW), item_id)
+        self.assertEqual(sessions(), [dict(starts_at=date_start, ends_at=date_end, precision='date')])
+
     def test_connection_loss_reconnects_once_without_retrying_write(self):
         from trending.progress import Progress
         progress=Progress(self.store,['ticketbox'],['hanoi'])
