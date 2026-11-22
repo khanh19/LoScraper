@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import re
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 import psycopg
@@ -510,6 +510,25 @@ class Persistence(unittest.TestCase):
         old=self.store.reserve('brightdata','facebook-0',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108')
         self.assertFalse(old['created_now'])
         self.assertEqual(old['status'],'unknown')
+
+    def test_tiktok_profile_and_post_share_existing_pilot_budget(self):
+        pilot = 'coverage-20261108'
+        self.store.db.execute('INSERT INTO discovery_pilots(id) VALUES (%s)', (pilot,))
+        for n in (1, 2):
+            self.store.reserve('brightdata', f'old-post-{n}', 1, 4500, 4500,
+                               {'platform': 'tiktok'}, NOW, pilot_id=pilot)
+        request = Mock(side_effect=[{'snapshot_id': 'sd_example'}, {'status': 'ready'}, []])
+        with patch.dict(os.environ, {'BRIGHTDATA_API_KEY': 'test'}, clear=True), patch(
+            'trending.providers.bright_preflight', return_value=(40, NOW.isoformat())
+        ):
+            client = BrightSocial(self.store, request, pilot_id=pilot)
+            self.assertEqual(client.collect_tiktok_profile('https://www.tiktok.com/@venue', NOW), [])
+            self.assertEqual(client.collect_tiktok_profile('https://www.tiktok.com/@venue', NOW), [])
+            with self.assertRaisesRegex(ProviderDisabled, 'brightdata_monthly_cap'):
+                client.collect_tiktok_profile('https://www.tiktok.com/@another', NOW)
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(self.store.db.execute("""SELECT sum(reserved_units) AS units
+            FROM discovery_provider_jobs WHERE pilot_id=%s AND provider='brightdata'""", (pilot,)).fetchone()['units'], 3)
 
     def test_revoking_permission_hides_existing_image(self):
         c=candidate();c.image_url='https://example.com/image.jpg';c.image_permitted=True;c.image_association_verified=True

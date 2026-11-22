@@ -167,6 +167,8 @@ def run(args):
             search, social = SerpDiscovery(store), BrightSocial(store)
             # Resume provider polling even if today's discovery omits yesterday's URL.
             for job in store.submitted('brightdata'):
+                if job['input_data'].get('operation') == 'tiktok_profile':
+                    continue
                 try:
                     rows = social.collect(job['input_data']['url'],now)
                     for primary in primaries:

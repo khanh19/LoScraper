@@ -44,8 +44,8 @@ def serp_allowance(account):
 def bright_allowance(balance, verification, now):
     if not isinstance(balance,dict) or not isinstance(verification,dict):
         return 0
-    # Bright Data explicitly has NO API for free allowance or auto-recharge status.
-    # Require a recent control-panel receipt; a zero cash balance alone proves neither.
+    # The dashboard receipt establishes how a positive wallet balance was funded.
+    # Live credit and recharge checks are performed separately.
     verified = parse_time(verification.get('verified_at'))
     if not verified or not now - timedelta(hours=24) <= verified <= now:
         return 0
@@ -97,6 +97,28 @@ def bright_preflight(now, request=api_json):
         status = request('GET', 'https://api.brightdata.com/status', headers={'Authorization': 'Bearer ' + key})
         if not isinstance(status, dict) or status.get('customer') != account:
             raise ProviderDisabled('brightdata_account_mismatch')
+    headers = {'Authorization': 'Bearer ' + billing_token}
+    try:
+        credits = request('GET', 'https://api.brightdata.com/trials/free_tier', headers=headers)
+        recharge = request('GET', 'https://api.brightdata.com/billing/autorecharge', headers=headers)
+    except ProviderDisabled as exc:
+        if str(exc) == 'provider_http_403':
+            raise ProviderDisabled('brightdata_billing_permission_required') from None
+        raise
+    if not isinstance(recharge, dict) or any(
+        not isinstance(recharge.get(name), dict) or recharge[name].get('enabled') is not False
+        for name in ('regular', 'dataset')
+    ):
+        raise ProviderDisabled('brightdata_auto_recharge_not_verified_off')
+    if not isinstance(credits, dict) or credits.get('is_enabled') is not True:
+        raise ProviderDisabled('brightdata_no_verified_free_allowance')
+    included, used, left = (credits.get(name) for name in ('included_credits', 'used_credits', 'left_credits'))
+    if any(type(value) is not int or value < 0 for value in (included, used, left)):
+        raise ProviderDisabled('brightdata_no_verified_free_allowance')
+    # The provider rounds shared usage, including products that consume fractions.
+    remaining = min(remaining, min(left, included-used) - 1)
+    if remaining < 1:
+        raise ProviderDisabled('brightdata_no_verified_free_allowance')
     return remaining, verification['verified_at']
 
 
@@ -106,7 +128,7 @@ def post_platform(url):
     except ValueError:
         return None
     host = (p.hostname or '').removeprefix('www.')
-    if host == 'tiktok.com' and re.fullmatch(r'/@[^/]+/video/\d+', p.path):
+    if host == 'tiktok.com' and re.fullmatch(r'/@[^/]+/(?:video|photo)/\d+', p.path):
         return 'tiktok'
     if host == 'instagram.com' and re.fullmatch(r'/(p|reel)/[A-Za-z0-9_-]+', p.path):
         return 'instagram'
@@ -154,12 +176,43 @@ class SerpDiscovery:
 
 class BrightSocial:
     DATASETS = {'tiktok': 'gd_lu702nij2f790tmv9h', 'instagram': 'gd_lk5ns7kz21pck8jpis', 'facebook':'gd_lyclm1571iy3mv57zw'}
+    TIKTOK_PROFILE_DATASET = 'gd_m7n5v2gq296pex2f5m'
 
     def __init__(self, store, request=api_json, pilot_id=None):
         self.store, self.request, self.pilot_id = store, request, pilot_id
 
     def collect(self, url, now):
-        platform = post_platform(url)
+        return self._collect_one(url, post_platform(url), now)
+
+    def collect_tiktok_profile(self, url, now):
+        if not self.pilot_id:
+            raise ProviderDisabled('tiktok_profile_pilot_required')
+        try:
+            parts = urlsplit(canonical(url))
+        except ValueError:
+            raise ProviderDisabled('invalid_tiktok_profile') from None
+        if parts.hostname not in {'www.tiktok.com', 'tiktok.com'} or not re.fullmatch(r'/@[A-Za-z0-9_.]+', parts.path):
+            raise ProviderDisabled('invalid_tiktok_profile')
+        profile = 'https://www.tiktok.com' + parts.path.lower()
+        rows = self._collect_one(profile, 'tiktok', now, profile=True)
+        if not rows:
+            return []
+        row = rows[0]
+        url = row.get('url')
+        if not isinstance(url, str) or post_platform(url) != 'tiktok':
+            raise ProviderDisabled('invalid_tiktok_profile_post')
+        handle, _, post_id = urlsplit(canonical(url)).path.strip('/').split('/')
+        if handle.lower() != parts.path.lower().lstrip('/') or str(row.get('post_id')) != post_id:
+            raise ProviderDisabled('invalid_tiktok_profile_post')
+        timestamp = row.get('create_time')
+        if not isinstance(timestamp, str) or not re.search(r'(?:Z|[+-]\d{2}:\d{2})$', timestamp):
+            return []
+        published = parse_time(timestamp)
+        if not published or not now-timedelta(days=7) <= published <= now:
+            return []
+        return [{**row, 'url': 'https://www.tiktok.com' + urlsplit(canonical(url)).path}]
+
+    def _collect_one(self, url, platform, now, *, profile=False):
         token = os.environ.get('BRIGHTDATA_API_KEY') or os.environ.get('BRIGHT_DATA_API_KEY')
         if not platform or not token or not self.store:
             raise ProviderDisabled('brightdata_not_configured')
@@ -175,18 +228,26 @@ class BrightSocial:
             return job['input_data'].get('result', [])
         if not job:
             remaining, verified_at = bright_preflight(now, self.request)
-            dataset = ('gd_lyclm20il4r5helnj' if platform == 'instagram' and urlsplit(url).path.startswith('/reel/')
-                       else self.DATASETS.get(platform))
+            dataset = self.DATASETS[platform]
+            inputs = {'url': url}
+            reservation = {'url': url, 'platform': platform}
+            if profile:
+                dataset = self.TIKTOK_PROFILE_DATASET
+                inputs.update(num_of_posts=1, start_date=(now-timedelta(days=7)).date().isoformat(),
+                              end_date=now.date().isoformat())
+                reservation['operation'] = 'tiktok_profile'
+            elif platform == 'instagram' and urlsplit(url).path.startswith('/reel/'):
+                dataset = 'gd_lyclm20il4r5helnj'
             if not dataset:
                 raise ProviderDisabled('unsupported_dataset')
             job = self.store.reserve('brightdata', key, 1, 4500, remaining,
-                                     {'url': url, 'platform': platform}, now, verified_at=verified_at, pilot_id=self.pilot_id)
+                                     reservation, now, verified_at=verified_at, pilot_id=self.pilot_id)
             if not job or not job['created_now']:
                 raise ProviderDisabled('brightdata_monthly_cap')
             self.store.update_job(key, 'unknown')
             result = self.request('POST', 'https://api.brightdata.com/datasets/v3/trigger', headers=headers,
-                params={'dataset_id': dataset, 'format': 'json', 'limit_per_input': 1},
-                json=[{'url': url}])
+                params={'dataset_id': dataset, 'format': 'json'},
+                json={'input': [inputs], 'limit_per_input': 1})
             snapshot = result.get('snapshot_id') if isinstance(result,dict) else None
             if not snapshot or not re.fullmatch(r'sd?_[A-Za-z0-9_-]+', snapshot):
                 raise ProviderDisabled('brightdata_unknown_submission')
@@ -210,6 +271,9 @@ class BrightSocial:
         fields = {'url','description','content','date_posted','create_time','date','likes','num_comments',
                   'digg_count','share_count','comment_count','profile_url','user_posted','user_url','num_likes','num_shares',
                   'user_profile_url','thumbnail','images','video_url','audio_url','transcript','alt_text'}
+        if profile:
+            fields = {'url', 'post_id', 'description', 'create_time', 'post_type',
+                      'digg_count', 'comment_count', 'share_count', 'collect_count', 'play_count'}
         result = [{k:v for k,v in row.items() if k in fields} for row in rows]
         self.store.update_job(key, 'complete', result=result)
         return result

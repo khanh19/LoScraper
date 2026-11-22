@@ -6,13 +6,35 @@ import json
 import os
 from pathlib import Path
 from urllib.parse import urlsplit,urljoin
-from .adapters import CLASSES, load_sources
+from .adapters import CLASSES, is_type, load_sources, structured
 from .http import PublicClient,FetchError
 from .model import CITIES,canonical
 from .social_links import extract_posts, remember_lead
 from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
+
+def reviewed_tiktok_profile(city, client):
+    for source in json.loads(DIRECTORY.read_text()):
+        accounts = [a for a in source['accounts'] if a['platform'] == 'tiktok']
+        if city not in source['cities'] or not accounts:
+            continue
+        page = source['review_evidence']
+        try:
+            soup = client.get(page, {urlsplit(page).hostname})
+        except FetchError:
+            continue
+        links = {a['href'].rstrip('/') for a in soup.select('a[href]')}
+        for entry in structured(soup):
+            owner, aliases = entry.get('url'), entry.get('sameAs')
+            if (is_type(entry, 'Organization') and isinstance(owner, str)
+                    and owner.rstrip('/') == page.rstrip('/') and isinstance(aliases, list)):
+                links.update(alias.rstrip('/') for alias in aliases if isinstance(alias, str))
+        for account in accounts:
+            if account['url'].rstrip('/') in links:
+                return {'url': account['url'], 'ownership_evidence': page,
+                        'publisher_id': source['publisher_id'], 'city_hint': city}
+    return None
 
 def discover(city,client,now,counts=None,limit=6):
     seeds=[s for s in json.loads(DIRECTORY.read_text()) if city in s['cities']]

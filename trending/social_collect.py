@@ -2,8 +2,9 @@
 import argparse,json,os
 from datetime import datetime,timezone
 from urllib.parse import urlsplit
+import psycopg
 from .__main__ import load_env_files
-from .discover import discover
+from .discover import discover, reviewed_tiktok_profile
 from .http import PublicClient
 from .model import CITIES
 from .pilot import PILOT_ID
@@ -12,14 +13,47 @@ from .announcements import announcement
 from .store import Store
 
 
+def profile_pilot(city, now, live, ledger_url):
+    profile = reviewed_tiktok_profile(city, PublicClient())
+    report = {'city': city, 'profile': profile, 'maximum_records': 1, 'posts': [], 'published': 0}
+    if not profile:
+        return {**report, 'status': 'blocked', 'reason': 'no_reviewed_profile'}
+    if not live:
+        return {**report, 'status': 'dry_run'}
+    if urlsplit(ledger_url).hostname not in {'localhost', '127.0.0.1', '::1'}:
+        return {**report, 'status': 'blocked', 'reason': 'existing_local_quota_ledger_required'}
+    try:
+        ledger = Store(ledger_url)
+        try:
+            if not ledger.db.execute('SELECT 1 FROM discovery_provider_jobs WHERE pilot_id=%s LIMIT 1', (PILOT_ID,)).fetchone():
+                return {**report, 'status': 'blocked', 'reason': 'existing_pilot_history_required'}
+            rows = BrightSocial(ledger, pilot_id=PILOT_ID).collect_tiktok_profile(profile['url'], now)
+        finally:
+            ledger.close()
+    except ProviderDisabled as exc:
+        return {**report, 'status': 'blocked', 'reason': str(exc)}
+    except psycopg.Error:
+        return {**report, 'status': 'blocked', 'reason': 'existing_local_quota_ledger_unavailable'}
+    report['posts'] = rows
+    report['status'] = 'retrieved_for_review' if rows else 'no_fresh_post'
+    return report
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--city',choices=list(CITIES),required=True)
     p.add_argument('--env-file',action='append',default=[])
     p.add_argument('--providers',action='store_true',help='Use remaining existing pilot reservations; never resets caps')
+    p.add_argument('--tiktok-profile',action='store_true',help='Check one reviewed TikTok profile without publishing')
     p.add_argument('--write-db',action='store_true',help='Import only publication-enabled reviewed organizers in isolated preview')
     args=p.parse_args();load_env_files(args.env_file)
     now=datetime.now(timezone.utc)
+    if args.tiktok_profile:
+        if args.write_db:
+            p.error('the TikTok profile pilot produces review leads only')
+        report = profile_pilot(args.city, now, args.providers, os.environ.get('QUOTA_DATABASE_URL', ''))
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report['status'] in {'dry_run', 'retrieved_for_review'} else 2
     result=discover(args.city,PublicClient(),now)
     result['collection']=[]
     if not args.providers:
@@ -32,7 +66,9 @@ def main():
         social=BrightSocial(ledger,pilot_id=PILOT_ID)
         attempted={}
         # Also resume existing known jobs if a webpage no longer lists the post.
-        pending=ledger.db.execute("SELECT input_data FROM discovery_provider_jobs WHERE pilot_id=%s AND provider='brightdata' AND status='submitted'",(PILOT_ID,)).fetchall()
+        pending=ledger.db.execute("""SELECT input_data FROM discovery_provider_jobs WHERE pilot_id=%s
+            AND provider='brightdata' AND status='submitted'
+            AND input_data->>'operation' IS DISTINCT FROM 'tiktok_profile'""",(PILOT_ID,)).fetchall()
         leads={r['url']:r for r in result['posts']}
         for r in pending:
             url=r['input_data']['url']
