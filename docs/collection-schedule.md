@@ -44,6 +44,9 @@ abandoned pooled session cannot retain the import lock. Run staging imports
 serially when validating outside GitHub Actions.
 Page fetches write at most one heartbeat every 30 seconds. The collector still
 records each candidate outcome and the final run status as they happen.
+A handled interruption ends the active source receipt as partial if it already
+accepted candidates, or failed otherwise. An abrupt process kill still relies on
+the health report's stale-heartbeat detection.
 
 Life of Da Nang collection reads the Vietnamese calendars through the end of the
 30-day horizon. It shares the same detail-page cap across calendar and weekly

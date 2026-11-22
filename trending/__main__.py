@@ -206,9 +206,7 @@ def run(args):
         report['status'] = progress.status()
         report['persistence_errors'] = dict(progress.errors)
     except BaseException as exc:
-        progress.fatal = True
-        progress.errors[type(exc).__name__] += 1
-        progress.heartbeat(final=True)
+        progress.abort(exc)
         print(json.dumps({'run_id':progress.run_id,'status':'failed','counts':progress.totals(),
                           'errors':dict(progress.errors)}),flush=True)
         raise

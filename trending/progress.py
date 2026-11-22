@@ -123,10 +123,20 @@ class Progress:
         self.call('progress',self.run_id,a,r,f+self.unassigned_failures,
                   {'mode':self.mode,'sources':self.stats,'persistence_errors':dict(self.errors)},self.status() if final else 'running')
 
-    def finish_source(self):
+    def finish_source(self, final=False):
         s = self.stats[self.source]
         error_count = sum(self.errors.values())-self.source_error_start
         s['persistence_errors'] = error_count
         s['acceptance_yield'] = s['accepted']/s['extracted_entries'] if s.get('extracted_entries') else 0
         s['status'] = ('partial' if s['accepted'] else 'failed') if s['failed'] or error_count else 'complete'
-        self.heartbeat()
+        self.heartbeat(final=final)
+
+    def abort(self, error):
+        self.fatal = True
+        reason = type(error).__name__
+        self.errors[reason] += 1
+        if self.source and self.stats[self.source]['status'] == 'running':
+            self.fail(reason)
+            self.finish_source(final=True)
+        else:
+            self.heartbeat(final=True)
