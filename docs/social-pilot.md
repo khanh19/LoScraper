@@ -181,3 +181,32 @@ attempts, 0 SerpAPI searches, 0 TikTok submissions**. Including the previous Fac
 attempt, this fixed pilot now holds 3 of 9 Bright Data attempts (Instagram 2 of 3).
 No reservations were reset. The follow-up PostgreSQL run passed all **74 tests**.
 [Sanitized live receipt](evidence/social-20261108/results.json).
+
+## November 23 public-source validation
+
+Discovery now reads original post links in Instagram embeds and matching
+TikTok video blockquotes. Alias links share one post identity and keep the
+dated publisher evidence. The website adapters supply detail links so calendar
+downloads and navigation links use none of the two detail fetches per publisher.
+
+The baseline attempted 20 pages and had five fetch failures. The updated run
+used the same source directory and opened all 22 selected pages successfully.
+Hanoi and Da Nang returned no original social links. HCMC returned two from
+Saigon Outcast, both confirmed against their live Instagram pages. The dance
+session advertised for November 22 had ended. The burger awards post was a
+recap. Neither became a feed item. [Organizer site](https://www.saigonoutcast.com/) ·
+[Dance reel](https://www.instagram.com/reel/Df4uHYdTFDg/) · [Awards post](https://www.instagram.com/p/DfzcxWlk-xE/)
+
+The two recent Da Nang reels from the previous pilot were also checked against
+their original pages. The covers confirmed the named venues. The engagement
+counts are a single public observation.
+
+| Original reel | Published | Venue evidence | Likes / comments |
+| --- | --- | --- | ---: |
+| [Tiệm Yến](https://www.instagram.com/reel/Df_0zs_oXt6/) | November 21 | The cover names the Da Nang branch. The [restaurant](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) confirms 347 Nguyễn Văn Linh. | 32 / 0 |
+| [Mì Cay Gangwon](https://www.instagram.com/reel/Df7X04roCHE/) | November 19 | The storefront in the cover shows 489 Hoàng Diệu. The promotion end date is unknown. | 137 / 1 |
+
+These remain review samples. No image reuse or public social publication was
+approved. TikTok returned no fresh original lead and its official public player
+failed TLS hostname verification on this machine. There were zero metered
+provider requests and the campaign reservation total stayed at 132.
