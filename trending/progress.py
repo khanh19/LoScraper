@@ -36,7 +36,7 @@ class Progress:
         try:
             return True, getattr(self.store, method)(*args, **kwargs)
         except Exception as exc:
-            if isinstance(exc, ValueError) and str(exc) in {'identity_conflict','stale_roundup_evidence'}:
+            if isinstance(exc, ValueError) and str(exc) in {'identity_conflict','stale_roundup_evidence','stale_observation'}:
                 return False, str(exc)
             # SQL error details can include row contents, connection strings or secrets.
             self.errors[type(exc).__name__] += 1

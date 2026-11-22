@@ -36,29 +36,66 @@ Full discovery retains the bounded 20 detail pages per source plus existing chec
 “full” means all enabled sources/cities, not unlimited scraping or a minimum feed size.
 The workflow has a 25-minute timeout; inspect interrupted receipts if it is reached.
 
+Life of Da Nang collection reads the Vietnamese calendars through the end of the
+30-day horizon. It shares the same detail-page cap across calendar and weekly
+listings, giving both weekly and planning leads a chance before the cap. The
+individual event pages still determine eligibility. Nhà hát Hồ Gươm's performance
+pages provide another planning source. The collector stores the exact announced
+show days when the venue omits the end time.
+
+Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
+Market publications disagree on the start day and opening hour. Pullman's official
+pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
+
+The Furama tree lighting is corroborated by the exact venue link, the resort's
+street address, and the city's matching schedule. Its December 3 session is
+17:30–19:00 Vietnam time. The separately booked dinner is outside that session.
+The collector checks these pages again before renewing evidence.
+[Life of Da Nang](https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-furama-resort-2026-12-03) · [Resort address](https://team.furamavietnam.com/khach-san.html) · [City tourism calendar](https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027)
+
+When both sources give complete and different schedules for an existing event,
+the collector records a hold on the reviewed observation. The shared evaluator
+withholds the event and its pending reminder until a later successful check
+clears the hold. The hold preserves the last successful verification time.
+Incomplete schedules and failed fetches leave the existing observation alone.
+Apply backend migration `20261122110000_discovery_confirmed_schedule_holds.sql`
+before running the updated collector.
+
 ## Activation checklist — not yet active
 
-1. Review and merge PR #6 into the default branch (`main`). No merge was performed.
+1. Review PR #6 with its parent stack. Confirm the reviewed workflow reaches the
+   default branch (`main`) before using manual Actions dispatch.
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. Never point this job at the local accounting ledger.
-3. Run manual `mode=full`, `pilot=true`, `providers=false`; inspect source coverage.
-4. Verify `DATABASE_URL` for manual writes; run `pilot=false`, then `mode=refresh`
+3. Run manual `mode=full`, `pilot=true`; inspect source coverage.
+4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging feed. For Supabase, use `sslmode=verify-full` and set `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published database root certificate. Run `pilot=false`, then `mode=refresh`
    with `pilot=false`. Check stable IDs, timestamps and health without erasing data.
-5. Store that verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
-   secrets. Automated writes never fall back to the existing legacy DATABASE_URL.
+5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
+   secrets. Use **TRENDING_DATABASE_ROOT_CA** when the scheduled target uses its own CA. Scheduled writes use these dedicated settings.
 6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
-   Both gates are currently unconfigured; no remote database was contacted or changed.
+   Keep both database secrets separate from the legacy workflow target.
 
 To pause, set the variable false or disable the workflow. No raw payload uploads.
 Provider/social automation is still gated: this cadence covers website adapters.
+Website-only runs can use a scoped database role without access to provider jobs.
 It does not make TikTok/Instagram posts verified, renew social evidence, or run
 OpenAI/Apify/Bright Data/SerpAPI automatically. Those need a separate validated
 refresh path and allowance checks before inclusion in unattended collection.
 
 ## Verification
 
-Local scraper/PostgreSQL suite: 141 tests passed, including Vietnam-time start and
-weekday boundaries, no-listing refresh, empty targets, existing-entry filtering,
-and failed fetch preserving the prior verification timestamp. Workflow YAML parsed
-successfully. No live collection, production write, default-branch merge or scheduled
-run was performed during implementation.
+The isolated staging database's shared eligibility evaluator returned these
+website-backed counts on 23 November 2026 Vietnam time. They describe a
+point-in-time feed with expiring evidence.
+
+| City | Weekly / target | Planning / target |
+| --- | ---: | ---: |
+| Hanoi | 16 / 14 | 8 / 7 |
+| Ho Chi Minh City | 19 / 18 | 10 / 7 |
+| Da Nang | 13 / 12 | 5 / 5 |
+
+The manual Furama run imported one eligible event without a failed fetch or
+provider usage. Controlled tests cover matching dates and times, competing
+sessions, missing address evidence, and venue ambiguity. Hosted app validation
+requires the staging deployment to include the release branch. Scheduling remains
+disabled.

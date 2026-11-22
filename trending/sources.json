@@ -19,7 +19,10 @@
     ],
     "enabled": true,
     "review_holds": {
-      "https://ticketbox.vn/chillpark-da-quang-26736": "unresolved_cross_source_end_time"
+      "https://ticketbox.vn/chillpark-da-quang-26736": "unresolved_cross_source_end_time",
+      "https://ticketbox.vn/hanoi-firebeat-worldfest-26838": "unresolved_cross_source_session_times",
+      "https://ticketbox.vn/xuan-phat-tai-26863": "unresolved_performance_schedule",
+      "https://ticketbox.vn/khu-vui-choi-nha-chen-uoc-mo-xanh-26396": "unresolved_daily_opening_hours"
     }
   },
   "hanoigrapevine": {
@@ -85,7 +88,31 @@
       "lifeofdanang.com"
     ],
     "enabled": true,
-    "pilot_status": "validated_20261108_single_destination_event"
+    "pilot_status": "validated_20261108_single_destination_event",
+    "reviewed_events": {
+      "https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-furama-resort-2026-12-03": {
+        "venue_url": "https://lifeofdanang.com/vi/danang/dia-diem/furama-resort-danang",
+        "venue_name": "Furama Resort Danang",
+        "location": "Sảnh chính, Furama Resort Danang",
+        "address": "103 - 105 đường Võ Nguyên Giáp, Phường Ngũ Hành Sơn, TP Đà Nẵng",
+        "address_url": "https://team.furamavietnam.com/khach-san.html",
+        "schedule_url": "https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027"
+      }
+    },
+    "review_holds": {
+      "https://lifeofdanang.com/vi/danang/city-da-nang-christmas-market-2026-2026-12-03": "unresolved_cross_source_session_times",
+      "https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-pullman-2026-12-04": "unresolved_cross_source_session_times"
+    }
+  },
+  "hoguomopera": {
+    "name": "Nhà hát Hồ Gươm",
+    "seeds": [
+      "https://hoguomopera.vn/chuong-trinh-bieu-dien?page=1"
+    ],
+    "hosts": [
+      "hoguomopera.vn"
+    ],
+    "enabled": true
   },
   "saigoneer": {
     "name": "Saigoneer",
@@ -139,6 +166,9 @@
       "hanoigo.com.vn"
     ],
     "enabled": false,
-    "pilot_status": "pending_bounded_live_validation"
+    "pilot_status": "pending_bounded_live_validation",
+    "review_holds": {
+      "https://hanoigo.com.vn/event/hanoi-firebeat-world-festival-2026": "unresolved_cross_source_session_times"
+    }
   }
 }

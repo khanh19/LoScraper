@@ -20,10 +20,6 @@ on:
         description: Audit adapters without importing
         type: boolean
         default: true
-      providers:
-        description: Include optional providers with verified free allowance
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -64,25 +60,34 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Collect and validate
         env:
-          DATABASE_URL: ${{ github.event_name == 'schedule' && secrets.TRENDING_DATABASE_URL || secrets.DATABASE_URL }}
+          STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
+          STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}
           SCHEDULE_DATABASE_URL: ${{ secrets.TRENDING_DATABASE_URL }}
+          SCHEDULE_DATABASE_ROOT_CA: ${{ secrets.TRENDING_DATABASE_ROOT_CA }}
           EVENT_NAME: ${{ github.event_name }}
           MODE: ${{ needs.policy.outputs.mode }}
-          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
-          BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
-          BRIGHTDATA_BILLING_API_KEY: ${{ secrets.BRIGHTDATA_BILLING_API_KEY }}
-          BRIGHTDATA_FREE_VERIFICATION_JSON: ${{ secrets.BRIGHTDATA_FREE_VERIFICATION_JSON }}
           INPUT_CITY: ${{ inputs.city }}
           INPUT_PILOT: ${{ inputs.pilot }}
-          INPUT_PROVIDERS: ${{ inputs.providers }}
         run: |
+          database_root_ca=
           if [ "$EVENT_NAME" = "schedule" ]; then
-            # Never fall back to the legacy/shared database for automated writes.
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
+            database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
+          elif [ "$INPUT_PILOT" = "true" ]; then
+            unset DATABASE_URL
+          else
+            export DATABASE_URL="$STAGING_DATABASE_URL"
+            database_root_ca="$STAGING_DATABASE_ROOT_CA"
           fi
           if [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
             echo "Missing collection database configuration" >&2
             exit 1
+          fi
+          if [ -n "$database_root_ca" ]; then
+            database_ca_path=$(mktemp)
+            trap 'rm -f "$database_ca_path"' EXIT
+            printf '%s\n' "$database_root_ca" > "$database_ca_path"
+            export PGSSLROOTCERT="$database_ca_path"
           fi
           if [ "$MODE" = "refresh" ]; then
             if [ "$INPUT_PILOT" = "true" ]; then
@@ -103,7 +108,6 @@ jobs:
             args=(--browser --supplemental --limit 20)
             if [ -n "$INPUT_CITY" ] && [ "$INPUT_CITY" != "all" ]; then args+=(--city "$INPUT_CITY"); fi
             if [ "$INPUT_PILOT" = "true" ]; then args+=(--pilot); else args+=(--write-db); fi
-            if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_PROVIDERS" = "true" ]; then args+=(--providers); fi
             discovery_status=0
             python -m trending "${args[@]}" || discovery_status=$?
             if [ "$discovery_status" -ne 0 ]; then exit "$discovery_status"; fi

@@ -2,7 +2,10 @@
 from collections import Counter
 from urllib.parse import urlsplit
 
-TARGETS = {'hanoi':15, 'hcmc':15, 'danang':8}
+SECTION_TARGETS = {'hanoi': {'weekly':14,'planning':7},
+                   'hcmc': {'weekly':18,'planning':7},
+                   'danang': {'weekly':12,'planning':5}}
+TARGETS = {city:sum(sections.values()) for city,sections in SECTION_TARGETS.items()}
 
 
 def platform(url):
@@ -22,11 +25,15 @@ def summarize(rows, city):
     for item in items.values():
         sources.update({platform(s['url']) for s in item.get('sources',[]) if s.get('url')})
     target=TARGETS[city]
+    sections=Counter(i.get('section','weekly') for i in items.values())
+    deficits={section:max(0,count-sections[section]) for section,count in SECTION_TARGETS[city].items()}
     return {'target':target,'eligible_unique_items':len(items),
             'shortfall':max(0,target-len(items)),
-            'target_met':len(items)>=target,
-            'sections':dict(Counter(i.get('section','weekly') for i in items.values())),
+            'target_met':not any(deficits.values()),
+            'sections':dict(sections),
+            'section_targets':SECTION_TARGETS[city],
+            'section_shortfalls':deficits,
             'categories':dict(Counter(i.get('category','unknown') for i in items.values())),
             'items_by_supporting_platform':dict(sources),
             'missing_social_platforms':[p for p in ('instagram','tiktok') if not sources[p]],
-            'note':'Soft target across weekly and planning; multi-source items count once.'}
+            'note':'Soft section targets; surplus weekly items cannot fill planning gaps. Multi-source items count once.'}

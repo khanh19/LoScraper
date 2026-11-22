@@ -143,6 +143,20 @@ The endpoint audit found Reels incorrectly shared the Posts dataset. The collect
 now routes `/reel/` to `gd_lyclm20il4r5helnj`, keeping `/p/` on
 `gd_lk5ns7kz21pck8jpis`, as documented in the
 [Instagram endpoint reference](https://docs.brightdata.com/products/scrapers/instagram/send-first-request).
+
+## November 22 staging check
+
+The bounded Instagram run returned two recent public posts. Both remain lead
+evidence pending venue verification. A later read of the same run reconciled its
+included usage to $0.0062. Apify's campaign ledger retains all 132 reserved units.
+
+The TikTok submission returned HTTP 400. The actor's run list had no new run,
+and its live metadata advertised a $0.50 minimum value for `maxTotalChargeUsd`.
+The attempted $0.10 cap was below that minimum. The minimum is a ceiling the
+caller must be willing to reserve, with actual usage charged separately. Confirm
+the current `pricingInfos[].minimalMaxTotalChargeUsd` with the actor details API
+before a new authorized test. The outstanding reservation remains intact, and
+this diagnosis did not submit another run. [Actor API](https://apify.com/clockworks/tiktok-scraper/api)
 A second single-record reservation tests the organizer's
 [recent reel](https://www.instagram.com/reel/DfezjTRTU4a/).
 
@@ -167,3 +181,32 @@ attempts, 0 SerpAPI searches, 0 TikTok submissions**. Including the previous Fac
 attempt, this fixed pilot now holds 3 of 9 Bright Data attempts (Instagram 2 of 3).
 No reservations were reset. The follow-up PostgreSQL run passed all **74 tests**.
 [Sanitized live receipt](evidence/social-20261108/results.json).
+
+## November 23 public-source validation
+
+Discovery now reads original post links in Instagram embeds and matching
+TikTok video blockquotes. Alias links share one post identity and keep the
+dated publisher evidence. The website adapters supply detail links so calendar
+downloads and navigation links use none of the two detail fetches per publisher.
+
+The baseline attempted 20 pages and had five fetch failures. The updated run
+used the same source directory and opened all 22 selected pages successfully.
+Hanoi and Da Nang returned no original social links. HCMC returned two from
+Saigon Outcast, both confirmed against their live Instagram pages. The dance
+session advertised for November 22 had ended. The burger awards post was a
+recap. Neither became a feed item. [Organizer site](https://www.saigonoutcast.com/) ·
+[Dance reel](https://www.instagram.com/reel/Df4uHYdTFDg/) · [Awards post](https://www.instagram.com/p/DfzcxWlk-xE/)
+
+The two recent Da Nang reels from the previous pilot were also checked against
+their original pages. The covers confirmed the named venues. The engagement
+counts are a single public observation.
+
+| Original reel | Published | Venue evidence | Likes / comments |
+| --- | --- | --- | ---: |
+| [Tiệm Yến](https://www.instagram.com/reel/Df_0zs_oXt6/) | November 21 | The cover names the Da Nang branch. The [restaurant](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) confirms 347 Nguyễn Văn Linh. | 32 / 0 |
+| [Mì Cay Gangwon](https://www.instagram.com/reel/Df7X04roCHE/) | November 19 | The storefront in the cover shows 489 Hoàng Diệu. The promotion end date is unknown. | 137 / 1 |
+
+These remain review samples. No image reuse or public social publication was
+approved. TikTok returned no fresh original lead and its official public player
+failed TLS hostname verification on this machine. There were zero metered
+provider requests and the campaign reservation total stayed at 132.
