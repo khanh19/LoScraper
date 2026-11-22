@@ -489,6 +489,51 @@ class Persistence(unittest.TestCase):
         self.assertNotIn('secret',output.getvalue())
         self.assertEqual(self.store.db.execute('SELECT status FROM discovery_ingestion_runs WHERE id=%s',(result['run_id'],)).fetchone()['status'],'partial')
 
+    def test_handled_interrupt_closes_active_source_receipt_and_preserves_imports(self):
+        args = Namespace(sources='ticketbox,ticketgo,vnexpress', city=None, pilot=True,
+                         write_db=True, browser=False, supplemental=False, providers=False,
+                         limit=12, out=None)
+        first = candidate()
+        saved = candidate('place')
+        saved.source_slug = 'ticketgo'
+        saved.source_name = 'TicketGo'
+        saved.source_url = 'https://ticketgo.vn/event/saved-before-interrupt'
+        interrupted = copy.deepcopy(saved)
+        interrupted.source_url = 'https://ticketgo.vn/event/interrupted'
+        upsert = self.store.upsert
+        clock = Mock()
+        clock.now.return_value = NOW
+
+        def import_candidate(candidate, now):
+            if candidate is interrupted:
+                raise KeyboardInterrupt('private detail')
+            return upsert(candidate, now)
+
+        output = StringIO()
+        with patch.dict(os.environ, {'DATABASE_URL': URL}), \
+             patch('trending.__main__.datetime', clock), \
+             patch('trending.__main__.Store', return_value=self.store), patch.object(self.store, 'close'), \
+             patch('trending.__main__.PublicClient'), \
+             patch('trending.__main__.collect_source', side_effect=[([first], []), ([saved, interrupted], [])]) as collect, \
+             patch.object(self.store, 'upsert', side_effect=import_candidate), redirect_stdout(output):
+            with self.assertRaises(KeyboardInterrupt):
+                run(args)
+
+        rows = self.store.db.execute('''SELECT source_slug,status,accepted,failed,diagnostics
+            FROM discovery_ingestion_runs''').fetchall()
+        receipts = {row['source_slug']: row for row in rows}
+        self.assertEqual(set(receipts), {'__run__', 'ticketbox', 'ticketgo'})
+        self.assertEqual(receipts['ticketbox']['status'], 'complete')
+        self.assertEqual(receipts['ticketgo']['status'], 'partial')
+        self.assertEqual(receipts['ticketgo']['accepted'], 1)
+        self.assertEqual(receipts['ticketgo']['failed'], 1)
+        self.assertEqual(receipts['ticketgo']['diagnostics']['reasons'], {'KeyboardInterrupt': 1})
+        self.assertEqual(receipts['__run__']['status'], 'failed')
+        self.assertEqual(receipts['__run__']['accepted'], 2)
+        self.assertEqual(collect.call_count, 2)
+        self.assertEqual(len(self.feed()), 2)
+        self.assertNotIn('private detail', output.getvalue())
+
     def test_primary_place_match_and_price_follow_selected_observation(self):
         c=candidate();self.store.upsert(c,NOW)
         self.store.register('ticketgo','TicketGo',True)
