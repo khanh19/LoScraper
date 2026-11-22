@@ -39,14 +39,20 @@ def parse_time(value: str | None) -> datetime | None:
         return None
 
 
-def city_from_address(address: str) -> str | None:
+def outside_supported_cities(address: str) -> bool:
     text = folded(address)
     # These nearby destinations are not the three urban destinations in this feed.
-    if re.search(r"\b(hoi an|vung tau|binh duong|nha trang|phu quoc)\b", text) or text == 'hue' or text.endswith(' hue'):
-        return None
+    return text == 'hue' or text.endswith(' hue') or bool(re.search(
+        r'\b(hoi an|vung tau|binh duong|nha trang|phu quoc|tinh quang ninh|yen tu|'
+        r'tinh lam dong|tinh khanh hoa|hung yen|vinpalace ocean city|'
+        r'vincom mega mall ocean city|vinhomes ocean park [23])\b', text))
+
+
+def city_from_address(address: str) -> str | None:
     # Some publishers append a default supported city after another province.
-    if re.search(r'\b(tinh quang ninh|yen tu|tinh lam dong|tinh khanh hoa)\b', text):
+    if outside_supported_cities(address):
         return None
+    text = folded(address)
     aliases = {"hcmc": r"\b(ho chi minh|hcmc|hcm|tp hcm|tphcm|sai gon|saigon)\b",
                "hanoi": r"\b(ha noi|hanoi)\b", "danang": r"\b(da nang|danang)\b"}
     matches = [city for city, pattern in aliases.items() if re.search(pattern, text)]

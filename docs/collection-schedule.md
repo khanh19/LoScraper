@@ -90,9 +90,22 @@ point-in-time feed with expiring evidence.
 
 | City | Weekly / target | Planning / target |
 | --- | ---: | ---: |
-| Hanoi | 16 / 14 | 8 / 7 |
-| Ho Chi Minh City | 19 / 18 | 10 / 7 |
+| Hanoi | 15 / 14 | 8 / 7 |
+| Ho Chi Minh City | 18 / 18 | 9 / 7 |
 | Da Nang | 13 / 12 | 5 / 5 |
+
+The daily staging recheck processed 71 existing observations from six publishers
+in 10 minutes and 23 seconds. It completed with zero fetch or write failures,
+preserved the item IDs, and made no metered requests.
+
+A venue review found two Hưng Yên shows that Ticketbox placed under Hanoi or
+Ho Chi Minh City and an online merchandise listing. The table reflects the
+68 eligible cards after those three were withheld. Apply backend migration
+`20261122120000_discovery_correct_ticketbox_locations.sql` to withdraw the older
+fact snapshots without deleting records or creating cancellation alerts.
+[VinPalace venue](https://vinpearl-theatre.vinwonders.com/) ·
+[YeaH1 venue announcement](https://www.yeah1group.com/concert-anh-trai-vuot-ngan-chong-gai-2026-completely-sold-out-in-88-minutes-of-ticket-sales?locale=en) ·
+[Ticketbox online listing](https://ticketbox.vn/combo-khongxinhe-kosmik-2026-26880)
 
 The manual Furama run imported one eligible event without a failed fetch or
 provider usage. Controlled tests cover matching dates and times, competing

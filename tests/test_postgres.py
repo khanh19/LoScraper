@@ -71,6 +71,27 @@ class Persistence(unittest.TestCase):
         self.assertEqual(len(self.feed()),1)
         self.assertEqual(len(self.feed()[0]['sources']),2)
 
+    def test_ticketbox_location_correction_preserves_observation_and_other_cards(self):
+        legacy = candidate()
+        legacy.source_url = 'https://ticketbox.vn/datnuocthienhungca-26630'
+        legacy.venue_name = 'VINPALACE OCEAN CITY'
+        legacy.address = 'Tầng 3 Vincom Mega Mall, Thành phố Hà Nội'
+        legacy_id = self.store.upsert(legacy, NOW)
+        other_id = self.store.upsert(candidate(), NOW)
+        migration = BACKEND/'supabase/migrations/20261122120000_discovery_correct_ticketbox_locations.sql'
+
+        self.store.db.execute(migration.read_text())
+        self.store.db.execute(migration.read_text())
+
+        observation = self.store.db.execute('''SELECT status, verified_at, facts FROM discovery_observations
+                                                WHERE item_id=%s''', (legacy_id,)).fetchone()
+        self.assertEqual(observation['status'], 'active')
+        self.assertEqual(observation['verified_at'], NOW)
+        self.assertNotIn('version', observation['facts'])
+        self.assertEqual(observation['facts']['address'], legacy.address)
+        self.assertEqual(observation['facts']['location_review']['reason'], 'outside_supported_cities')
+        self.assertEqual([row['id'] for row in self.feed()], [str(other_id)])
+
     def test_city_kind_expiry_and_window(self):
         self.store.upsert(candidate(),NOW)
         p=candidate('place');p.source_url='https://ticketbox.vn/place-12345'
