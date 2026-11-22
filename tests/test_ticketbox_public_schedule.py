@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from trending.adapters import Ticketbox
-from trending.model import Candidate
+from trending.model import Candidate, PUBLISHER_CONFIRMED_CANCELLATION
 
 
 class TicketboxPublicSchedule(unittest.TestCase):
@@ -11,9 +11,9 @@ class TicketboxPublicSchedule(unittest.TestCase):
         self.candidate = Candidate("ticketbox", "Ticketbox", "https://ticketbox.vn/workshop-23330", "Art", "event")
         self.client = Mock()
 
-    def enrich(self, rows, event_id=23330):
+    def enrich(self, rows, event_id=23330, status=None):
         self.client.get.return_value = {"data": {"result": {
-            "id": event_id, "showings": rows, "categoriesV2": ["seminarsworkshops"]
+            "id": event_id, "status": status, "showings": rows, "categoriesV2": ["seminarsworkshops"]
         }}}
         return self.adapter.enrich(self.candidate, None, self.client, None)
 
@@ -30,3 +30,12 @@ class TicketboxPublicSchedule(unittest.TestCase):
             with self.subTest(rows=rows):
                 self.assertIn("unresolved_individual_sessions", self.enrich(rows).reasons)
         self.assertIn("event_identity_conflict", self.enrich([], 9876).reasons)
+
+    def test_confirmation_uses_the_same_event_and_current_api_status(self):
+        self.candidate.status = "cancelled"
+        self.candidate.reasons = [PUBLISHER_CONFIRMED_CANCELLATION]
+        postponed = self.enrich([], status="postponed")
+        self.assertEqual(postponed.status, "cancelled")
+        self.assertNotIn(PUBLISHER_CONFIRMED_CANCELLATION, postponed.reasons)
+        confirmed = self.enrich([], status="cancelled")
+        self.assertEqual(confirmed.reasons.count(PUBLISHER_CONFIRMED_CANCELLATION), 1)

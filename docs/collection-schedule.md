@@ -61,6 +61,12 @@ Incomplete schedules and failed fetches leave the existing observation alone.
 Apply backend migration `20261122110000_discovery_confirmed_schedule_holds.sql`
 before running the updated collector.
 
+The notification companion branch records whether the publisher explicitly
+cancelled the event. Postponements and title-only warnings can hide the card
+without triggering a cancellation alert. Ticketbox confirmation comes from its
+official event endpoint with the matching event ID. A replay older than existing
+evidence cannot overwrite the current status. [Notification collector PR](https://github.com/khanh19/LoScraper/pull/13)
+
 ## Activation checklist — not yet active
 
 1. Review PR #6 with its parent stack. Confirm the reviewed workflow reaches the

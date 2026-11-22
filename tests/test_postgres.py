@@ -94,6 +94,24 @@ class Persistence(unittest.TestCase):
         c=candidate();self.store.upsert(c,NOW)
         self.store.cancel(c.source_slug,c.source_url,NOW)
         self.assertEqual(self.feed(),[])
+
+    def test_publisher_cancellation_preserves_identity_and_rejects_stale_replays(self):
+        c = candidate()
+        self.store.upsert(c, NOW)
+        later = NOW + timedelta(minutes=1)
+        for rejected in (
+            {'now': NOW - timedelta(seconds=1), 'kind': 'event', 'city': 'hanoi'},
+            {'now': later, 'kind': 'event', 'city': 'danang'},
+            {'now': later, 'kind': 'place', 'city': 'hanoi'},
+        ):
+            self.assertFalse(self.store.cancel(c.source_slug, c.source_url, confirmed=True, **rejected))
+        self.assertEqual(len(self.feed()), 1)
+        self.assertTrue(self.store.cancel(c.source_slug, c.source_url, later, confirmed=True, kind='event', city='hanoi'))
+        self.assertEqual(self.feed(later), [])
+        row = self.store.db.execute("""SELECT status,verified_at,facts->'publisher_confirmed_cancellation' AS confirmed
+            FROM discovery_observations""").fetchone()
+        self.assertEqual(row, {'status': 'cancelled', 'verified_at': later, 'confirmed': True})
+        self.assertFalse(self.store.cancel(c.source_slug, c.source_url, NOW))
         self.store.upsert(c,NOW)
         self.store.register('ticketbox','Ticketbox',False)
         self.assertEqual(self.feed(),[])

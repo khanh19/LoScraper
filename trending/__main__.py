@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from .adapters import CLASSES, collect_source, load_sources, supplemental_links
 from .http import PublicClient
-from .model import CITIES, CONFIRMED_SCHEDULE_CONFLICT
+from .model import CITIES, CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION
 from .providers import BrightSocial, ProviderDisabled, SerpDiscovery, post_platform, social_evidence
 from .store import Store
 from .progress import Progress
@@ -137,15 +137,17 @@ def run(args):
                         report['rejected'].append({'source':slug,'reasons':invalid,
                             'sample': {k:c.payload().get(k) for k in
                                 ('source_url','title','city_slug','published_at','verified_at','venue_name','kind')}})
-                        if c.status == 'cancelled' and store and args.write_db:
-                            ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key,
-                                                 'publisher_confirmed_cancellation' in c.reasons)
-                            if not ok:
-                                progress.count('failed',city,['cancellation_write_failed'])
-                        elif CONFIRMED_SCHEDULE_CONFLICT in invalid and store and args.write_db:
-                            ok,_ = progress.call('hold_schedule',c,now)
-                            if not ok:
-                                progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
+                        if store and args.write_db and 'event_identity_conflict' not in invalid:
+                            if c.status == 'cancelled':
+                                ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key,
+                                                     confirmed=PUBLISHER_CONFIRMED_CANCELLATION in invalid,
+                                                     kind=c.kind, city=city)
+                                if not ok:
+                                    progress.count('failed',city,['cancellation_write_failed'])
+                            elif CONFIRMED_SCHEDULE_CONFLICT in invalid:
+                                ok,_ = progress.call('hold_schedule',c,now)
+                                if not ok:
+                                    progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
                         continue
                     payload = c.payload()
                     if store and args.write_db:

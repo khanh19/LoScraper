@@ -11,7 +11,10 @@ from bs4 import BeautifulSoup
 
 from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
 from .http import FetchError, PublicClient
-from .model import CONFIRMED_SCHEDULE_CONFLICT, ICT, Candidate, canonical, city_from_address, folded, parse_time
+from .model import (
+    CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION, ICT,
+    Candidate, canonical, city_from_address, folded, parse_time,
+)
 
 
 def structured(soup):
@@ -147,11 +150,15 @@ class Adapter:
                 c.price_text='Giá niêm yết: '+' – '.join(amounts)+' ₫'
             occ = iso_occurrence(str(event.get("startDate", "")), event.get("endDate"))
             c.occurrences = [occ] if occ else []
-            event_status = event.get("eventStatus", "")
-            if event_status.endswith(("EventCancelled", "EventPostponed")):
+            event_status = event.get("eventStatus")
+            status = re.fullmatch(
+                r'(?:https?://schema\.org/)?(EventCancelled|EventPostponed)',
+                event_status if isinstance(event_status, str) else "",
+            )
+            if status:
                 c.status = "cancelled"
-                if event_status.endswith("EventCancelled"):
-                    c.reasons.append("publisher_confirmed_cancellation")
+                if status[1] == "EventCancelled":
+                    c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
         # Only address-labelled lines in the primary article; never the footer/sidebar.
         if not address:
             lines = paragraphs or [line.strip() for line in text.splitlines() if line.strip()]
@@ -201,10 +208,14 @@ class Ticketbox(Adapter):
         if str(data.get("id")) != event_id:
             c.reasons.append("event_identity_conflict")
             return c
+        # The same-ID official endpoint determines whether a Ticketbox page can
+        # send a cancellation alert. Its HTML can still trigger a feed hold.
+        if PUBLISHER_CONFIRMED_CANCELLATION in c.reasons:
+            c.reasons.remove(PUBLISHER_CONFIRMED_CANCELLATION)
         if data.get("status") in {"cancelled", "canceled", "postponed"}:
             c.status = "cancelled"
             if data["status"] != "postponed":
-                c.reasons.append("publisher_confirmed_cancellation")
+                c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
             return c
         sessions = []
         for row in data.get("showings") or []:

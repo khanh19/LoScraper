@@ -105,18 +105,23 @@ class Parsers(unittest.TestCase):
         self.assertEqual(datetime.fromisoformat(c.occurrences[0].ends_at).day,10)
 
     def test_only_structured_cancellation_supplies_notification_evidence(self):
-        for status, confirmed in (("EventCancelled", True), ("EventPostponed", False)):
+        for status, outcome, confirmed in (
+            ("https://schema.org/EventCancelled", "cancelled", True),
+            ("https://schema.org/EventPostponed", "cancelled", False),
+            ("https://example.com/EventCancelled", "active", False),
+            (None, "active", False),
+        ):
             with self.subTest(status=status):
                 event = {
                     "@type": "Event",
                     "name": "Baking Workshop",
-                    "eventStatus": "https://schema.org/" + status,
+                    "eventStatus": status,
                 }
                 candidate = self.parse(
                     "ticketbox",
                     f'<main><script type="application/ld+json">{json.dumps(event)}</script></main>',
                 )
-                self.assertEqual(candidate.status, "cancelled")
+                self.assertEqual(candidate.status, outcome)
                 self.assertEqual("publisher_confirmed_cancellation" in candidate.reasons, confirmed)
 
     def test_article_publication_is_not_an_event(self):

@@ -120,10 +120,19 @@ class Store:
                     VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",(observation_id,o.starts_at,o.ends_at,o.precision))
         return str(item_id)
 
-    def cancel(self, source_slug, url, now, entry_key="", confirmed=False):
-        self.db.execute("""UPDATE discovery_observations SET status='cancelled',verified_at=%s,
-            facts=facts || jsonb_build_object('publisher_confirmed_cancellation',%s::boolean)
-            WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",(now,confirmed,source_slug,url,entry_key))
+    def cancel(self, source_slug, url, now, entry_key="", *, confirmed=False, kind=None, city=None):
+        with self.db.transaction():
+            self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
+            result = self.db.execute("""UPDATE discovery_observations o SET status='cancelled',verified_at=%s,
+                facts=o.facts || jsonb_build_object('publisher_confirmed_cancellation',
+                    %s::boolean AND i.kind='event' AND s.platform='web')
+                FROM discovery_items i, discovery_sources s
+                WHERE o.item_id=i.id AND o.source_slug=s.slug AND s.enabled
+                  AND o.source_slug=%s AND o.source_url=%s AND o.entry_key=%s
+                  AND (%s::text IS NULL OR i.kind=%s) AND (%s::text IS NULL OR i.city_slug=%s)
+                  AND o.verified_at<=%s AND (o.schedule_held_at IS NULL OR o.schedule_held_at<=%s)""",
+                (now,confirmed,source_slug,url,entry_key,kind,kind,city,city,now,now))
+            return result.rowcount == 1
 
     def hold_schedule(self, c: Candidate, now: datetime):
         if c.kind != 'event' or c.platform != 'web' or CONFIRMED_SCHEDULE_CONFLICT not in c.reasons:
