@@ -94,6 +94,9 @@ class Persistence(unittest.TestCase):
         c=candidate();self.store.upsert(c,NOW)
         self.store.cancel(c.source_slug,c.source_url,NOW)
         self.assertEqual(self.feed(),[])
+        self.store.upsert(c,NOW)
+        self.store.register('ticketbox','Ticketbox',False)
+        self.assertEqual(self.feed(),[])
 
     def test_publisher_cancellation_preserves_identity_and_rejects_stale_replays(self):
         c = candidate()
@@ -112,9 +115,12 @@ class Persistence(unittest.TestCase):
             FROM discovery_observations""").fetchone()
         self.assertEqual(row, {'status': 'cancelled', 'verified_at': later, 'confirmed': True})
         self.assertFalse(self.store.cancel(c.source_slug, c.source_url, NOW))
-        self.store.upsert(c,NOW)
-        self.store.register('ticketbox','Ticketbox',False)
-        self.assertEqual(self.feed(),[])
+        with self.assertRaisesRegex(ValueError, 'stale_observation'):
+            self.store.upsert(c, later)
+        checked = later + timedelta(minutes=1)
+        c.verified_at = checked.isoformat()
+        self.store.upsert(c, checked)
+        self.assertEqual(len(self.feed(checked)), 1)
 
     def test_conflicting_source_dates_are_not_published(self):
         c=candidate();self.store.upsert(c,NOW)
