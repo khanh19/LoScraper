@@ -143,6 +143,20 @@ The endpoint audit found Reels incorrectly shared the Posts dataset. The collect
 now routes `/reel/` to `gd_lyclm20il4r5helnj`, keeping `/p/` on
 `gd_lk5ns7kz21pck8jpis`, as documented in the
 [Instagram endpoint reference](https://docs.brightdata.com/products/scrapers/instagram/send-first-request).
+
+## November 22 staging check
+
+The bounded Instagram run returned two recent public posts. Both remain lead
+evidence pending venue verification. A later read of the same run reconciled its
+included usage to $0.0062. Apify's campaign ledger retains all 132 reserved units.
+
+The TikTok submission returned HTTP 400. The actor's run list had no new run,
+and its live metadata advertised a $0.50 minimum value for `maxTotalChargeUsd`.
+The attempted $0.10 cap was below that minimum. The minimum is a ceiling the
+caller must be willing to reserve, with actual usage charged separately. Confirm
+the current `pricingInfos[].minimalMaxTotalChargeUsd` with the actor details API
+before a new authorized test. The outstanding reservation remains intact, and
+this diagnosis did not submit another run. [Actor API](https://apify.com/clockworks/tiktok-scraper/api)
 A second single-record reservation tests the organizer's
 [recent reel](https://www.instagram.com/reel/DfezjTRTU4a/).
 

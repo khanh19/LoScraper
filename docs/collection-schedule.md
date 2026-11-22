@@ -36,6 +36,17 @@ Full discovery retains the bounded 20 detail pages per source plus existing chec
 “full” means all enabled sources/cities, not unlimited scraping or a minimum feed size.
 The workflow has a 25-minute timeout; inspect interrupted receipts if it is reached.
 
+Life of Da Nang collection reads the Vietnamese calendars through the end of the
+30-day horizon. It shares the same detail-page cap across calendar and weekly
+listings, giving both weekly and planning leads a chance before the cap. The
+individual event pages still determine eligibility. Nhà hát Hồ Gươm's performance
+pages provide another planning source. The collector stores the exact announced
+show days when the venue omits the end time.
+
+Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
+Market publications disagree on the start day and opening hour. Pullman's official
+pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
+
 ## Activation checklist — not yet active
 
 1. Review and merge PR #6 into the default branch (`main`). No merge was performed.
