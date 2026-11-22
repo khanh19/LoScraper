@@ -99,17 +99,28 @@ point-in-time feed with expiring evidence.
 
 | City | Weekly / target | Planning / target |
 | --- | ---: | ---: |
-| Hanoi | 15 / 14 | 8 / 7 |
-| Ho Chi Minh City | 18 / 18 | 9 / 7 |
+| Hanoi | 16 / 14 | 8 / 7 |
+| Ho Chi Minh City | 19 / 18 | 12 / 7 |
 | Da Nang | 13 / 12 | 5 / 5 |
 
-The daily staging recheck processed 71 existing observations from six publishers
-in 10 minutes and 23 seconds. It completed with zero fetch or write failures,
-preserved the item IDs, and made no metered requests.
+An earlier daily staging recheck processed 71 existing observations from six
+publishers in 10 minutes and 23 seconds. It completed with zero fetch or write
+failures, preserved the item IDs, and made no metered requests.
+
+On 23 November, a separate full run imported 25 candidates before database
+connection errors prevented its final database receipt. The Mac slept during
+that run, so the 42-minute result is a poor baseline for a hosted runner.
+The latest manual recheck ended at a 25-minute cutoff after 9 accepted and
+3 rejected candidates and 4 fetch or extraction failures. Vietnam Nightlife
+finished partially and Ticketbox was still processing. The parent receipt
+recorded a failed run and the feed evaluator still returned the 73 cards above.
+These runs used website collection only. A clean manual full run and recheck in
+GitHub Actions are still required before enabling the schedule.
 
 A venue review found two Hưng Yên shows that Ticketbox placed under Hanoi or
-Ho Chi Minh City and an online merchandise listing. The table reflects the
-68 eligible cards after those three were withheld. Apply backend migration
+Ho Chi Minh City and an online merchandise listing. At that point 68 eligible
+cards remained. Later website imports brought the feed to the counts above.
+Apply backend migration
 `20261122120000_discovery_correct_ticketbox_locations.sql` to withdraw the older
 fact snapshots without deleting records or creating cancellation alerts.
 [VinPalace venue](https://vinpearl-theatre.vinwonders.com/) ·
