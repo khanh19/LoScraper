@@ -1,26 +1,52 @@
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 from unittest.mock import patch, Mock
 from bs4 import BeautifulSoup
-from trending.schedule import scheduled_mode
+from trending.schedule import FULL_CRON, REFRESH_CRON, scheduled_collection
 from trending.adapters import collect_source
 from trending.store import Store
 from test_trending import candidate, NOW
 
 class ScheduleTests(unittest.TestCase):
     def test_vietnam_start_and_weekdays(self):
-        cases={
-            '2026-11-29T23:00:00+00:00':'disabled',
-            '2026-11-30T23:00:00+00:00':'full',
-            '2026-12-01T23:00:00+00:00':'refresh',
-            '2026-12-03T23:00:00+00:00':'full',
-            '2026-12-04T23:00:00+00:00':'refresh',
-            '2026-12-06T23:00:00+00:00':'refresh',
-            '2026-12-07T23:00:00+00:00':'full',
-        }
-        for at,expected in cases.items():
-            self.assertEqual(scheduled_mode(datetime.fromisoformat(at)),expected)
-        with self.assertRaises(ValueError):scheduled_mode(datetime(2026,12,1))
+        cases = [
+            ('2026-11-29', REFRESH_CRON, 'disabled'),
+            ('2026-11-30', FULL_CRON, 'full'),
+            ('2026-12-01', REFRESH_CRON, 'refresh'),
+            ('2026-12-02', REFRESH_CRON, 'refresh'),
+            ('2026-12-03', FULL_CRON, 'full'),
+            ('2026-12-04', REFRESH_CRON, 'refresh'),
+            ('2026-12-05', REFRESH_CRON, 'refresh'),
+            ('2026-12-06', REFRESH_CRON, 'refresh'),
+            ('2026-12-07', FULL_CRON, 'full'),
+        ]
+        for day, cron, expected in cases:
+            with self.subTest(day=day, cron=cron):
+                now = datetime.fromisoformat(day + 'T23:00:00+00:00')
+                mode, due = scheduled_collection(now, cron)
+                self.assertEqual((mode, due), (expected, now))
+                self.assertEqual(due.hour, 6)
+        with self.assertRaisesRegex(ValueError, 'timezone_required'):
+            scheduled_collection(datetime(2026, 12, 1), FULL_CRON)
+        with self.assertRaisesRegex(ValueError, 'unknown_collection_cron'):
+            scheduled_collection(datetime(2026, 12, 1, tzinfo=timezone.utc), '0 23 * * *')
+
+    def test_delayed_cron_keeps_its_mode_and_original_start_gate(self):
+        now = datetime.fromisoformat('2026-12-02T00:15:00+07:00')
+        mode, due = scheduled_collection(now, FULL_CRON)
+        self.assertEqual(mode, 'full')
+        self.assertEqual(due.isoformat(), '2026-12-01T06:00:00+07:00')
+        now = datetime.fromisoformat('2026-12-01T12:30:00+07:00')
+        mode, due = scheduled_collection(now, REFRESH_CRON)
+        self.assertEqual(mode, 'disabled')
+        self.assertEqual(due.isoformat(), '2026-11-30T06:00:00+07:00')
+
+    def test_workflow_declares_each_recognized_trigger(self):
+        workflow = Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml'
+        self.assertEqual(set(re.findall(r"^\s+- cron: '([^']+)'$", workflow.read_text(), re.M)),
+                         {FULL_CRON, REFRESH_CRON})
 
     def test_existing_checks_skip_listings_and_followup_discovery(self):
         config={'seeds':['https://example.com/list'],'hosts':['example.com']}

@@ -15,9 +15,9 @@ on:
         type: string
         default: ''
       staging_collection:
-        description: Manually rehearse website collection against isolated staging
+        description: Rehearse website collection or check the isolated staging target
         type: choice
-        options: [none, full, refresh]
+        options: [none, full, refresh, check-staging]
         default: none
 permissions:
   contents: read
@@ -46,7 +46,7 @@ jobs:
 
   staging_collection:
     name: Isolated staging collection
-    if: github.event_name == 'workflow_dispatch' && (inputs.staging_collection == 'full' || inputs.staging_collection == 'refresh')
+    if: github.event_name == 'workflow_dispatch' && inputs.staging_collection != 'none'
     needs: unit
     uses: ./.github/workflows/trending.yml
     with:

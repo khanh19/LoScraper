@@ -2,14 +2,15 @@ name: Collect verified local discovery
 
 on:
   schedule:
-    # 23:00 UTC is 06:00 the following day in Vietnam (no DST).
-    - cron: '0 23 * * *'
+    # Monday and Thursday UTC map to Tuesday and Friday in Vietnam.
+    - cron: '0 23 * * 1,4'
+    - cron: '0 23 * * 0,2,3,5,6'
   workflow_dispatch:
     inputs:
       mode:
-        description: Full discovery or existing website checks only
+        description: Collect website evidence or inspect a database target read-only
         type: choice
-        options: [full, refresh]
+        options: [full, refresh, check-staging, check-scheduled]
         default: full
       city:
         description: City (all collects all three)
@@ -54,16 +55,23 @@ jobs:
       - id: policy
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_CRON: ${{ github.event.schedule }}
           MANUAL_MODE: ${{ inputs.mode }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             case "$MANUAL_MODE" in
-              full|refresh) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
+              full|refresh|check-staging|check-scheduled) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
               *) echo "Invalid manual collection mode" >&2; exit 1 ;;
             esac
           else
-            python -m trending.schedule >> "$GITHUB_OUTPUT"
+            python -m trending.schedule --cron "$EVENT_CRON" >> "$GITHUB_OUTPUT"
           fi
+      - name: Record scheduled slot
+        if: github.event_name == 'schedule'
+        env:
+          DUE: ${{ steps.policy.outputs.due }}
+          MODE: ${{ steps.policy.outputs.mode }}
+        run: printf 'Scheduled slot %s\n\nCollection mode %s\n' "$DUE" "$MODE" >> "$GITHUB_STEP_SUMMARY"
   collect:
     needs: policy
     if: needs.policy.outputs.mode != 'disabled'
@@ -78,6 +86,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python -m playwright install --with-deps chromium
+        if: needs.policy.outputs.mode == 'full' || needs.policy.outputs.mode == 'refresh'
       - name: Collect and validate
         env:
           STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
@@ -89,25 +98,37 @@ jobs:
           INPUT_CITY: ${{ inputs.city }}
           INPUT_PILOT: ${{ inputs.pilot }}
         run: |
+          set -o pipefail
           database_root_ca=
-          if [ "$EVENT_NAME" = "schedule" ]; then
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "check-scheduled" ]; then
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
             database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
-          elif [ "$INPUT_PILOT" = "true" ]; then
+          elif [ "$INPUT_PILOT" = "true" ] && [ "$MODE" != "check-staging" ]; then
             unset DATABASE_URL
           else
             export DATABASE_URL="$STAGING_DATABASE_URL"
             database_root_ca="$STAGING_DATABASE_ROOT_CA"
-          fi
-          if [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
-            echo "Missing collection database configuration" >&2
-            exit 1
           fi
           if [ -n "$database_root_ca" ]; then
             database_ca_path=$(mktemp)
             trap 'rm -f "$database_ca_path"' EXIT
             printf '%s\n' "$database_root_ca" > "$database_ca_path"
             export PGSSLROOTCERT="$database_ca_path"
+          fi
+          case "$MODE" in
+            check-staging|check-scheduled)
+              python -m trending.coverage --require-verified-tls | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+          esac
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            if ! preflight=$(python -m trending.coverage --require-verified-tls); then
+              printf '%s\n' "$preflight" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          elif [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
+            echo "Missing collection database configuration" >&2
+            exit 1
           fi
           collection_status=0
           if [ "$MODE" = "refresh" ]; then

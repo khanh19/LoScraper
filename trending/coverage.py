@@ -1,5 +1,6 @@
 """Soft collection targets, measured only from eligible database results."""
 from collections import Counter
+import argparse
 import os
 from urllib.parse import urlsplit
 
@@ -85,12 +86,20 @@ def markdown_coverage(results, now):
 
 def main():
     import psycopg
+    from psycopg.conninfo import conninfo_to_dict
     from psycopg.rows import dict_row
 
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--require-verified-tls', action='store_true')
+    args = parser.parse_args()
     try:
-        url = os.environ['DATABASE_URL']
+        url = os.environ.get('DATABASE_URL', '')
         if not url:
-            raise ValueError('missing_database')
+            print('Discovery target check failed (missing_database).')
+            raise SystemExit(1)
+        if args.require_verified_tls and conninfo_to_dict(url).get('sslmode') != 'verify-full':
+            print('Discovery target check failed (verify_full_required).')
+            raise SystemExit(1)
         with psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row) as db:
             db.execute("SET statement_timeout = '30s'")
             result, now = read_coverage(db)

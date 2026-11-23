@@ -8,10 +8,12 @@ User-confirmed cadence, starting **1 December 2026**, timezone **Asia/Ho_Chi_Min
 | Other days | Recheck stored website entries only |
 
 First full runs: December 1 and 4. First maintenance run: December 2.
-The GitHub trigger is `0 23 * * *` UTC (the preceding calendar date). Vietnam
-has no daylight-saving shift. Runs before the start date skip collection;
-manual dispatch remains available before then. GitHub schedules are best effort,
-not an exact-time guarantee. Overlapping collections queue rather than cancel.
+GitHub uses `0 23 * * 1,4` UTC for full runs and `0 23 * * 0,2,3,5,6` UTC for
+rechecks. Both map to 06:00 the next day in Vietnam. Each run records its most
+recent matching due slot and uses the triggering cron to choose its mode even if
+it starts after midnight. Slots before December 1 skip collection. Manual
+dispatch remains available before then. Scheduled starts can be delayed by
+GitHub. [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 
 ## What a recheck does
 
@@ -100,10 +102,9 @@ workflow. The reviewed schedule and its staging rehearsals are in the
 open PR stack. The repository has the staging database secrets. The scheduled
 database secret and enable switch are still absent.
 
-1. Review PR #6 with its parent stack. Before it reaches `main`, dispatch
-   **Scraper CI** on the reviewed staging branch and select `full` or `refresh`
-   for `staging_collection`. That job calls the branch's collection workflow
-   with the two staging secrets. It does not use the schedule settings.
+1. Review PR #6 and its follow-ups. Before the workflow reaches `main`, dispatch
+   **Scraper CI** on the reviewed staging branch. The `staging_collection` input
+   calls that branch's workflow with the two staging secrets.
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. The coverage summary needs backend migration
    `20261123100000_discovery_coverage_snapshot.sql` and `EXECUTE` on
@@ -112,10 +113,18 @@ database secret and enable switch are still absent.
    approvals, verified venue records or provider accounting. Keep the target
    separate from the local accounting database.
 3. Run manual `mode=full`, `pilot=true`; inspect source coverage.
-4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging feed. For Supabase, use `sslmode=verify-full` and set `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published database root certificate. Run `pilot=false`, then `mode=refresh`
-   with `pilot=false`. Check stable IDs, timestamps and health without erasing data.
+4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging
+   feed with `sslmode=verify-full`. For Supabase, set
+   `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published root certificate.
+   Select `check-staging` under `staging_collection` to verify TLS and read the feed
+   counts without starting a collection. Select `full`, then `refresh` for the
+   staging writes. Check stable IDs, timestamps and health without erasing data.
 5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
-   secrets. Use **TRENDING_DATABASE_ROOT_CA** when the scheduled target uses its own CA. Scheduled writes use these dedicated settings.
+   secrets with `sslmode=verify-full`. Use **TRENDING_DATABASE_ROOT_CA** when the
+   target uses its own CA. Once the workflow is on `main`, dispatch it with
+   `mode=check-scheduled` while the enable variable is still off. Compare the
+   read-only coverage summary against the intended deployment. Every scheduled
+   run repeats this TLS and feed snapshot check before starting collection.
 6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
    Keep both database secrets separate from the legacy workflow target.
 

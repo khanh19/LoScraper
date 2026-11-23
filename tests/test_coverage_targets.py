@@ -1,7 +1,10 @@
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
+from io import StringIO
 import unittest
+from unittest.mock import patch
 
-from trending.coverage import markdown_coverage, platform, summarize
+from trending.coverage import main, markdown_coverage, platform, summarize
 
 
 def row(identity,reason='eligible',section='weekly',urls=()):
@@ -35,3 +38,19 @@ class CoverageTargets(unittest.TestCase):
         result = markdown_coverage({'hcmc': summarize(rows, 'hcmc')}, now)
         self.assertIn('| hcmc | 26 / 18 | 0 / 7 | 1 | 1 | Below target |', result)
         self.assertNotIn('https://', result)
+
+    def test_preflight_rejects_unverified_tls_before_connecting(self):
+        for sslmode in ('', '?sslmode=require', '?sslmode=verify-ca'):
+            with self.subTest(sslmode=sslmode):
+                output = StringIO()
+                env = {'DATABASE_URL': 'postgresql://test:fixture@db.example/feed' + sslmode}
+                with (patch.dict('os.environ', env, clear=True),
+                      patch('sys.argv', ['coverage', '--require-verified-tls']),
+                      patch('psycopg.connect') as connect,
+                      redirect_stdout(output),
+                      self.assertRaises(SystemExit) as error):
+                    main()
+                self.assertEqual(error.exception.code, 1)
+                self.assertIn('verify_full_required', output.getvalue())
+                self.assertNotIn('fixture', output.getvalue())
+                connect.assert_not_called()
