@@ -168,6 +168,24 @@ were recorded in either run. The staged feed still had 73 eligible items and
 met all six city targets. Both runs ended as partial. Verify the manual Actions
 runs on the reviewed workflow before activating the cadence.
 
+The first GitHub Actions recheck completed in 4m37s with 73 accepted
+observations, three rejections and zero failures. The full rehearsal then
+completed its recheck and accepted 35 candidates in the discovery phase,
+with 101 rejections and zero failures. Both used the dedicated QA database
+and website collection. [Recheck](https://github.com/khanh19/LoScraper/actions/runs/45101943631) ·
+[Full rehearsal](https://github.com/khanh19/LoScraper/actions/runs/45102243085)
+
+Review of the three new Da Nang cards held two pickleball listings. Picklehead's
+visible agenda lists starts omitted from its structured data. Spin City's
+Sunday session is at PICO Pickleball while its Tuesday and Thursday sessions
+are at PapiPoint. The collector compares the visible and structured starts for
+the selected day, and keeps Spin City held until one card can show the correct
+venue for every session. The holds preserve item IDs and verification times.
+The original Ticketbox source confirmed the children's theatre listing. All
+six staging coverage targets still passed after both holds. [Picklehead](https://lifeofdanang.com/vi/danang/picklehead-pickleball) ·
+[Spin City](https://lifeofdanang.com/vi/danang/spin-city-pickleball-social) ·
+[Theatre listing](https://ticketbox.vn/kich-thieu-nhi-vi-nu-cuoi-tre-tho-26824)
+
 A venue review found two Hưng Yên shows that Ticketbox placed under Hanoi or
 Ho Chi Minh City and an online merchandise listing. At that point 68 eligible
 cards remained. Later website imports brought the feed to the counts above.

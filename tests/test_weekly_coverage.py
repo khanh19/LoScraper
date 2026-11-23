@@ -133,6 +133,35 @@ class WeeklyCoverage(unittest.TestCase):
         event['location']['name'] = 'Xưởng Mây, 12 Trần Phú, 16 Lê Duẩn'
         self.assertIn('unverified_street_address', parse().validate(NOW))
 
+    def test_da_nang_visible_session_starts_prevent_an_aggregate_time_window(self):
+        url = 'https://lifeofdanang.com/vi/danang/pickleball'
+        adapter = LifeOfDaNang('lifeofdanang', load_sources()['lifeofdanang'])
+        event = {
+            '@type': 'Event',
+            'name': 'Giao lưu pickleball',
+            'location': {'name': 'Sân Pickleball', 'address': {
+                'streetAddress': '84 Chế Lan Viên', 'addressLocality': 'Da Nang',
+            }},
+            'startDate': '2026-11-09T14:30:00+07:00',
+            'endDate': '2026-11-09T17:30:00+07:00',
+        }
+
+        def parse(agenda, events):
+            html = (f'<main><dl><div><dt>Thời gian</dt><dd><span>Thứ Hai, 9 tháng 11</span>'
+                    f'<span>{agenda}</span></dd></div></dl></main>'
+                    f'<script type="application/ld+json">{json.dumps(events)}</script>')
+            return adapter.parse_many(BeautifulSoup(html, 'html.parser'), url, NOW)[0]
+
+        starts = '14h30, 17h30 và 19h30'
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse(starts, [event]).reasons)
+        next_sessions = [
+            dict(event, startDate=f'2026-11-09T{start}:00+07:00', endDate=f'2026-11-09T{end}:00+07:00')
+            for start, end in [('17:30', '19:15'), ('19:30', '21:00')]
+        ]
+        self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, parse(starts, [event, *next_sessions]).reasons)
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse('14h30, 17h30', [event, *next_sessions]).reasons)
+        self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, parse('14h30 đến 17h30', [event]).reasons)
+
     def test_reviewed_da_nang_event_requires_matching_venue_and_complete_session(self):
         config = load_sources()['lifeofdanang']
         url, review = next(iter(config['reviewed_events'].items()))

@@ -551,6 +551,8 @@ class LifeOfDaNang(Adapter):
         events=[e for e in structured(soup) if is_type(e,'Event')]
         if events and all(e.get('name')==events[0].get('name') and e.get('location')==events[0].get('location') for e in events):
             c.occurrences=[o for e in events if (o:=iso_occurrence(str(e.get('startDate','')),e.get('endDate')))]
+            if self._visible_starts_conflict(soup, c.occurrences):
+                c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
             # Related-event cards in <main> must not supply the primary category
             # or text evidence. Use only this event's structured description.
             c.original_text = str(events[0].get('description') or '')
@@ -573,6 +575,36 @@ class LifeOfDaNang(Adapter):
                 # distinguish a single destination from a citywide listing.
                 c.reasons.append('unverified_street_address')
         return [c]
+
+    @staticmethod
+    def _visible_starts_conflict(soup, occurrences):
+        # The visible "Thời gian" block may list separate starts while JSON-LD
+        # compresses the same day into one window.
+        for label in soup.select('main dt'):
+            if plain(label.get_text(' ', strip=True)) != 'thoi gian':
+                continue
+            agenda = label.find_next_sibling('dd')
+            parts = agenda.find_all('span', recursive=False) if agenda else []
+            if len(parts) < 2:
+                continue
+            day_month = re.search(r'\b(\d{1,2}) thang (\d{1,2})\b', plain(parts[0].get_text(' ', strip=True)))
+            if not day_month:
+                continue
+            labels = re.split(r'\s*(?:,|\bva\b)\s*', plain(parts[1].get_text(' ', strip=True)))
+            starts = [re.fullmatch(r'([01]?\d|2[0-3])(?:h([0-5]\d)?|:([0-5]\d))', text) for text in labels]
+            if len(starts) < 2 or not all(starts):
+                continue
+            day, month = map(int, day_month.groups())
+            visible = {(int(m[1]), int(m[2] or m[3] or '0')) for m in starts}
+            structured_starts = set()
+            for occurrence in occurrences:
+                if occurrence.precision != 'time':
+                    continue
+                local = parse_time(occurrence.starts_at).astimezone(ICT)
+                if (local.day, local.month) == (day, month):
+                    structured_starts.add((local.hour, local.minute))
+            return bool(structured_starts and structured_starts != visible)
+        return False
 
     def enrich(self, c, soup, client, now):
         review = self.config.get('reviewed_events', {}).get(canonical(c.source_url))
