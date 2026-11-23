@@ -42,6 +42,9 @@ def run(args):
     selected = args.sources.split(',') if args.sources else list(CLASSES)
     if any(s not in CLASSES for s in selected):
         raise ValueError('Unknown source')
+    if refresh and not args.sources:
+        # The largest publisher comes last so it cannot consume the whole recheck window.
+        selected.sort(key=lambda slug: slug == 'ticketbox')
     url = os.environ.get('DATABASE_URL')
     if refresh and (not args.write_db or args.providers or args.supplemental or args.pilot):
         raise ValueError('Refresh requires --write-db without providers, supplemental discovery or pilot')
@@ -88,6 +91,45 @@ def run(args):
         for slug, urls in lead_map.items():
             extra[slug] = urls + extra.get(slug, [])
         primaries = []
+
+        def record_candidate(slug, c):
+            city = getattr(c,'city_slug',None)
+            if args.city and city and city != args.city:
+                return
+            try:
+                invalid = c.validate(now)
+                if invalid:
+                    progress.count('rejected',city,invalid,kind=c.kind)
+                    report['rejected'].append({'source':slug,'reasons':invalid,
+                        'sample': {k:c.payload().get(k) for k in
+                            ('source_url','title','city_slug','published_at','verified_at','venue_name','kind')}})
+                    if store and args.write_db and 'event_identity_conflict' not in invalid:
+                        if c.status == 'cancelled':
+                            ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key,
+                                                 confirmed=PUBLISHER_CONFIRMED_CANCELLATION in invalid,
+                                                 kind=c.kind, city=city)
+                            if not ok:
+                                progress.count('failed',city,['cancellation_write_failed'])
+                        elif CONFIRMED_SCHEDULE_CONFLICT in invalid:
+                            ok,_ = progress.call('hold_schedule',c,now)
+                            if not ok:
+                                progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
+                    return
+                payload = c.payload()
+                if store and args.write_db:
+                    ok,result = progress.call('upsert',c,now)
+                    if result in {'identity_conflict','stale_roundup_evidence','stale_observation'}:
+                        progress.count('rejected',city,[result])
+                        return
+                    if not ok:
+                        progress.count('failed',city,['candidate_write_failed'])
+                        return
+                progress.count('accepted',city,kind=c.kind)
+                primaries.append(c)
+                report['accepted'].append(payload)
+            except Exception as exc:
+                progress.count('failed',city,[type(exc).__name__])
+
         for slug in selected:
             config = configs[slug]
             if not config['enabled'] and not args.pilot:
@@ -101,25 +143,30 @@ def run(args):
                 if not ok:
                     progress.fail('source_registration_failed')
             try:
-                metrics = {}
-                known = None
                 if refresh:
                     ok, targets = progress.call('refresh_targets',slug,now,args.city)
                     if not ok: raise RuntimeError('refresh_targets_unavailable')
                     urls = list(dict.fromkeys(t['source_url'] for t in targets))
                     selected_urls = urls[:200]
                     known = {(t['source_url'],t['entry_key']) for t in targets if t['source_url'] in selected_urls}
-                    candidates, failures = collect_source(slug,config,client,now,200,selected_urls,
-                        heartbeat=progress.collection_heartbeat,metrics=metrics,existing_only=True)
-                    candidates = [c for c in candidates if (c.source_url,c.entry_key) in known]
-                    found = {(c.source_url,c.entry_key) for c in candidates}
+                    found = set()
+                    stats.update(existing_entries=len(known),deferred_pages=max(0,len(urls)-200))
+
+                    def recheck_candidate(c):
+                        key = c.source_url, c.entry_key
+                        if key in known:
+                            found.add(key)
+                            record_candidate(slug, c)
+
+                    _, failures = collect_source(slug,config,client,now,200,selected_urls,
+                        heartbeat=progress.collection_heartbeat,metrics=stats,existing_only=True,
+                        on_candidate=recheck_candidate)
+                    candidates = ()
                     if known-found: failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
                     if len(urls)>200: failures.append({'stage':'refresh','reason':'refresh_page_limit'})
-                    metrics.update(existing_entries=len(known),deferred_pages=max(0,len(urls)-200))
                 else:
                     candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
-                                                          heartbeat=progress.collection_heartbeat,metrics=metrics)
-                stats.update(metrics)
+                                                          heartbeat=progress.collection_heartbeat,metrics=stats)
             except Exception as exc:
                 candidates, failures = [], [{'stage':'source','reason':type(exc).__name__}]
             stats['failures'] = failures
@@ -127,42 +174,7 @@ def run(args):
                 progress.fail(failure['reason'])
             progress.heartbeat()
             for c in candidates:
-                city = getattr(c,'city_slug',None)
-                if args.city and city and city != args.city:
-                    continue
-                try:
-                    invalid = c.validate(now)
-                    if invalid:
-                        progress.count('rejected',city,invalid,kind=c.kind)
-                        report['rejected'].append({'source':slug,'reasons':invalid,
-                            'sample': {k:c.payload().get(k) for k in
-                                ('source_url','title','city_slug','published_at','verified_at','venue_name','kind')}})
-                        if store and args.write_db and 'event_identity_conflict' not in invalid:
-                            if c.status == 'cancelled':
-                                ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key,
-                                                     confirmed=PUBLISHER_CONFIRMED_CANCELLATION in invalid,
-                                                     kind=c.kind, city=city)
-                                if not ok:
-                                    progress.count('failed',city,['cancellation_write_failed'])
-                            elif CONFIRMED_SCHEDULE_CONFLICT in invalid:
-                                ok,_ = progress.call('hold_schedule',c,now)
-                                if not ok:
-                                    progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
-                        continue
-                    payload = c.payload()
-                    if store and args.write_db:
-                        ok,result = progress.call('upsert',c,now)
-                        if result in {'identity_conflict','stale_roundup_evidence','stale_observation'}:
-                            progress.count('rejected',city,[result])
-                            continue
-                        if not ok:
-                            progress.count('failed',city,['candidate_write_failed'])
-                            continue
-                    progress.count('accepted',city,kind=c.kind)
-                    primaries.append(c)
-                    report['accepted'].append(payload)
-                except Exception as exc:
-                    progress.count('failed',city,[type(exc).__name__])
+                record_candidate(slug, c)
             progress.finish_source()
             report['sources'][slug] = stats
             print(json.dumps({'source':slug,**{k:stats[k] for k in ('accepted','rejected','failed','status')}}),flush=True)
