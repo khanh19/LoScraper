@@ -1293,6 +1293,92 @@ class YogaLabHanoi(Adapter):
         return candidate
 
 
+class RealityDaNang(Adapter):
+    scheduled = 'https://schema.org/EventScheduled'
+    cancelled = 'https://schema.org/EventCancelled'
+    venue_id = 'https://realitydn.com/#business'
+    event_path = re.compile(r'^/events/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
+
+    @classmethod
+    def venue_matches(cls, event):
+        location = event.get('location')
+        if not isinstance(location, dict) or location.get('@id') != cls.venue_id:
+            return False
+        address = location.get('address')
+        return (isinstance(address, dict) and location.get('name') == 'REALITY'
+                and folded(str(address.get('streetAddress', ''))) == '86 mai thuc lan'
+                and city_from_address(str(address.get('addressLocality', ''))) == 'danang')
+
+    def parse(self, soup, url, now):
+        review = self.config['reviewed_detail_pages'].get(canonical(url), {})
+        c = Candidate(self.slug, self.config['name'], url, review.get('title_vi', ''), 'event',
+                      category='workshop', venue_name='REALITY', address='86 Mai Thúc Lân, Đà Nẵng',
+                      city_slug='danang', verified_at=now.isoformat())
+        if not review:
+            c.reasons.append('unreviewed_reality_series')
+        return c
+
+    def enrich(self, c, soup, client, now):
+        if c.reasons:
+            return c
+        url = canonical(c.source_url)
+        review = self.config['reviewed_detail_pages'][url]
+        series = [item for item in structured(soup) if is_type(item, 'EventSeries') and item.get('url') == url]
+        heading = soup.select_one('h1')
+        if (len(series) != 1 or heading is None or heading.get_text(' ', strip=True) != review['publisher_title']
+                or series[0].get('name') != review['publisher_title'] or not self.venue_matches(series[0])):
+            c.reasons.append('unverified_reality_series')
+            return c
+        # The server streams some dated links outside <main>. Verify that the
+        # whole link set still matches the series and every linked detail page.
+        event_ids = {urljoin(url, a['href']): a.get_text(' ', strip=True)
+                     for a in soup.select('a[href]') if self.event_path.fullmatch(a['href'])}
+        rows = series[0].get('subEvent')
+        if (not isinstance(rows, list) or not 1 <= len(rows) <= 6
+                or not all(isinstance(row, dict) and isinstance(row.get('url'), str) for row in rows)
+                or len(event_ids) != len(rows) or set(event_ids) != {row['url'] for row in rows}):
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+        occurrences = []
+        for row in rows:
+            link = row['url']
+            detail_page = client.get(link, self.hosts)
+            details = [item for item in structured(detail_page) if is_type(item, 'Event') and item.get('url') == link]
+            row_status = row.get('eventStatus')
+            if (len(details) != 1 or not is_type(row, 'Event') or row.get('name') != review['publisher_title']
+                    or details[0].get('name') != row.get('name') or not self.venue_matches(row)
+                    or not self.venue_matches(details[0]) or row_status not in {self.scheduled, self.cancelled}
+                    or details[0].get('eventStatus') != row_status
+                    or not isinstance(details[0].get('superEvent'), dict)
+                    or details[0]['superEvent'].get('url') != url):
+                c.reasons.append('unresolved_individual_sessions')
+                return c
+            if row_status == self.cancelled:
+                continue
+            timestamps = [str(item.get(key, '')) for item in (row, details[0]) for key in ('startDate', 'endDate')]
+            shown = re.search(r'\b(\d{1,2})\.(\d{1,2})\s*·\s*(\d{1,2}:\d{2})\b', event_ids[link])
+            if shown is None or not all(re.search(r'(?:Z|[+-]\d{2}:\d{2})$', t) for t in timestamps):
+                c.reasons.append('unresolved_individual_sessions')
+                return c
+            start, end, detail_start, detail_end = map(parse_time, timestamps)
+            if not all((start, end, detail_start, detail_end)) or end <= start or detail_end <= detail_start:
+                c.reasons.append('unresolved_individual_sessions')
+                return c
+            local = start.astimezone(ICT)
+            if ((start, end) != (detail_start, detail_end)
+                    or (int(shown[1]), int(shown[2]), shown[3].zfill(5)) != (local.day, local.month, local.strftime('%H:%M'))):
+                c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+                return c
+            occurrences.append(Occurrence(start.isoformat(), end.isoformat()))
+        c.occurrences = occurrences
+        if not occurrences:
+            c.status = 'cancelled'
+            c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
+        c.location_evidence = review['venue_url']
+        c.original_text = str(series[0].get('description') or review['publisher_title'])
+        return c
+
+
 class Vio(Adapter):
     link_pattern = r'^/vi-vn/event/[^/]+$'
     hours_pattern = r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})'
@@ -1420,7 +1506,8 @@ CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticke
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang,
            "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer,
            "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage,
-           "hanoiyouththeatre": HanoiYouthTheatre, "yogalabhanoi": YogaLabHanoi, "vio": Vio}
+           "hanoiyouththeatre": HanoiYouthTheatre, "yogalabhanoi": YogaLabHanoi,
+           "realitydanang": RealityDaNang, "vio": Vio}
 
 
 def load_sources():

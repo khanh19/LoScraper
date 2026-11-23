@@ -201,6 +201,19 @@
       "booking_address": "address level 5 no 19 21 yen ninh alley turn right from no 23 yen ninh ba dinh"
     }
   },
+  "realitydanang": {
+    "name": "REALITY Đà Nẵng",
+    "seeds": [],
+    "hosts": ["app.realitydn.com", "realitydn.com"],
+    "enabled": true,
+    "reviewed_detail_pages": {
+      "https://app.realitydn.com/series/da-nang-vibe-coding-x-ai-buildathon": {
+        "publisher_title": "DA NANG VIBE CODING X AI BUILDATHON",
+        "title_vi": "Workshop Vibe Coding × AI Buildathon",
+        "venue_url": "https://realitydn.com/vn/"
+      }
+    }
+  },
   "vio": {
     "name": "Vio",
     "seeds": [],

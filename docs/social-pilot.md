@@ -565,3 +565,23 @@ and the run left two more attribution checks deferred under the read limit.
 The Hanoi website scan was partial. All three city checks used zero metered
 requests and published zero cards.
 [New Phương Đông post](https://www.instagram.com/p/Df_4KPoGvG9/) · [Bếp Hên post](https://www.instagram.com/p/Df6vOXfmjhg/) · [PRIME Pilates post](https://www.instagram.com/p/Df4YX_jmqEb/) · [PRIME venue](https://primepilates.vn/)
+
+### November 24 · Three-city event check
+
+Public profile metadata supplied exact publication times. The original post
+previews confirmed each author and reported the engagement counts below.
+Local times are Vietnam time. A single snapshot supplies no growth signal.
+
+| City | Original post and publication | Likes / comments | Confirmed outing |
+| --- | --- | ---: | --- |
+| Hà Nội | [Yoga Lab Hanoi](https://www.instagram.com/p/DgEXUf7hYR5/) · 23 Nov 10:00 | 6 / 0 | [Detox Your Posture](https://www.yogalabhanoi.com/vi/events), 29 Nov 10:00–11:30 at 19–21 ngõ Yên Ninh, Ba Đình. |
+| TP.HCM | [Discover:Saigon arts roundup](https://www.instagram.com/p/Df7Dl-OILZM/) · 19 Nov 19:14 | 3 / 0 | [Mạch Thổ](https://quangsan.museum/su-kien/) at Quang San Art Museum, 189B/3 Nguyễn Văn Hưởng, Phường An Khánh, through 29 Nov. The counts belong to the roundup as a whole. |
+| Đà Nẵng | [REALITY Đà Nẵng](https://www.instagram.com/p/DgEl9LqI6AH/) · 23 Nov 12:07 | 5 / 0 | [Vibe Coding × AI Buildathon](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) at [86 Mai Thúc Lân](https://realitydn.com/vn/). Four timed sessions remain on 26 Nov and 3, 10, and 17 Dec, 11:00–13:00. |
+
+The REALITY website adapter uses the organizer's series and checks each
+session page for matching identity, venue, status, start, and end. The series
+groups the session links under one stable URL. Its title is in Vietnamese in
+Discover. The Instagram posts remain review evidence and do not add a second
+publisher count for the same organizer. Public TikTok searches included these
+and other current events but did not return a verifiable original video. No
+metered provider requests or social publication were made in this check.
