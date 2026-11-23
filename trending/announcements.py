@@ -1,6 +1,7 @@
 """Conservative text-only organizer announcements; never infer facts from media."""
 from datetime import datetime, timedelta
 import re
+from unicodedata import normalize
 from .dates import plain
 from .model import Candidate, Occurrence, ICT, folded, parse_time, city_from_address
 from .providers import post_platform
@@ -9,7 +10,15 @@ from .providers import post_platform
 def social_sessions(text, published_at):
     published=parse_time(published_at)
     if not published:return [],'unknown_publication_time'
-    published=published.astimezone(ICT);value=plain(text)
+    published=published.astimezone(ICT)
+    value=plain(normalize('NFKC', text))
+    # Dotted dates are explicit too. Do not resolve an omitted or two-digit
+    # year by moving the announcement to the next occurrence of its weekday.
+    value=re.sub(
+        r'(?<![\d./])(0?[1-9]|[12]\d|3[01])\.(0?[1-9]|1[0-2])(?:\.(20\d{2}|\d{2}))?(?!\d|[./]\d)',
+        lambda date: f'{date[1]}/{date[2]}' + (f'/{date[3]}' if date[3] and len(date[3]) == 4 else ''),
+        value,
+    )
     if re.search(r'\b(recap|da dien ra|nhin lai|throwback)\b',value):return [],'past_recap'
     # Explicit dates override relative language; never assume a missing year.
     dates=[]

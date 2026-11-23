@@ -1,12 +1,13 @@
 """Discovery triage, not publication approval or demographic inference."""
 import re
+from unicodedata import normalize
 from .model import folded
 
-ACTIVITY_TERMS=('photobooth','workshop','trien lam','le hoi','caphe','ca phe','cafe','quan an','nha hang','cho phien','pop up','tha dieu','concert','nhac song','di bo','su kien','3d mapping')
+ACTIVITY_TERMS=('photobooth','workshop','trien lam','le hoi','caphe','ca phe','cafe','quan an','nha hang','cho phien','pop up','tha dieu','concert','nhac song','di bo','su kien','3d mapping','lop yoga','special class')
 WEATHER_TERMS=('thoi tiet','du bao','mua to','mua lanh','gio manh','weather')
 
 def triage(text):
-    text=folded(text or '')
+    text=folded(normalize('NFKC', text or ''))
     activity=any(t in text for t in ACTIVITY_TERMS)
     weather=any(t in text for t in WEATHER_TERMS)
     # Mixed posts remain leads; never blacklist an entire publisher by topic.

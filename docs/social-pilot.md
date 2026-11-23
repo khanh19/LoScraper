@@ -290,6 +290,13 @@ was absent from this cluster. No new provider request or feed import was made.
 
 ### November 24 provider and organizer recheck
 
+Social triage recognizes styled Unicode activity headings. The organizer
+schedule parser reads dotted dates such as `29.11.2026`. A dotted date
+without a four-digit year stays unresolved even when the caption names a
+weekday. The Yoga Lab post was recognized as an activity lead and held for
+its missing event year. The staging card uses the organizer website's
+reviewed schedule. [Original Instagram post](https://www.instagram.com/p/DgEXUf7hYR5/)
+
 The original Bright Data and SerpAPI ledger remains unavailable. The separate
 multimodal ledger was audited from a local PostgreSQL copy with read-only
 transactions. Apify's account API reported the Free plan, a $5 monthly credit

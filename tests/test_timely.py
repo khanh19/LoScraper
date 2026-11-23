@@ -102,3 +102,20 @@ class Timely(unittest.TestCase):
         self.assertEqual(post['url'], 'https://www.instagram.com/reel/example')
         self.assertIsNone(post['published_at'])
         self.assertEqual(result['provider_requests'], 0)
+class DottedSocialDateTests(unittest.TestCase):
+    def test_dotted_without_full_year_cannot_fall_back_to_weekday(self):
+        published = '2026-11-23T03:00:04+00:00'
+        for date in ('29.11', '6.12', '06.12.26'):
+            with self.subTest(date=date):
+                self.assertEqual(
+                    social_sessions(f'Chủ Nhật, {date} | 10:00 – 11:30', published),
+                    ([], 'missing_event_year'),
+                )
+
+    def test_full_dotted_date_preserves_the_original_session_day(self):
+        sessions, reason = social_sessions(
+            'Chủ Nhật, 𝟎𝟔.𝟏𝟐.𝟐𝟎𝟐𝟔 | 14:00 – 15:30', '2026-11-23T03:00:04+00:00')
+        self.assertIsNone(reason)
+        self.assertEqual([(slot.starts_at, slot.ends_at) for slot in sessions], [
+            ('2026-12-06T14:00:00+07:00', '2026-12-06T15:30:00+07:00'),
+        ])
