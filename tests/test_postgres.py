@@ -565,8 +565,11 @@ class Persistence(unittest.TestCase):
         failed=execute([], [{'stage':'detail','reason':'http_503'}])
         self.assertNotEqual(failed['status'],'complete')
         self.assertEqual(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
-        success=execute([fresh,sibling],[])
-        self.assertEqual(success['sources']['ticketbox']['accepted'],1)
+        incomplete = copy.deepcopy(fresh)
+        incomplete.reasons.append('unresolved_individual_sessions')
+        success = execute([incomplete, copy.deepcopy(incomplete), fresh, copy.deepcopy(fresh), sibling], [])
+        stats = success['sources']['ticketbox']
+        self.assertEqual((stats['accepted'], stats['rejected'], stats['failed']), (1, 1, 0))
         self.assertEqual(self.store.db.execute('SELECT count(*) AS n FROM discovery_observations').fetchone()['n'],1)
         self.assertGreater(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
 

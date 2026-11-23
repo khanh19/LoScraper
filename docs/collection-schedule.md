@@ -31,6 +31,8 @@ Failures or disappeared entries retain old observations and verification time;
 missing evidence is not cancellation. Confirmed cancellations use the existing
 cancellation path. Whole-event conflicts and seven-day verification expiry still apply.
 The existing receipts/health command report failures and interrupted work.
+Identical evidence reached through both a catalogue and a legacy link counts
+once per recheck. Distinct evidence for the same observation is still evaluated.
 
 Each source checks at most 200 distinct pages, oldest verification first. Exceeding
 that bound produces `refresh_page_limit` and a deferred-page count, not a false

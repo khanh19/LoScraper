@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from dataclasses import asdict
 from datetime import datetime, timezone
 import json
 import os
@@ -149,22 +150,28 @@ def run(args):
                     urls = list(dict.fromkeys(t['source_url'] for t in targets))
                     selected_urls = urls[:200]
                     known = {(t['source_url'],t['entry_key']) for t in targets if t['source_url'] in selected_urls}
-                    found = set()
+                    rechecked = {}
                     stats.update(existing_entries=len(known),deferred_pages=max(0,len(urls)-200))
 
                     def recheck_candidate(c):
                         key = c.source_url, c.entry_key
                         if key not in known and c.replaces_source_url:
                             key = c.replaces_source_url, ''
-                        if key in known:
-                            found.add(key)
+                        if key not in known:
+                            return
+                        # The catalogue and a legacy link can yield the same evidence.
+                        evidence = asdict(c)
+                        seen = rechecked.setdefault(key, [])
+                        if evidence not in seen:
+                            seen.append(evidence)
                             record_candidate(slug, c)
 
                     _, failures = collect_source(slug,config,client,now,200,selected_urls,
                         heartbeat=progress.collection_heartbeat,metrics=stats,existing_only=True,
                         on_candidate=recheck_candidate)
                     candidates = ()
-                    if known-found: failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
+                    if known - rechecked.keys():
+                        failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
                     if len(urls)>200: failures.append({'stage':'refresh','reason':'refresh_page_limit'})
                 else:
                     candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
