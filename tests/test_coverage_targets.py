@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
 import unittest
-from trending.coverage import summarize,platform
+
+from trending.coverage import markdown_coverage, platform, summarize
 
 
 def row(identity,reason='eligible',section='weekly',urls=()):
@@ -23,3 +25,13 @@ class CoverageTargets(unittest.TestCase):
         self.assertTrue(summarize(balanced,'hcmc')['target_met'])
         self.assertEqual(summarize(balanced,'hcmc')['section_shortfalls'],{'weekly':0,'planning':0})
         self.assertEqual(platform('https://instagram.com.evil.example/p/a'),'web')
+
+    def test_summary_reports_section_shortfalls_without_source_urls(self):
+        now = datetime(2026, 11, 23, tzinfo=timezone.utc)
+        rows = [row(str(i)) for i in range(25)] + [
+            row('fresh', urls=['https://instagram.com/p/a', 'https://tiktok.com/@a/video/1']),
+            row('held', 'unverified', 'planning', ['https://instagram.com/p/private-preview']),
+        ]
+        result = markdown_coverage({'hcmc': summarize(rows, 'hcmc')}, now)
+        self.assertIn('| hcmc | 26 / 18 | 0 / 7 | 1 | 1 | Below target |', result)
+        self.assertNotIn('https://', result)

@@ -109,6 +109,7 @@ jobs:
             printf '%s\n' "$database_root_ca" > "$database_ca_path"
             export PGSSLROOTCERT="$database_ca_path"
           fi
+          collection_status=0
           if [ "$MODE" = "refresh" ]; then
             if [ "$INPUT_PILOT" = "true" ]; then
               echo "Existing-item checks require pilot=false" >&2
@@ -116,7 +117,7 @@ jobs:
             fi
             args=(--browser --write-db --refresh-existing)
             if [ -n "$INPUT_CITY" ] && [ "$INPUT_CITY" != "all" ]; then args+=(--city "$INPUT_CITY"); fi
-            python -m trending "${args[@]}"
+            python -m trending "${args[@]}" || collection_status=$?
           else
             # Full updates also recheck existing entries, so verification runs daily.
             refresh_status=0
@@ -128,9 +129,13 @@ jobs:
             args=(--browser --supplemental --limit 20)
             if [ -n "$INPUT_CITY" ] && [ "$INPUT_CITY" != "all" ]; then args+=(--city "$INPUT_CITY"); fi
             if [ "$INPUT_PILOT" = "true" ]; then args+=(--pilot); else args+=(--write-db); fi
-            discovery_status=0
-            python -m trending "${args[@]}" || discovery_status=$?
-            if [ "$discovery_status" -ne 0 ]; then exit "$discovery_status"; fi
-            exit "$refresh_status"
+            python -m trending "${args[@]}" || collection_status=$?
+            if [ "$collection_status" -eq 0 ]; then collection_status="$refresh_status"; fi
           fi
+          coverage_status=0
+          if [ "$INPUT_PILOT" != "true" ]; then
+            python -m trending.coverage >> "$GITHUB_STEP_SUMMARY" || coverage_status=$?
+          fi
+          if [ "$collection_status" -ne 0 ]; then exit "$collection_status"; fi
+          exit "$coverage_status"
       # No raw scrape artifacts or media uploads; receipts live in Postgres.

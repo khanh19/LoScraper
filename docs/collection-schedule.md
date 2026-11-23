@@ -95,6 +95,11 @@ evidence cannot overwrite the current status. [Notification collector PR](https:
 
 ## Activation checklist — not yet active
 
+The November 23 check found that `main` still contains only the legacy scraper
+workflow. The reviewed schedule and its two staging rehearsals are in the
+open PR stack. The repository has the staging database secrets. The scheduled
+database secret and enable switch are still absent.
+
 1. Review PR #6 with its parent stack. Before it reaches `main`, dispatch
    **Scraper CI** on the reviewed staging branch and select `full` or `refresh`
    for `staging_collection`. That job calls the branch's collection workflow
@@ -110,6 +115,18 @@ evidence cannot overwrite the current status. [Notification collector PR](https:
    Keep both database secrets separate from the legacy workflow target.
 
 To pause, set the variable false or disable the workflow. No raw payload uploads.
+After a collection command exits, its Actions summary shows the weekly and
+planning results for each city and the counts of eligible cards with Instagram
+or TikTok evidence. It uses the collection database and a single read-only feed
+snapshot. Targets are goals for coverage. A shortfall stays visible and does not
+loosen eligibility or change the collection exit status. A missing coverage
+report fails an otherwise successful run. The same check can be used with the
+database connection already configured in the operator terminal.
+
+```sh
+python -m trending.coverage
+```
+
 Provider/social automation is still gated: this cadence covers website adapters.
 Website-only runs can use a scoped database role without access to provider jobs.
 It does not make TikTok/Instagram posts verified, renew social evidence, or run
@@ -126,7 +143,7 @@ point-in-time feed with expiring evidence.
 | --- | ---: | ---: |
 | Hanoi | 16 / 14 | 8 / 7 |
 | Ho Chi Minh City | 19 / 18 | 12 / 7 |
-| Da Nang | 13 / 12 | 5 / 5 |
+| Da Nang | 14 / 12 | 5 / 5 |
 
 An earlier daily staging recheck processed 71 existing observations from six
 publishers in 10 minutes and 23 seconds. It completed with zero fetch or write
@@ -138,9 +155,9 @@ that run, so the 42-minute result is a poor baseline for a hosted runner.
 A subsequent manual recheck ended at a 25-minute cutoff after 9 accepted and
 3 rejected candidates and 4 fetch or extraction failures. Vietnam Nightlife
 finished partially and Ticketbox was still processing. The parent receipt
-recorded a failed run and the feed evaluator still returned the 73 cards above.
-These runs used website collection only. A clean manual full run and recheck in
-GitHub Actions are still required before enabling the schedule.
+recorded a failed run and the feed evaluator still returned 73 cards. These runs
+used website collection only. The later hosted rehearsals below completed the
+manual recheck and full-run gates.
 
 The next all-source staging recheck with batched session writes accepted 51
 candidates before the 25-minute cutoff. It rejected three candidates and recorded
@@ -165,8 +182,7 @@ publishers accepted 25 candidates that matched existing item IDs. The run
 rejected 90 candidates and recorded two Hanoi Grapevine listing failures. That
 publisher was the only failed source. No database errors or metered requests
 were recorded in either run. The staged feed still had 73 eligible items and
-met all six city targets. Both runs ended as partial. Verify the manual Actions
-runs on the reviewed workflow before activating the cadence.
+met all six city targets. Both runs ended as partial.
 
 The first GitHub Actions recheck completed in 4m37s with 73 accepted
 observations, three rejections and zero failures. The full rehearsal then
@@ -186,6 +202,13 @@ six staging coverage targets still passed after both holds. [Picklehead](https:/
 [Spin City](https://lifeofdanang.com/vi/danang/spin-city-pickleball-social) ·
 [Theatre listing](https://ticketbox.vn/kich-thieu-nhi-vi-nu-cuoi-tre-tho-26824)
 
+The next hosted full run accepted 33 candidates, rejected 104 during validation,
+and recorded zero collection or write failures. The public API still withheld
+both held listings and served the children's theatre detail. The same isolated
+environment served the verified DẾ GARDEN workshop from a signed-in reminder on
+a physical iPhone. [Corrected full rehearsal](https://github.com/khanh19/LoScraper/actions/runs/45104600109) ·
+[Device rehearsal](https://github.com/khanh19/LoApp/blob/db299b3/docs/design/notifications/README.md#hosted-release-rehearsal)
+
 A venue review found two Hưng Yên shows that Ticketbox placed under Hanoi or
 Ho Chi Minh City and an online merchandise listing. At that point 68 eligible
 cards remained. Later website imports brought the feed to the counts above.
@@ -204,6 +227,4 @@ were still HTTP 404. The daily recheck continues to use stored event URLs.
 
 The manual Furama run imported one eligible event without a failed fetch or
 provider usage. Controlled tests cover matching dates and times, competing
-sessions, missing address evidence, and venue ambiguity. Hosted app validation
-requires the staging deployment to include the release branch. Scheduling remains
-disabled.
+sessions, missing address evidence, and venue ambiguity. Scheduling remains disabled.
