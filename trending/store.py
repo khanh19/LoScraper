@@ -71,10 +71,20 @@ class Store:
         p = c.payload()
         with self.db.transaction():
             self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
-            known = self.db.execute("""SELECT o.item_id,i.kind,i.city_slug,o.published_at,o.verified_at,o.schedule_held_at
+            known = self.db.execute("""SELECT o.id,o.item_id,i.kind,i.city_slug,i.fingerprint,o.published_at,o.verified_at,o.schedule_held_at
                 FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id
                 WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",
                                     (c.source_slug,c.source_url,c.entry_key)).fetchone()
+            moving = False
+            if not known and c.replaces_source_url and c.kind == 'event' and c.platform == 'web':
+                known = self.db.execute("""SELECT o.id,o.item_id,i.kind,i.city_slug,i.fingerprint,
+                    o.published_at,o.verified_at,o.schedule_held_at
+                    FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id
+                    WHERE source_slug=%s AND source_url=%s AND entry_key=''""",
+                                        (c.source_slug,c.replaces_source_url)).fetchone()
+                moving = known is not None
+                if moving and known['fingerprint'] != p['fingerprint']:
+                    raise ValueError('identity_conflict')
             if known and (known['kind'] != c.kind or known['city_slug'] != c.city_slug):
                 raise ValueError('identity_conflict')
             if known:
@@ -89,6 +99,9 @@ class Store:
                     c = replace(c,published_at=known['published_at'].isoformat())
                     if c.validate(now):
                         raise ValueError('stale_roundup_evidence')
+            if moving:
+                self.db.execute("""UPDATE discovery_observations SET source_url=%s,entry_key=%s
+                    WHERE id=%s""", (c.source_url,c.entry_key,known['id']))
             existing = known or self.db.execute("SELECT id AS item_id FROM discovery_items WHERE fingerprint=%s",(p['fingerprint'],)).fetchone()
             # Only match an existing place when name AND address AND city agree.
             places = self.db.execute("""SELECT p.id FROM places p JOIN cities c ON c.id=p.city_id

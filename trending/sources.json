@@ -121,7 +121,19 @@
     "hosts": [
       "hoguomopera.vn"
     ],
-    "enabled": true
+    "enabled": true,
+    "reviewed_programs": {
+      "st-petersburg-night-2088": {
+        "address": "40 Hàng Bài, Cửa Nam, Hà Nội",
+        "sessions": 2,
+        "category": "music"
+      },
+      "ballet-cuba-don-quixote-2099": {
+        "address": "40 Hàng Bài, phường Cửa Nam, Hà Nội",
+        "sessions": 2,
+        "category": "culture"
+      }
+    }
   },
   "saigoneer": {
     "name": "Saigoneer",

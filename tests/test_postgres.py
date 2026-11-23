@@ -79,6 +79,29 @@ class Persistence(unittest.TestCase):
         self.assertEqual(len(self.feed()),1)
         self.assertEqual(len(self.feed()[0]['sources']),2)
 
+    def test_relocated_program_preserves_the_original_observation_and_item(self):
+        original = candidate()
+        item_id = self.store.upsert(original, NOW)
+        observation_id = self.store.db.execute('SELECT id FROM discovery_observations').fetchone()['id']
+        updated = copy.deepcopy(original)
+        updated.replaces_source_url = original.source_url
+        updated.source_url = 'https://ticketbox.vn/programs'
+        updated.entry_key = 'program-2088'
+        updated.verified_at = (NOW + timedelta(minutes=1)).isoformat()
+
+        substituted = copy.deepcopy(updated)
+        substituted.title = 'Một chương trình khác'
+        with self.assertRaisesRegex(ValueError, 'identity_conflict'):
+            self.store.upsert(substituted, NOW)
+        self.assertEqual(self.store.refresh_targets('ticketbox', NOW)[0]['source_url'], original.source_url)
+
+        self.assertEqual(self.store.upsert(updated, NOW), item_id)
+        self.assertEqual(self.store.upsert(updated, NOW), item_id)
+        observed = self.store.db.execute('SELECT id,source_url,entry_key FROM discovery_observations').fetchall()
+        self.assertEqual(observed, [{'id': observation_id, 'source_url': updated.source_url,
+                                     'entry_key': updated.entry_key}])
+        self.assertEqual(self.feed(NOW + timedelta(minutes=1))[0]['sources'][0]['url'], updated.source_url)
+
     def test_coverage_snapshot_counts_eligible_items_by_section_and_platform(self):
         now = self.store.db.execute('SELECT statement_timestamp() AS now').fetchone()['now']
         weekly = candidate()

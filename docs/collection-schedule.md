@@ -75,9 +75,17 @@ On November 23, the Hồ Gươm Opera catalogue returned 200 while three linked
 performance pages returned 404. The catalogue showed two complete slots for
 St. Petersburg Night and Don Quixote, but only one timed slot for the gala's
 two announced dates. The failed detail fetches left those observations at their
-previous verification times. Recheck the complete event page and user-facing
-source link before renewing an observation. [Publisher catalogue](https://hoguomopera.vn/chuong-trinh-bieu-dien?page=1) ·
+previous verification times. [Publisher catalogue](https://hoguomopera.vn/chuong-trinh-bieu-dien?page=1) ·
 [Staging recheck](https://github.com/khanh19/LoScraper/actions/runs/45219666848)
+
+For reviewed programs, the collector can now recover a missing detail page
+through the publisher's catalogue. It matches every visible local-time slot to
+the program ID and its own booking page, checks the theatre address, and updates
+the existing observation and card IDs. The app opens the reachable programme
+catalogue. An incomplete or inconsistent slot set never renews verification.
+The gala remains outside this fallback while its second slot is unresolved.
+[St. Petersburg booking](https://hoguomopera.vn/dat-ve/127) ·
+[Don Quixote booking](https://hoguomopera.vn/dat-ve/131)
 
 Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
 Market publications disagree on the start day and opening hour. Pullman's official

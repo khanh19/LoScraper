@@ -760,6 +760,131 @@ class HoGuomOpera(Adapter):
     content_selector = '.ck-content'
     link_pattern = r'^/chuong-trinh-bieu-dien/[^/]+-\d+$'
 
+    def fetch(self, client, url):
+        try:
+            return super().fetch(client, url)
+        except FetchError as exc:
+            program = urlsplit(url).path.rsplit('/', 1)[-1]
+            if str(exc) != 'http_404' or program not in self.config.get('reviewed_programs', {}):
+                raise
+            return client.get(self.config['seeds'][0], self.hosts)
+
+    @staticmethod
+    def _page_data(soup):
+        node = soup.find('script', id='__NEXT_DATA__')
+        try:
+            data = json.loads(node.string)['props']['pageProps']['data'] if node else {}
+        except (KeyError, TypeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def parse_many(self, soup, url, now):
+        catalogue = self.config['seeds'][0]
+        programs = self.config.get('reviewed_programs', {})
+        selected = urlsplit(url).path.rsplit('/', 1)[-1]
+        if url != catalogue and (selected not in programs or soup.select_one(self.content_selector)):
+            return super().parse_many(soup, url, now)
+        entries = self._page_data(soup).get('items')
+        if not isinstance(entries, list):
+            return super().parse_many(soup, url, now)
+        candidates = []
+        for program, review in programs.items():
+            if url != catalogue and program != selected:
+                continue
+            rows = [row for row in entries if isinstance(row, dict) and row.get('slug') == program]
+            if len(rows) != 1 or rows[0].get('isShow') is not True:
+                continue
+            row = rows[0]
+            article_id = int(program.rsplit('-', 1)[1])
+            if row.get('articleId') != article_id or not isinstance(row.get('name'), str):
+                continue
+            old_url = urljoin(catalogue, f'/chuong-trinh-bieu-dien/{program}')
+            candidates.append(Candidate(
+                self.slug, self.config['name'], catalogue, row['name'].strip(), 'event',
+                city_slug='hanoi', venue_name='Nhà hát Hồ Gươm', address=review['address'],
+                category=review['category'], original_text=str(row.get('shortDescription') or ''),
+                verified_at=now.isoformat(), entry_key=f'program-{article_id}',
+                evidence_locator=program, replaces_source_url=old_url,
+            ))
+        return candidates
+
+    def enrich(self, candidate, soup, client, now):
+        if not candidate.replaces_source_url:
+            return candidate
+        review = self.config['reviewed_programs'][candidate.evidence_locator]
+        rows = self._page_data(soup)['items']
+        row = next(entry for entry in rows if isinstance(entry, dict)
+                   and entry.get('slug') == candidate.evidence_locator)
+        slots = row.get('showSches')
+        visible = self._visible_slots(soup, candidate)
+        count = review['sessions']
+        if (not isinstance(slots, list) or len(slots) != count or len(visible) != count
+                or re.search(r'\b(?:da huy|hoan lich|hoan chuong trinh|cancelled|postponed)\b',
+                             folded(candidate.original_text))):
+            candidate.reasons.append('unresolved_individual_sessions')
+            return candidate
+        article_id = row['articleId']
+        confirmed = {}
+        for slot in slots:
+            if not isinstance(slot, dict) or type(slot.get('showId')) is not int or slot.get('articleId') != article_id:
+                break
+            show_id = slot['showId']
+            booking_url = urljoin(candidate.source_url, f'/dat-ve/{show_id}')
+            booking = client.get(booking_url, self.hosts)
+            record = self._page_data(booking)
+            article = record.get('article')
+            clock = slot.get('startTime'), slot.get('endTime')
+            # This publisher serializes its local wall times with a Z suffix.
+            # Interpret it only when the visible timetable independently agrees.
+            if (clock not in visible or clock in confirmed or record.get('id') != show_id
+                    or not isinstance(article, dict) or article.get('id') != article_id
+                    or record.get('isAvailFS') is not True or slot.get('isAvailFS') is not True
+                    or not isinstance(record.get('articleName'), str)
+                    or folded(record['articleName']) != folded(candidate.title)
+                    or (record.get('startTime'), record.get('endTime')) != clock):
+                break
+            if not booking.find(string=lambda text: text and re.fullmatch(
+                    r'dia chi 40 hang bai phuong cua nam tp ha noi', folded(text))):
+                break
+            confirmed[clock] = booking_url
+        if len(confirmed) != count:
+            candidate.reasons.append('unresolved_individual_sessions')
+            return candidate
+        candidate.occurrences = sorted(visible.values(), key=lambda session: session.starts_at)
+        candidate.location_evidence = next(iter(confirmed.values()))
+        return candidate
+
+    @staticmethod
+    def _visible_slots(soup, candidate):
+        path = urlsplit(candidate.replaces_source_url).path
+        titles = [link for link in soup.find_all('a', href=path)
+                  if folded(link.get_text(' ', strip=True)) == folded(candidate.title)]
+        if len(titles) != 1:
+            return {}
+        for block in titles[0].parents:
+            paths = {link['href'] for link in block.select('a[href]')}
+            if paths - {path}:
+                return {}
+            if not block.select_one('img[alt="calendar"]'):
+                continue
+            slots = {}
+            for line in block.select('p'):
+                match = re.fullmatch(r'(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2}),\s*(\d{2}/\d{2}/20\d{2})',
+                                     line.get_text(' ', strip=True))
+                if not match:
+                    continue
+                try:
+                    start, end = (datetime.strptime(f'{match[3]} {clock}', '%d/%m/%Y %H:%M').replace(tzinfo=ICT)
+                                  for clock in (match[1], match[2]))
+                except ValueError:
+                    return {}
+                key = tuple(t.strftime('%Y-%m-%dT%H:%M:%SZ') for t in (start, end))
+                if key in slots or end <= start:
+                    return {}
+                slots[key] = iso_occurrence(start.isoformat(), end.isoformat())
+            return slots
+        return {}
+
     def parse(self, soup, url, now):
         candidate = super().parse(soup, url, now)
         body = soup.select_one(self.content_selector)

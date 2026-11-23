@@ -98,6 +98,7 @@ class Candidate:
     image_permission: dict | None = None
     entry_key: str = ""
     evidence_locator: str = ""
+    replaces_source_url: str = ""
 
     def validate(self, now: datetime) -> list[str]:
         reasons = list(self.reasons)

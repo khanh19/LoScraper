@@ -105,6 +105,59 @@ class WeeklyCoverage(unittest.TestCase):
         candidate = adapter.parse(BeautifulSoup(conflict, 'html.parser'), url, NOW)
         self.assertIn('unresolved_individual_sessions', candidate.validate(NOW))
 
+    def test_opera_rechecks_each_visible_slot_against_its_booking(self):
+        adapter = HoGuomOpera('hoguomopera', load_sources()['hoguomopera'])
+        legacy = 'https://hoguomopera.vn/chuong-trinh-bieu-dien/st-petersburg-night-2088'
+        path = '/chuong-trinh-bieu-dien/st-petersburg-night-2088'
+        title = 'ST PETERSBURG NIGHT'
+
+        def page(data, body=''):
+            node = {'props': {'pageProps': {'data': data}}}
+            return BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(node)}</script>{body}', 'html.parser')
+
+        slots = [
+            {'showId': show, 'articleId': 2088, 'isAvailFS': True,
+             'startTime': f'2026-11-{day}T20:00:00Z', 'endTime': f'2026-11-{day}T23:00:00Z'}
+            for show, day in [(126, 14), (127, 15)]
+        ]
+        programme = {'slug': 'st-petersburg-night-2088', 'articleId': 2088, 'isShow': True,
+                     'name': title, 'shortDescription': 'Hai đêm hòa nhạc', 'showSches': slots}
+        catalogue = page({'items': [programme]}, f'''
+          <div><section><a href="{path}">{title}</a>
+          <img alt="calendar"><p>20:00 - 23:00, 14/11/2026</p>
+          <img alt="calendar"><p>20:00 - 23:00, 15/11/2026</p></section>
+          <section><a href="/adjacent">Chương trình khác</a><p>20:00 - 23:00, 16/11/2026</p></section></div>
+        ''')
+
+        class Client:
+            def __init__(self, wrong_article=False):
+                self.wrong_article = wrong_article
+
+            def get(self, url, hosts, **kwargs):
+                if url == legacy:
+                    raise FetchError('http_404')
+                if url == adapter.config['seeds'][0]:
+                    return catalogue
+                slot = next(slot for slot in slots if url.endswith(f'/dat-ve/{slot["showId"]}'))
+                article_id = 2099 if self.wrong_article and slot['showId'] == 127 else 2088
+                return page({
+                    'id': slot['showId'], 'article': {'id': article_id}, 'articleName': title,
+                    'isAvailFS': True, 'startTime': slot['startTime'], 'endTime': slot['endTime'],
+                }, '<span>Địa chỉ: 40 Hàng Bài, Phường Cửa Nam, TP. Hà Nội</span>')
+
+        client = Client()
+        candidate, = adapter.parse_many(adapter.fetch(client, legacy), legacy, NOW)
+        adapter.enrich(candidate, catalogue, client, NOW)
+        self.assertEqual(candidate.validate(NOW), [])
+        self.assertEqual(candidate.entry_key, 'program-2088')
+        self.assertEqual(candidate.replaces_source_url, legacy)
+        self.assertEqual([s.starts_at for s in candidate.occurrences],
+                         ['2026-11-14T20:00:00+07:00', '2026-11-15T20:00:00+07:00'])
+        broken, = adapter.parse_many(catalogue, adapter.config['seeds'][0], NOW)
+        adapter.enrich(broken, catalogue, Client(wrong_article=True), NOW)
+        self.assertIn('unresolved_individual_sessions', broken.validate(NOW))
+        self.assertEqual(broken.occurrences, [])
+
     def test_seven_day_verification_boundary(self):
         c=candidate('place')
         c.verified_at=(NOW-timedelta(hours=167)).isoformat()

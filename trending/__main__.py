@@ -154,6 +154,8 @@ def run(args):
 
                     def recheck_candidate(c):
                         key = c.source_url, c.entry_key
+                        if key not in known and c.replaces_source_url:
+                            key = c.replaces_source_url, ''
                         if key in known:
                             found.add(key)
                             record_candidate(slug, c)
