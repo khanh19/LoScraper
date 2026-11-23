@@ -297,6 +297,12 @@ weekday. The Yoga Lab post was recognized as an activity lead and held for
 its missing event year. The staging card uses the organizer website's
 reviewed schedule. [Original Instagram post](https://www.instagram.com/p/DgEXUf7hYR5/)
 
+The 1900 anniversary captions contain a 2019 founding date and a November 27,
+2026 event date. Explicitly labeled founding dates stay out of event sessions.
+Date-only captions containing only ended dates are recaps. A mix of ended and
+upcoming dates without that attribution stays unresolved. The three anniversary
+posts came from the same publisher. [Organizer post](https://www.instagram.com/p/DgDABDCk5Vj/)
+
 The original Bright Data and SerpAPI ledger remains unavailable. The separate
 multimodal ledger was audited from a local PostgreSQL copy with read-only
 transactions. Apify's account API reported the Free plan, a $5 monthly credit

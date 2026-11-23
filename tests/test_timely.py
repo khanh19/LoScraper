@@ -119,3 +119,15 @@ class DottedSocialDateTests(unittest.TestCase):
         self.assertEqual([(slot.starts_at, slot.ends_at) for slot in sessions], [
             ('2026-12-06T14:00:00+07:00', '2026-12-06T15:30:00+07:00'),
         ])
+
+    def test_foundation_date_is_not_an_anniversary_session(self):
+        published = '2026-11-22T14:17:10+00:00'
+        slots, reason = social_sessions(
+            '1900 x Hennessy Night | Friday 27.11.2026\nĐược thành lập vào ngày 29/11/2019.',
+            published,
+        )
+        self.assertIsNone(reason)
+        self.assertEqual([s.starts_at for s in slots], ['2026-11-27T00:00:00+07:00'])
+        self.assertEqual(social_sessions('Show 29/11/2019', published), ([], 'past_recap'))
+        self.assertEqual(
+            social_sessions('Show 29/11/2019 và 27/11/2026', published), ([], 'ambiguous_schedule'))
