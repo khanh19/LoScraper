@@ -58,6 +58,11 @@ preserve 4,500-credit and 200-search monthly caps and any smaller verified remai
 Failed requests retain reservations. Unknown submissions cannot be retriggered;
 known snapshots resume polling. Pilot reservations survive routine cleanup, so
 recreating a preview or waiting 90 days cannot reset the pilot budget.
+The fixed-pilot commands check the existing ledger before contacting providers.
+They require at least the six SerpAPI reservations, one Facebook reservation,
+and two Instagram reservations established by the pilot receipts. An empty
+ledger or one missing this recorded history blocks collection. Restore the
+complete canonical ledger, including unresolved jobs, before further calls.
 
 No free allowance evidence means no submission. SerpAPI account reads must confirm
 an active zero-price free plan before search. Bright Data's receipt covers the
@@ -250,3 +255,25 @@ A public check of REALITY's Vietnamese site verified its Đà Nẵng venue and t
 outbound link to the organizer's Instagram profile. The page supplied a profile
 link only. A fresh post still needs its own timestamp and activity evidence.
 [Organizer site](https://realitydn.com/vn/) · [Organizer profile](https://www.instagram.com/reality.dn/)
+
+## November 23 public social recheck
+
+The retained review export contained 68 Instagram and 47 TikTok links.
+None of its dated posts fell within the rolling seven-day window at the check.
+Two separate Đà Nẵng review leads returned HTTP 200 and the requested original
+permalink from Meta's token-free Instagram oEmbed endpoint. The embed supplied
+no publication timestamp. The native Tiệm Yến reel showed a November 21 date
+and the venue name again. The restaurant's site confirms the branch at
+347 Nguyễn Văn Linh. The Mì Cay Gangwon reel showed November 19 in an initial
+read, consistent with the earlier review. Its repeat read timed out waiting for
+the post details, and the promotion end date remains unknown.
+[Instagram oEmbed](https://developers.facebook.com/docs/graph-api/reference/instagram-oembed) ·
+[Tiệm Yến reel](https://www.instagram.com/reel/Df_0zs_oXt6/) ·
+[Restaurant branch](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) ·
+[Mì Cay Gangwon reel](https://www.instagram.com/reel/Df7X04roCHE/)
+
+Official TikTok creator-profile oEmbed requests for Ticketbox and Da Nang's
+tourism profile both failed TLS before returning a post list. Fresh automatic
+TikTok discovery remains unverified. The canonical quota database was
+unreachable. The check made no metered requests and wrote no feed records.
+[TikTok creator-profile oEmbed](https://developers.tiktok.com/docs/en/embed-creator-profiles/)
