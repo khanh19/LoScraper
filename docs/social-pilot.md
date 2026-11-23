@@ -311,6 +311,20 @@ limit, and approximately $0.39 of November usage. The Lô campaign had all
 no matching runs for the two reservations without a run ID. Both reservations
 remain unresolved. [Apify actor-run history](https://docs.apify.com/api/v2/actor-runs-get)
 
+The November 24 Bright Data dashboard showed 4,996 shared free credits and a
+$5 balance fully accounted for by promotional transactions. Both recharge
+switches showed off. The read-only API checks matched the existing account
+credentials and confirmed the same allowance and recharge state. The receipt
+was used in memory for this check. New jobs still require the complete
+canonical reservation ledger.
+
+KaT Jewelry's own homepage links to its TikTok profile and advertises its
+November in-person appointment calendar for HCMC. The HCMC public audit uses
+this profile as a lead. Each post still needs its own publication timestamp
+and the original activity or branch evidence.
+[KaT organizer page](https://katjewelry.vn/) ·
+[Original profile](https://www.tiktok.com/@katjewelry)
+
 The Hanoi source directory now checks Yoga Lab Hanoi's public profile against
 the account linked on its own website. The profile embed tied its **Detox Your
 Posture** announcement to November 23 at 10:00 Vietnam time. The caption and
