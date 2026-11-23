@@ -67,4 +67,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
-      - run: python -m trending.tiktok_public
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m trending.tiktok_public --browser

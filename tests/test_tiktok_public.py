@@ -57,3 +57,16 @@ class TikTokPublicAuditTests(unittest.TestCase):
         self.assertEqual(result['metered_provider_requests'], 0)
         self.assertEqual(result['published'], 0)
         self.assertEqual(len(result['profiles'][0]['city_hints']), 2)
+
+    def test_browser_is_only_used_when_direct_profile_has_no_original_links(self):
+        client = Mock()
+        client.get.side_effect = [
+            {'author_url': PROFILE, 'html': '<blockquote></blockquote>'},
+            BeautifulSoup('<main></main>', 'html.parser'),
+            BeautifulSoup(f'<a href="{POST}">Video</a>', 'html.parser'),
+            post_page(POST, {'@type': 'VideoObject', 'url': POST, 'uploadDate': '2026-11-22T08:00:00Z'}),
+        ]
+        result = review_profile({'url': PROFILE}, client, NOW, browser=True)
+        self.assertEqual(result['posts'][0]['status'], 'fresh_needs_venue_review')
+        self.assertEqual(client.get.call_args_list[2].kwargs, {'render': True})
+        self.assertEqual(client.get.call_count, 4)

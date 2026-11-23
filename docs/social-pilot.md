@@ -295,6 +295,11 @@ with `public_tiktok_audit=true`. It verifies each creator link on a reviewed
 organizer site, calls the official profile oEmbed endpoint once per distinct
 profile, and examines at most two original video pages from that creator. The
 job uses public HTTPS metadata and does not receive credentials.
+Pass `--browser` to render a public profile whose initial HTML has no video
+links. The manual Actions check enables this option. The first hosted check
+verified Ticketbox's profile identity, but its initial HTML had no original
+video links. Da Nang's profile path returned HTTP 400 on that run.
+[Direct HTTP check](https://github.com/khanh19/LoScraper/actions/runs/45112850240)
 
 The report requires a timestamp with a timezone from structured video metadata
 bound to the exact original post. City hints from the organizer still need

@@ -1,4 +1,5 @@
 """Review public TikTok metadata linked from reviewed organizers' sites."""
+import argparse
 from datetime import datetime, timedelta, timezone
 import json
 from urllib.parse import urlencode, urlsplit
@@ -56,9 +57,18 @@ def publication_time(page, url):
     return next(iter(dates)) if len(dates) == 1 else None
 
 
-def review_profile(profile, client, now):
+def owned_video_urls(pages, profile_url, now):
+    prefix = urlsplit(profile_url).path.rstrip('/') + '/video/'
+    return dict.fromkeys(
+        post['url'] for page in pages for post in extract_posts(str(page), profile_url, now)
+        if post['platform'] == 'tiktok' and urlsplit(post['url']).path.startswith(prefix)
+    )
+
+
+def review_profile(profile, client, now, browser=False):
     url = profile['url']
     report = {**profile, 'posts': []}
+    stage = 'profile_oembed'
     try:
         endpoint = f'https://{HOST}/oembed?' + urlencode({'url': url})
         embed = client.get(endpoint, {HOST}, json_response=True)
@@ -69,17 +79,20 @@ def review_profile(profile, client, now):
         if not isinstance(html, str):
             return {**report, 'status': 'profile_embed_unavailable'}
         # The supported embed often returns just the profile link. Never run embed scripts.
+        stage = 'profile_document'
         profile_page = client.get(url, {HOST})
     except (FetchError, ValueError) as error:
-        return {**report, 'status': 'public_profile_unavailable', 'reason': fetch_failure_reason(error)}
+        return {**report, 'status': 'public_profile_unavailable', 'stage': stage,
+                'reason': fetch_failure_reason(error)}
 
-    handle_path = urlsplit(url).path.rstrip('/')
-    post_prefix = handle_path + '/video/'
-    profiles = [BeautifulSoup(html, 'html.parser'), profile_page]
-    post_urls = dict.fromkeys(
-        post['url'] for page in profiles for post in extract_posts(str(page), url, now)
-        if post['platform'] == 'tiktok' and urlsplit(post['url']).path.startswith(post_prefix)
-    )
+    post_urls = owned_video_urls([BeautifulSoup(html, 'html.parser'), profile_page], url, now)
+    if not post_urls and browser:
+        try:
+            rendered = client.get(url, {HOST}, render=True)
+            post_urls = owned_video_urls([rendered], url, now)
+        except (FetchError, ValueError) as error:
+            return {**report, 'status': 'public_profile_unavailable', 'stage': 'profile_browser',
+                    'reason': fetch_failure_reason(error)}
     for post_url in list(post_urls)[:MAX_POSTS_PER_PROFILE]:
         try:
             published = publication_time(client.get(post_url, {HOST}), post_url)
@@ -94,7 +107,7 @@ def review_profile(profile, client, now):
     return {**report, 'status': 'reviewed' if report['posts'] else 'no_original_video_links'}
 
 
-def audit(client, now):
+def audit(client, now, browser=False):
     profiles = {}
     missing = []
     for city in CITIES:
@@ -106,14 +119,17 @@ def audit(client, now):
         profiles.setdefault(url, {key: value for key, value in identity.items() if key != 'city_hint'})
         profiles[url].setdefault('city_hints', []).append(city)
     return {'evaluated_at': now.isoformat(), 'cities_without_reviewed_profile': missing,
-            'profiles': [review_profile(profile, client, now) for profile in profiles.values()],
+            'profiles': [review_profile(profile, client, now, browser) for profile in profiles.values()],
             'metered_provider_requests': 0, 'published': 0}
 
 
 def main():
-    client = PublicClient()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--browser', action='store_true', help='Render the public profile when its initial HTML has no original video links')
+    args = parser.parse_args()
+    client = PublicClient(browser=args.browser)
     try:
-        result = audit(client, datetime.now(timezone.utc))
+        result = audit(client, datetime.now(timezone.utc), args.browser)
     finally:
         client.close()
     print(json.dumps(result, ensure_ascii=False, indent=2))
