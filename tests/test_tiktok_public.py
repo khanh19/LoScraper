@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from bs4 import BeautifulSoup
 
 from trending.http import FetchError
-from trending.tiktok_public import audit, publication_time, review_profile
+from trending.tiktok_public import audit, direct_video_review, publication_time, review_profile, video_permalink
 
 NOW = datetime(2026, 11, 23, tzinfo=timezone.utc)
 PROFILE = 'https://www.tiktok.com/@organizer'
@@ -28,6 +28,43 @@ class TikTokPublicAuditTests(unittest.TestCase):
         self.assertIsNone(publication_time(post_page(POST + '4', entry), POST))
         self.assertIsNone(publication_time(post_page(POST, {**entry, 'uploadDate': '2026-11-22'}), POST))
         self.assertIsNone(publication_time(post_page(POST, entry, {**entry, 'uploadDate': '2026-11-21T20:00:00Z'}), POST))
+        self.assertIsNone(publication_time(post_page(POST, {**entry, 'datePublished': '2026-11-22T00:00:00Z'}), POST))
+
+    def test_direct_video_normalizes_only_original_tiktok_video_urls(self):
+        self.assertEqual(video_permalink(POST.replace('www.', '') + '/?utm_medium=example'), POST)
+        for url in (PROFILE, POST.replace('/video/', '/photo/'), 'https://vm.tiktok.com/sample/',
+                    POST.replace('tiktok.com', 'tiktok.com.example'), POST[:-3] + '１２３'):
+            with self.subTest(url=url):
+                self.assertIsNone(video_permalink(url))
+
+    def test_direct_video_returns_verified_original_date_without_oembed(self):
+        client = Mock()
+        client.get.return_value = post_page(POST, {
+            '@type': 'VideoObject', 'url': POST, 'datePublished': '2026-11-22T12:00:00Z',
+        })
+        result = direct_video_review(POST, client, NOW)
+        self.assertEqual(result, {'url': POST, 'status': 'fresh_needs_venue_review',
+                                  'published_at': '2026-11-22T12:00:00+00:00'})
+        client.get.assert_called_once_with(POST, {'www.tiktok.com'})
+
+    def test_video_oembed_confirms_identity_but_cannot_supply_freshness(self):
+        client = Mock()
+        for author, video, number, status in (
+            (PROFILE, POST, '123', 'identity_verified'),
+            (PROFILE + '2', POST, '123', 'identity_unverified'),
+            (PROFILE, POST + '4', '123', 'identity_unverified'),
+            (PROFILE, POST, '1234', 'identity_unverified'),
+        ):
+            with self.subTest(author=author, video=video, number=number):
+                client.get.side_effect = [
+                    post_page(POST),
+                    {'author_url': author, 'html': f'<blockquote cite="{video}" data-video-id="{number}"></blockquote>',
+                     'uploadDate': '2026-11-22T12:00:00Z'},
+                ]
+                result = direct_video_review(POST, client, NOW)
+                self.assertEqual(result['status'], 'publication_time_unverified')
+                self.assertIsNone(result['published_at'])
+                self.assertEqual(result['oembed'], status)
 
     def test_profile_audit_checks_at_most_two_original_posts_from_same_account(self):
         urls = [PROFILE + '/video/' + str(i) for i in range(123, 126)]

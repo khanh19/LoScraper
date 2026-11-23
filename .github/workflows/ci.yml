@@ -14,6 +14,10 @@ on:
         description: Check TikTok share links on a public publisher page in the manual audit
         type: string
         default: ''
+      public_tiktok_video_url:
+        description: Check the metadata of one original public TikTok video
+        type: string
+        default: ''
       staging_collection:
         description: Rehearse website collection or check the isolated staging target
         type: choice
@@ -59,7 +63,7 @@ jobs:
 
   public_tiktok:
     name: Review public TikTok metadata
-    if: github.event_name == 'workflow_dispatch' && inputs.public_tiktok_audit
+    if: github.event_name == 'workflow_dispatch' && (inputs.public_tiktok_audit || inputs.public_tiktok_video_url != '')
     needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -72,11 +76,16 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
-        if: inputs.public_share_publisher_url == ''
+        if: inputs.public_share_publisher_url == '' && inputs.public_tiktok_video_url == ''
       - run: python -m trending.tiktok_public --browser
-        if: inputs.public_share_publisher_url == ''
+        if: inputs.public_share_publisher_url == '' && inputs.public_tiktok_video_url == ''
+      - name: Check an original public TikTok video
+        if: inputs.public_tiktok_video_url != ''
+        env:
+          VIDEO_URL: ${{ inputs.public_tiktok_video_url }}
+        run: python -m trending.tiktok_public --url "$VIDEO_URL"
       - name: Check original post links without fetching post media
-        if: inputs.public_share_publisher_url != ''
+        if: inputs.public_share_publisher_url != '' && inputs.public_tiktok_video_url == ''
         env:
           PUBLISHER_PAGE: ${{ inputs.public_share_publisher_url }}
         run: |

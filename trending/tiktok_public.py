@@ -1,4 +1,4 @@
-"""Review public TikTok metadata linked from reviewed organizers' sites."""
+"""Review public TikTok metadata on original videos and reviewed organizer profiles."""
 import argparse
 from datetime import datetime, timedelta, timezone
 from itertools import islice
@@ -16,6 +16,17 @@ from .social_links import extract_posts, original_post_url
 HOST = 'www.tiktok.com'
 MAX_PROFILES_PER_CITY = 3
 MAX_POSTS_PER_PROFILE = 2
+MAX_DIRECT_VIDEOS = 6
+
+
+def video_permalink(url):
+    post = original_post_url(url)
+    if not post:
+        return None
+    profile, separator, video_id = post.rpartition('/video/')
+    if separator and video_id.isascii() and video_id.isdecimal() and canonical_tiktok_profile(profile):
+        return post
+    return None
 
 
 def publication_time(page, url):
@@ -47,16 +58,47 @@ def publication_time(page, url):
                 continue
             if player.hostname != HOST or player.path != player_path:
                 continue
-        date = entry.get('uploadDate') or entry.get('datePublished')
-        if not isinstance(date, str):
-            continue
-        try:
-            published = datetime.fromisoformat(date.replace('Z', '+00:00'))
-        except ValueError:
-            continue
-        if published.tzinfo is not None:
-            dates.add(published.astimezone(timezone.utc))
+        for field in ('uploadDate', 'datePublished'):
+            date = entry.get(field)
+            if not isinstance(date, str):
+                continue
+            try:
+                published = datetime.fromisoformat(date.replace('Z', '+00:00'))
+            except ValueError:
+                continue
+            if published.tzinfo is not None:
+                dates.add(published.astimezone(timezone.utc))
     return next(iter(dates)) if len(dates) == 1 else None
+
+
+def review_video(url, client, now):
+    try:
+        published = publication_time(client.get(url, {HOST}), url)
+    except (FetchError, ValueError) as error:
+        return {'url': url, 'status': 'public_post_unavailable', 'reason': fetch_failure_reason(error)}
+    status = ('publication_time_unverified' if published is None else
+              'fresh_needs_venue_review' if now - timedelta(days=7) <= published <= now else
+              'outside_fresh_window')
+    return {'url': url, 'status': status, 'published_at': published.isoformat() if published else None}
+
+
+def direct_video_review(url, client, now):
+    report = review_video(url, client, now)
+    if report.get('published_at'):
+        return report
+
+    endpoint = f'https://{HOST}/oembed?' + urlencode({'url': url})
+    try:
+        embed = client.get(endpoint, {HOST}, json_response=True)
+    except (FetchError, ValueError) as error:
+        return {**report, 'oembed': fetch_failure_reason(error)}
+    profile, _, video_id = url.rpartition('/video/')
+    html = embed.get('html') if isinstance(embed, dict) else None
+    if isinstance(html, str) and canonical_tiktok_profile(embed.get('author_url')) == profile:
+        blocks = BeautifulSoup(html, 'html.parser').select('blockquote[cite][data-video-id]')
+        if any(video_permalink(block['cite']) == url and block['data-video-id'] == video_id for block in blocks):
+            return {**report, 'oembed': 'identity_verified'}
+    return {**report, 'oembed': 'identity_unverified'}
 
 
 def owned_video_urls(pages, profile_url, now):
@@ -100,17 +142,7 @@ def review_profile(profile, client, now, browser=False):
         except (FetchError, ValueError) as error:
             return {**report, 'status': 'public_profile_unavailable', 'stage': 'profile_browser',
                     'reason': fetch_failure_reason(error)}
-    for post_url in list(post_urls)[:MAX_POSTS_PER_PROFILE]:
-        try:
-            published = publication_time(client.get(post_url, {HOST}), post_url)
-            status = ('publication_time_unverified' if published is None else
-                      'fresh_needs_venue_review' if now - timedelta(days=7) <= published <= now else
-                      'outside_fresh_window')
-            report['posts'].append({'url': post_url, 'status': status,
-                                    'published_at': published.isoformat() if published else None})
-        except (FetchError, ValueError) as error:
-            report['posts'].append({'url': post_url, 'status': 'public_post_unavailable',
-                                    'reason': fetch_failure_reason(error)})
+    report['posts'] = [review_video(post_url, client, now) for post_url in islice(post_urls, MAX_POSTS_PER_PROFILE)]
     return {**report, 'status': 'reviewed' if report['posts'] else 'no_original_video_links'}
 
 
@@ -132,11 +164,22 @@ def audit(client, now, browser=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--browser', action='store_true', help='Render the public profile when its initial HTML has no original video links')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--browser', action='store_true', help='Render the public profile when its initial HTML has no original video links')
+    modes.add_argument('--url', action='append', help='Original TikTok video permalink; at most six')
     args = parser.parse_args()
+    now = datetime.now(timezone.utc)
+    videos = [video_permalink(url) for url in args.url or []]
+    if len(videos) > MAX_DIRECT_VIDEOS or None in videos:
+        parser.error(f'provide at most {MAX_DIRECT_VIDEOS} valid original TikTok video URLs')
     client = PublicClient(browser=args.browser)
     try:
-        result = audit(client, datetime.now(timezone.utc), args.browser)
+        if videos:
+            result = {'evaluated_at': now.isoformat(), 'videos': [
+                direct_video_review(url, client, now) for url in dict.fromkeys(videos)
+            ], 'metered_provider_requests': 0, 'published': 0}
+        else:
+            result = audit(client, now, args.browser)
     finally:
         client.close()
     print(json.dumps(result, ensure_ascii=False, indent=2))

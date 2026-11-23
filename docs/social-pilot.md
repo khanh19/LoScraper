@@ -332,6 +332,21 @@ free-only transport check. If the local network cannot reach TikTok, dispatch
 set to a public page. The job reads link metadata, omits post text from the log,
 and keeps metered collection and publication disabled.
 
+### Check an original TikTok video
+
+```sh
+python -m trending.tiktok_public --url https://www.tiktok.com/@danangzip.site/video/7707589251193474312
+```
+
+Pass up to six original video permalinks locally. To check a single link from
+the hosted runner, dispatch **Scraper CI** with `public_tiktok_video_url`.
+The audit reads the original video's public HTML. An unambiguous
+`VideoObject` timestamp with a timezone must match the page and video.
+When the date is unavailable, the official oEmbed response can confirm
+the creator, permalink, and video ID. That result leaves the date unresolved.
+The report includes transport and evidence status and performs no feed writes,
+metered requests, or video downloads. [TikTok embed metadata](https://developers.tiktok.com/docs/en/embed-videos)
+
 ### Publisher transport and city-targeted links
 
 Social lead discovery can use the existing website adapters' browser support
