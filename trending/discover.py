@@ -5,6 +5,7 @@ from itertools import islice
 import json
 import os
 from pathlib import Path
+import re
 from urllib.parse import urlsplit,urljoin
 from .adapters import CLASSES, is_type, load_sources, structured
 from .http import PublicClient,FetchError
@@ -14,7 +15,21 @@ from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
 
-def reviewed_tiktok_profile(city, client):
+def canonical_tiktok_profile(url):
+    if not isinstance(url, str):
+        return None
+    try:
+        parts = urlsplit(canonical(url))
+    except ValueError:
+        return None
+    if (parts.hostname in {'tiktok.com', 'www.tiktok.com'}
+            and re.fullmatch(r'/@[A-Za-z0-9_.]+', parts.path)):
+        return 'https://www.tiktok.com' + parts.path
+    return None
+
+
+def reviewed_tiktok_profiles(city, client):
+    seen = set()
     for source in json.loads(DIRECTORY.read_text()):
         accounts = [a for a in source['accounts'] if a['platform'] == 'tiktok']
         if city not in source['cities'] or not accounts:
@@ -24,17 +39,22 @@ def reviewed_tiktok_profile(city, client):
             soup = client.get(page, {urlsplit(page).hostname})
         except FetchError:
             continue
-        links = {a['href'].rstrip('/') for a in soup.select('a[href]')}
+        links = {canonical_tiktok_profile(a['href']) for a in soup.select('a[href]')}
         for entry in structured(soup):
             owner, aliases = entry.get('url'), entry.get('sameAs')
             if (is_type(entry, 'Organization') and isinstance(owner, str)
                     and owner.rstrip('/') == page.rstrip('/') and isinstance(aliases, list)):
-                links.update(alias.rstrip('/') for alias in aliases if isinstance(alias, str))
+                links.update(canonical_tiktok_profile(alias) for alias in aliases)
         for account in accounts:
-            if account['url'].rstrip('/') in links:
-                return {'url': account['url'], 'ownership_evidence': page,
-                        'publisher_id': source['publisher_id'], 'city_hint': city}
-    return None
+            url = canonical_tiktok_profile(account['url'])
+            if url and url in links and url not in seen:
+                seen.add(url)
+                yield {'url': url, 'ownership_evidence': page,
+                       'publisher_id': source['publisher_id'], 'city_hint': city}
+
+
+def reviewed_tiktok_profile(city, client):
+    return next(reviewed_tiktok_profiles(city, client), None)
 
 def discover(city,client,now,counts=None,limit=6):
     seeds=[s for s in json.loads(DIRECTORY.read_text()) if city in s['cities']]

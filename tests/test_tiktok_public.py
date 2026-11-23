@@ -48,8 +48,9 @@ class TikTokPublicAuditTests(unittest.TestCase):
     def test_duplicate_city_profiles_make_one_request_on_transport_failure(self):
         client = Mock()
         client.get.side_effect = FetchError('tls_handshake_failed')
-        with patch('trending.tiktok_public.reviewed_tiktok_profile', side_effect=[
-            {'url': PROFILE, 'publisher_id': 'organizer'}, {'url': PROFILE, 'publisher_id': 'organizer'}, None,
+        identity = {'url': PROFILE, 'publisher_id': 'organizer'}
+        with patch('trending.tiktok_public.reviewed_tiktok_profiles', side_effect=[
+            [identity], [identity], [],
         ]):
             result = audit(client, NOW)
         self.assertEqual(client.get.call_count, 1)
@@ -63,7 +64,7 @@ class TikTokPublicAuditTests(unittest.TestCase):
         client.get.side_effect = [
             {'author_url': PROFILE, 'html': '<blockquote></blockquote>'},
             BeautifulSoup('<main></main>', 'html.parser'),
-            BeautifulSoup(f'<a href="{POST}">Video</a>', 'html.parser'),
+            BeautifulSoup('<a href="/@organizer/video/123">Video</a>', 'html.parser'),
             post_page(POST, {'@type': 'VideoObject', 'url': POST, 'uploadDate': '2026-11-22T08:00:00Z'}),
         ]
         result = review_profile({'url': PROFILE}, client, NOW, browser=True)

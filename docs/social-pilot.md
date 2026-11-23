@@ -291,15 +291,17 @@ was absent from this cluster. No new provider request or feed import was made.
 ## Public TikTok metadata check
 
 Run `python -m trending.tiktok_public` locally or manually dispatch **Scraper CI**
-with `public_tiktok_audit=true`. It verifies each creator link on a reviewed
-organizer site, calls the official profile oEmbed endpoint once per distinct
+with `public_tiktok_audit=true`. It verifies up to three creator links per city on
+reviewed organizer sites, calls the official profile oEmbed endpoint per distinct
 profile, and examines at most two original video pages from that creator. The
 job uses public HTTPS metadata and does not receive credentials.
 Pass `--browser` to render a public profile whose initial HTML has no video
 links. The manual Actions check enables this option. The first hosted check
 verified Ticketbox's profile identity, but its initial HTML had no original
-video links. Da Nang's profile path returned HTTP 400 on that run.
-[Direct HTTP check](https://github.com/khanh19/LoScraper/actions/runs/45112850240)
+video links. The rendered check also found no links, and Da Nang's official
+tourism profile returned HTTP 400 at oEmbed. The expanded check also tries the
+profiles linked by 1900 Le Théâtre, Visit HCMC, and DANAGO. [Direct HTTP check](https://github.com/khanh19/LoScraper/actions/runs/45112850240) ·
+[First browser check](https://github.com/khanh19/LoScraper/actions/runs/45113197703)
 
 The report requires a timestamp with a timezone from structured video metadata
 bound to the exact original post. City hints from the organizer still need

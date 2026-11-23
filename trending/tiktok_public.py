@@ -1,18 +1,20 @@
 """Review public TikTok metadata linked from reviewed organizers' sites."""
 import argparse
 from datetime import datetime, timedelta, timezone
+from itertools import islice
 import json
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
 from .adapters import is_type, meta, structured
-from .discover import reviewed_tiktok_profile
+from .discover import canonical_tiktok_profile, reviewed_tiktok_profiles
 from .http import FetchError, PublicClient, fetch_failure_reason
 from .model import CITIES, canonical
 from .social_links import extract_posts, original_post_url
 
 HOST = 'www.tiktok.com'
+MAX_PROFILES_PER_CITY = 3
 MAX_POSTS_PER_PROFILE = 2
 
 
@@ -59,10 +61,15 @@ def publication_time(page, url):
 
 def owned_video_urls(pages, profile_url, now):
     prefix = urlsplit(profile_url).path.rstrip('/') + '/video/'
-    return dict.fromkeys(
-        post['url'] for page in pages for post in extract_posts(str(page), profile_url, now)
-        if post['platform'] == 'tiktok' and urlsplit(post['url']).path.startswith(prefix)
-    )
+    urls = {}
+    for page in pages:
+        candidates = [post['url'] for post in extract_posts(str(page), profile_url, now)]
+        candidates.extend(original_post_url(urljoin(profile_url, link['href']))
+                          for link in page.select('a[href^="/@"]'))
+        for url in candidates:
+            if url and urlsplit(url).hostname == HOST and urlsplit(url).path.startswith(prefix):
+                urls[url] = None
+    return urls
 
 
 def review_profile(profile, client, now, browser=False):
@@ -73,7 +80,7 @@ def review_profile(profile, client, now, browser=False):
         endpoint = f'https://{HOST}/oembed?' + urlencode({'url': url})
         embed = client.get(endpoint, {HOST}, json_response=True)
         author = embed.get('author_url') if isinstance(embed, dict) else None
-        if not isinstance(author, str) or author.rstrip('/') != url.rstrip('/'):
+        if canonical_tiktok_profile(author) != url:
             return {**report, 'status': 'profile_identity_unverified'}
         html = embed.get('html')
         if not isinstance(html, str):
@@ -111,13 +118,13 @@ def audit(client, now, browser=False):
     profiles = {}
     missing = []
     for city in CITIES:
-        identity = reviewed_tiktok_profile(city, client)
-        if identity is None:
+        identities = list(islice(reviewed_tiktok_profiles(city, client), MAX_PROFILES_PER_CITY))
+        if not identities:
             missing.append(city)
-            continue
-        url = identity['url']
-        profiles.setdefault(url, {key: value for key, value in identity.items() if key != 'city_hint'})
-        profiles[url].setdefault('city_hints', []).append(city)
+        for identity in identities:
+            url = identity['url']
+            profiles.setdefault(url, {key: value for key, value in identity.items() if key != 'city_hint'})
+            profiles[url].setdefault('city_hints', []).append(city)
     return {'evaluated_at': now.isoformat(), 'cities_without_reviewed_profile': missing,
             'profiles': [review_profile(profile, client, now, browser) for profile in profiles.values()],
             'metered_provider_requests': 0, 'published': 0}
