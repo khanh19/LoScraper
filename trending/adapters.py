@@ -47,7 +47,7 @@ def category(text):
     value = folded(text)
     if re.search(
         r"\b(?:giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua"
-        r"|hyrox|crossfit|padel|muay thai)\b",
+        r"|hyrox|crossfit|padel|muay thai|powerlifting|cu ta olympic|yoga bay|aerial yoga)\b",
         value,
     ):
         return "sports"
@@ -590,24 +590,38 @@ class LifeOfDaNang(Adapter):
 
     @staticmethod
     def _visible_starts_conflict(soup, occurrences):
+        def starts_in(text):
+            labels = re.split(r'\s*(?:,|\bva\b|\band\b)\s*', text)
+            starts = [re.fullmatch(r'([01]?\d|2[0-3])(?:h([0-5]\d)?|:([0-5]\d))', label) for label in labels]
+            if len(starts) < 2 or not all(starts):
+                return set()
+            return {(int(match[1]), int(match[2] or match[3] or '0')) for match in starts}
+
         # The visible "Thời gian" block may list separate starts while JSON-LD
         # compresses the same day into one window.
         for label in soup.select('main dt'):
-            if plain(label.get_text(' ', strip=True)) != 'thoi gian':
+            if plain(label.get_text(' ', strip=True)) not in {'thoi gian', 'time'}:
                 continue
             agenda = label.find_next_sibling('dd')
             parts = agenda.find_all('span', recursive=False) if agenda else []
+            if not parts:
+                continue
+            heading = plain(parts[0].get_text(' ', strip=True))
+            nightly = re.fullmatch(r'(?:hang dem|moi toi|nightly|every night),\s*(.+)', heading)
+            if nightly and (visible := starts_in(nightly[1])):
+                starts_by_day = {}
+                for occurrence in occurrences:
+                    if occurrence.precision == 'time':
+                        local = parse_time(occurrence.starts_at).astimezone(ICT)
+                        starts_by_day.setdefault(local.date(), set()).add((local.hour, local.minute))
+                return not starts_by_day or any(starts != visible for starts in starts_by_day.values())
             if len(parts) < 2:
                 continue
-            day_month = re.search(r'\b(\d{1,2}) thang (\d{1,2})\b', plain(parts[0].get_text(' ', strip=True)))
-            if not day_month:
-                continue
-            labels = re.split(r'\s*(?:,|\bva\b)\s*', plain(parts[1].get_text(' ', strip=True)))
-            starts = [re.fullmatch(r'([01]?\d|2[0-3])(?:h([0-5]\d)?|:([0-5]\d))', text) for text in labels]
-            if len(starts) < 2 or not all(starts):
+            day_month = re.search(r'\b(\d{1,2}) thang (\d{1,2})\b', heading)
+            visible = starts_in(plain(parts[1].get_text(' ', strip=True)))
+            if not day_month or not visible:
                 continue
             day, month = map(int, day_month.groups())
-            visible = {(int(m[1]), int(m[2] or m[3] or '0')) for m in starts}
             structured_starts = set()
             for occurrence in occurrences:
                 if occurrence.precision != 'time':
