@@ -37,6 +37,10 @@ on:
         required: false
       TRENDING_STAGING_DATABASE_ROOT_CA:
         required: false
+      TRENDING_DATABASE_URL:
+        required: false
+      TRENDING_DATABASE_ROOT_CA:
+        required: false
 
 permissions:
   contents: read
