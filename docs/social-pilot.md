@@ -370,3 +370,33 @@ remains fully reserved.
 [Da Nang Fantasticity](https://danangfantasticity.com/vi) ·
 [REALITY](https://realitydn.com/vn/) ·
 [1900 Le Théâtre](https://1900club.vn/vi/ve-chung-toi/)
+
+### Public Instagram post verification
+
+```sh
+python -m trending.discover --city hcmc --review-instagram
+python -m trending.instagram_public --url https://www.instagram.com/reel/Df_0zs_oXt6/
+```
+
+The first command checks up to three Instagram permalinks found on publisher
+pages. The second accepts up to six existing permalinks. Each check requests the
+public HTML and matches the page's canonical or Open Graph identity to the
+post. Recognized descriptions report the publication day, account, likes, and
+comments. Profile links, conflicting identity or metadata, and unavailable pages
+remain unresolved. The date has day precision and is kept separate from an
+exact timestamp or event date. Review considers today and the previous six
+Vietnam calendar days. These commands write no feed records and use no credits.
+
+On 23 November Vietnam time, the HCMC publisher scan discovered two original
+posts. Saigon Outcast's 18 November reel showed 23 likes and one comment, but
+its line-dancing event ended on 22 November. The 16 November post fell outside
+the date-only review window. The Hanoi and Da Nang publisher scans found no
+original links in their bounded set. [Publisher](https://www.saigonoutcast.com/) · [Line-dancing reel](https://www.instagram.com/reel/Df4uHYdTFDg/) · [16 November post](https://www.instagram.com/p/DfzcxWlk-xE/)
+
+Direct checks of the two existing Da Nang reels independently confirmed their
+reported publication days. Tiệm Yến showed 32 likes and zero comments on a
+21 November reel, and the restaurant corroborates the branch. Mì Cay Gangwon
+showed 137 likes and one comment on a 19 November reel. The promotion end date
+remains unknown. The older 8 November Burger Fest reel was rejected by date.
+The public checks made no metered requests or imports. Fresh TikTok validation
+remains open. [Tiệm Yến reel](https://www.instagram.com/reel/Df_0zs_oXt6/) · [Restaurant branch](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) · [Gangwon reel](https://www.instagram.com/reel/Df7X04roCHE/)

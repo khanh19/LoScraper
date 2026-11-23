@@ -118,6 +118,7 @@ def main():
     p.add_argument('--city',choices=list(CITIES),required=True)
     p.add_argument('--max-sources',type=int,default=6)
     p.add_argument('--browser', action='store_true', help='Use website adapters with browser support for public publisher pages')
+    p.add_argument('--review-instagram', action='store_true', help='Check up to three discovered Instagram permalinks')
     p.add_argument('--write-leads',action='store_true')
     p.add_argument('--env-file',action='append',default=[])
     args=p.parse_args()
@@ -135,6 +136,10 @@ def main():
             store=Store(url)
             counts={r['category']:r['n'] for r in store.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,args.city)).fetchall()}
         report=discover(args.city,client,now,counts,args.max_sources)
+        if args.review_instagram:
+            from .instagram_public import review
+            urls = (post['url'] for post in report['posts'] if post['platform'] == 'instagram')
+            report['public_instagram_reviews'] = [review(url, client, now) for url in islice(urls, 3)]
         if store:
             for row in report['posts']:
                 store.db.execute("""INSERT INTO discovery_leads(url,platform,discovered_on,published_at,publisher_id,city_slug)
