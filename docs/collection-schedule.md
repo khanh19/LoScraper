@@ -151,6 +151,21 @@ verification enabled. The collector now uses the browser for this source only
 after an HTTP client TLS failure when `--browser` is set. The targeted staging
 recheck then accepted both Hanoi corrections with their original IDs.
 
+The page-by-page staging recheck finished in 5 minutes 39 seconds. Five
+publishers refreshed 65 observations with zero database errors. Ticketbox also
+returned three rejected entries. Hanoi Grapevine failed before it could verify
+eight stored entries, so the run ended as partial. The browser reported
+`ERR_SSL_PROTOCOL_ERROR`. New browser receipts retain the code without the raw
+navigation URL or exception text.
+
+The following full staged collection completed in 9 minutes 39 seconds. Five
+publishers accepted 25 candidates that matched existing item IDs. The run
+rejected 90 candidates and recorded two Hanoi Grapevine listing failures. That
+publisher was the only failed source. No database errors or metered requests
+were recorded in either run. The staged feed still had 73 eligible items and
+met all six city targets. Both runs ended as partial. Verify the manual Actions
+runs on the reviewed workflow before activating the cadence.
+
 A venue review found two Hưng Yên shows that Ticketbox placed under Hanoi or
 Ho Chi Minh City and an online merchandise listing. At that point 68 eligible
 cards remained. Later website imports brought the feed to the counts above.

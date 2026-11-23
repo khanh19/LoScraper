@@ -245,3 +245,8 @@ dashboard transaction check still reconciles the source of a positive wallet
 balance. At the November 23 Vietnam-time check both switches were off and the
 provider returned 4,996 credits left. The wallet had $5 and the prior receipt
 recorded $7 promotional. The collector did not spend credits.
+
+A public check of REALITY's Vietnamese site verified its Đà Nẵng venue and the
+outbound link to the organizer's Instagram profile. The page supplied a profile
+link only. A fresh post still needs its own timestamp and activity evidence.
+[Organizer site](https://realitydn.com/vn/) · [Organizer profile](https://www.instagram.com/reality.dn/)
