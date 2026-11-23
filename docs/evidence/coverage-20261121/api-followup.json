@@ -1,0 +1,1170 @@
+{
+  "hanoi": {
+    "trending": {
+      "items": [
+        {
+          "timing_status": "ongoing",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-13T12:00:00-05:00",
+              "ends_at": "2026-11-28T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "5093780e-81ca-4720-89e9-0422c20a8356",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "culture",
+          "title_vi": "Triển lãm “Đối thoại với tranh Hàng Trống”",
+          "description_vi": "Sự kiện tại Đình Nam Hương, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Đình Nam Hương",
+          "address": "Đình Nam Hương, 75 phố Hàng Trống, Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Hà Nội Go",
+              "url": "https://hanoigo.com.vn/event/trien-lam-doi-thoai-voi-tranh-hang-trong"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-13T12:00:00-05:00",
+            "ends_at": "2026-11-28T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-15T02:40:40.739556-05:00",
+          "evidence_label": "Đang diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-21T08:00:00-05:00",
+              "ends_at": "2026-11-21T10:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "9e5b0c7a-60c7-4e6e-81f1-4a1f645d5b6a",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "music",
+          "title_vi": "Đêm nhạc Ký ức Hà Nội - Thanh Lam, Mỹ Linh, Ngọc Anh, Hà Trần",
+          "description_vi": "Sự kiện tại Cung Hữu nghị Việt Xô – Hà Nội, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Cung Hữu nghị Việt Xô – Hà Nội",
+          "address": "Cung Hữu nghị Việt Xô – Hà Nội,91 Trần Hưng Đạo ,Cửa Nam,Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 1.000.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "TicketGo",
+              "url": "https://www.ticketgo.vn/event/dem-nhac-ky-uc-ha-noi-thanh-lam-my-linh-ngoc-anh-ha-tran"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-21T08:00:00-05:00",
+            "ends_at": "2026-11-21T10:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:45:34.45224-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-22T12:00:00-05:00",
+              "ends_at": "2026-11-23T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "c33707b7-1c64-47f6-ac2b-356b6ed812de",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "nightlife",
+          "title_vi": "1900 Couple Night",
+          "description_vi": "Sự kiện tại 1900 Club Ha Noi, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "1900 Club Ha Noi",
+          "address": "8B TẠ HIỆN, HOÀN KIẾM, HÀ NỘI",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/1900-couple-night-707-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-22T12:00:00-05:00",
+            "ends_at": "2026-11-23T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "ongoing",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-13T12:00:00-05:00",
+              "ends_at": "2026-11-28T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "a7c5076e-5f73-471c-8680-e746c761a251",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "culture",
+          "title_vi": "Triển lãm “Chuyện Đình Kim Ngân”",
+          "description_vi": "Sự kiện tại Đình Kim Ngân Phố Hàng Bạc Phố Cổ Hà Nội, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Đình Kim Ngân Phố Hàng Bạc Phố Cổ Hà Nội",
+          "address": "Đình Kim Ngân Phố Hàng Bạc Phố Cổ Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Hà Nội Go",
+              "url": "https://hanoigo.com.vn/event/trien-lam-chuyen-dinh-kim-ngan"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-13T12:00:00-05:00",
+            "ends_at": "2026-11-28T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:24:40.961668-05:00",
+          "evidence_label": "Đang diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-22T08:00:00-05:00",
+              "ends_at": "2026-11-22T10:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "a00e09e1-73db-40d3-81fb-2af17c920521",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "music",
+          "title_vi": "ĐÊM 2 - Đêm nhạc Ký ức Hà Nội 22/11 | Thanh Lam, Mỹ Linh, Ngọc Anh, Hà Trần",
+          "description_vi": "Sự kiện tại Cung Hữu nghị Việt Xô – Hà Nội, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Cung Hữu nghị Việt Xô – Hà Nội",
+          "address": "Cung Hữu nghị Việt Xô – Hà Nội,91 Trần Hưng Đạo ,Cửa Nam,Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 1.000.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "TicketGo",
+              "url": "https://www.ticketgo.vn/event/ve-ky-uc-ha-noi-22-11-dem-2"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-22T08:00:00-05:00",
+            "ends_at": "2026-11-22T10:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:45:34.45224-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "ongoing",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-13T12:00:00-05:00",
+              "ends_at": "2026-11-28T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "edb46bc6-db43-4fca-add7-bfdbdb088ea9",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "culture",
+          "title_vi": "Triển lãm “Chuyện Đình Yên Thái”",
+          "description_vi": "Sự kiện tại Đình Yên Thái Ngõ Tạm Thương Phố Cổ Hà Nội, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Đình Yên Thái Ngõ Tạm Thương Phố Cổ Hà Nội",
+          "address": "Đình Yên Thái Ngõ Tạm Thương Phố Cổ Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Hà Nội Go",
+              "url": "https://hanoigo.com.vn/event/trien-lam-chuyen-dinh-yen-thai"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-13T12:00:00-05:00",
+            "ends_at": "2026-11-28T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-15T02:40:40.739556-05:00",
+          "evidence_label": "Đang diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-22T08:00:00-05:00",
+              "ends_at": "2026-11-22T10:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "c1856182-65d5-4d81-9d5f-1fc07ee01753",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "culture",
+          "title_vi": "Vở Ballet Đương Đại: DÓ - DÓ SHOW | 22.11.2026",
+          "description_vi": "Sự kiện tại Nhà Hát Hồ Gươm, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Nhà Hát Hồ Gươm",
+          "address": "Nhà Hát Hồ Gươm,40 Hàng Bài,Cửa Nam,Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 1.000.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "TicketGo",
+              "url": "https://www.ticketgo.vn/event/ve-do-show-22-11-2026"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-22T08:00:00-05:00",
+            "ends_at": "2026-11-22T10:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:23:00.533987-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-25T08:00:00-05:00",
+              "ends_at": "2026-11-25T10:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "1acb8877-7837-44e5-9305-fdee6f64b826",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "music",
+          "title_vi": "Hòa nhạc đặt vé trước số 188 - Subscription Concert Vol 188: GUSTAV MAHLER | ",
+          "description_vi": "Sự kiện tại Phòng hòa nhạc Lớn, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Phòng hòa nhạc Lớn",
+          "address": "Phòng hòa nhạc Lớn, Học viện Âm nhạc quốc gia Việt Nam ,77 Hào Nam, Ô Chợ Dừa,Đống Đa,Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 500.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "TicketGo",
+              "url": "https://www.ticketgo.vn/event/hoa-nhac-dat-ve-truoc-so-188-subscription-concert-vol-188-gustav-mahler"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-25T08:00:00-05:00",
+            "ends_at": "2026-11-25T10:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:45:34.45224-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-26T22:00:00-05:00",
+              "ends_at": "2026-11-27T11:00:00-05:00",
+              "precision": "time"
+            },
+            {
+              "starts_at": "2026-11-27T22:00:00-05:00",
+              "ends_at": "2026-11-28T11:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "4c4f38a2-0b14-4d6e-986b-0b29448482cb",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "culture",
+          "title_vi": "Hanoi Firebeat World Festival 2026",
+          "description_vi": "Sự kiện tại Sân Nam, Trung tâm Triển lãm Việt Nam (VEC), Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Sân Nam, Trung tâm Triển lãm Việt Nam (VEC)",
+          "address": "Sân Nam, Trung tâm Triển lãm Việt Nam (VEC), Đông Anh, Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Hà Nội Go",
+              "url": "https://hanoigo.com.vn/event/hanoi-firebeat-world-festival-2026"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-26T22:00:00-05:00",
+            "ends_at": "2026-11-27T11:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:40:40.739556-05:00",
+          "evidence_label": "Sắp diễn ra"
+        }
+      ],
+      "generated_at": "2026-11-21T06:50:28Z",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "planning": {
+      "items": [
+        {
+          "timing_status": "planning",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "planning",
+          "occurrences": [
+            {
+              "starts_at": "2026-12-04T08:00:00-05:00",
+              "ends_at": "2026-12-04T10:01:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "aa807ff6-19a8-4eb1-a363-f9a8f2c67c4b",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "music",
+          "title_vi": "Gala Tình Khúc Vàng Son Một Thuở 2026",
+          "description_vi": "Sự kiện tại Học viện Âm nhạc Quốc gia Việt Nam, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Học viện Âm nhạc Quốc gia Việt Nam",
+          "address": "Học viện Âm nhạc Quốc gia Việt Nam,77 Hào Nam,Ô Chợ Dừa,Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 1.000.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "TicketGo",
+              "url": "https://www.ticketgo.vn/event/gala-tinh-khuc-vang-son-mot-thuo-2026"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-12-04T08:00:00-05:00",
+            "ends_at": "2026-12-04T10:01:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:45:34.45224-05:00",
+          "evidence_label": "Lên lịch trước"
+        },
+        {
+          "timing_status": "planning",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "planning",
+          "occurrences": [
+            {
+              "starts_at": "2026-12-12T06:00:00-05:00",
+              "ends_at": "2026-12-12T11:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "e6fffb39-b10d-47c2-90d2-d014a84eef12",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "music",
+          "title_vi": "KOSMIK LIVE CONCERT 2026 IN HANOI: HOMECOMING",
+          "description_vi": "Sự kiện tại Trung Tâm Triễn lãm Việt Nam (VEC), Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Trung Tâm Triễn lãm Việt Nam (VEC)",
+          "address": "Đường Cầu Tứ Liên, Xã Đông Anh, Thành phố Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 800.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Ticketbox",
+              "url": "https://ticketbox.vn/kosmik-live-concert-2026-in-hanoi-26701"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-12-12T06:00:00-05:00",
+            "ends_at": "2026-12-12T11:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:39:21.011901-05:00",
+          "evidence_label": "Lên lịch trước"
+        },
+        {
+          "timing_status": "planning",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "planning",
+          "occurrences": [
+            {
+              "starts_at": "2026-12-12T07:00:00-05:00",
+              "ends_at": "2026-12-12T10:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "29440c9a-87ec-45ca-af68-a51bb4549fd3",
+          "kind": "event",
+          "city_slug": "hanoi",
+          "category": "music",
+          "title_vi": "HIỆN DIỆN - UPRIZE CONCERT",
+          "description_vi": "Sự kiện tại Cung Thể Thao Điền Kinh Mỹ Đình, Hà Nội. Xem nguồn để biết chi tiết.",
+          "venue_name": "Cung Thể Thao Điền Kinh Mỹ Đình",
+          "address": "Cung thể thao Điền Kinh, Phường Từ Liêm, Thành phố Hà Nội",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 800.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Ticketbox",
+              "url": "https://ticketbox.vn/hien-dien-uprize-concert-26725"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-12-12T07:00:00-05:00",
+            "ends_at": "2026-12-12T10:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:39:21.011901-05:00",
+          "evidence_label": "Lên lịch trước"
+        }
+      ],
+      "generated_at": "2026-11-21T06:50:28Z",
+      "timezone": "Asia/Ho_Chi_Minh"
+    }
+  },
+  "hcmc": {
+    "trending": {
+      "items": [
+        {
+          "timing_status": "ongoing",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-14T22:30:00-05:00",
+              "ends_at": "2026-12-31T08:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "fabf21af-ff51-4507-8537-74f1d3788195",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "workshop",
+          "title_vi": "[DẾ GARDEN] Terrarium Workshop",
+          "description_vi": "Sự kiện tại Dế garden, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "Dế garden",
+          "address": "53/104 Trần Khánh Dư, phường Tân Định, Quận 1, Thành Phố Hồ Chí Minh",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 445.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Ticketbox",
+              "url": "https://ticketbox.vn/de-garden-terrarium-workshop-25079"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-14T22:30:00-05:00",
+            "ends_at": "2026-12-31T08:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:39:21.011901-05:00",
+          "evidence_label": "Đang diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-22T12:00:00-05:00",
+              "ends_at": "2026-11-23T12:00:00-05:00",
+              "precision": "date"
+            },
+            {
+              "starts_at": "2026-11-23T12:00:00-05:00",
+              "ends_at": "2026-11-24T12:00:00-05:00",
+              "precision": "date"
+            },
+            {
+              "starts_at": "2026-11-24T12:00:00-05:00",
+              "ends_at": "2026-11-25T12:00:00-05:00",
+              "precision": "date"
+            },
+            {
+              "starts_at": "2026-11-25T12:00:00-05:00",
+              "ends_at": "2026-11-26T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "a04bdcd2-45fc-45b6-9277-6d8fe960c0d1",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "nightlife",
+          "title_vi": "Skypass Night",
+          "description_vi": "Sự kiện tại Babylon Ultra Lounge, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "Babylon Ultra Lounge",
+          "address": "16-18-20 Thu Khoa Huan Street, District 1, HCMC",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/skypass-night-848-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-22T12:00:00-05:00",
+            "ends_at": "2026-11-23T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-23T12:00:00-05:00",
+              "ends_at": "2026-11-24T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "2a7f5a3f-57bb-42b0-9629-d395c93171a9",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "nightlife",
+          "title_vi": "District K - Ladies Night",
+          "description_vi": "Sự kiện tại District K, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "District K",
+          "address": "30 Thu Khoa Huan, District 1, HCMC",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/district-k-ladies-night-662-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-23T12:00:00-05:00",
+            "ends_at": "2026-11-24T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-23T12:00:00-05:00",
+              "ends_at": "2026-11-24T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "be3afa67-ecaf-4bb9-8e4d-7816c91cdb65",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "nightlife",
+          "title_vi": "Industry Night",
+          "description_vi": "Sự kiện tại Vertigo Nightclub, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "Vertigo Nightclub",
+          "address": "16-18-20 Thủ Khoa Huân Street, Bến Thành Ward, District 1, Ho Chi Minh City.",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/industry-night-849-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-23T12:00:00-05:00",
+            "ends_at": "2026-11-24T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-24T12:00:00-05:00",
+              "ends_at": "2026-11-25T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "80873056-edc6-4bf6-98c6-4af80d856097",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "nightlife",
+          "title_vi": "Abg Ladies' Night",
+          "description_vi": "Sự kiện tại Ciné Saigon, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "Ciné Saigon",
+          "address": "148 Công Quỳnh, Bến Thành Ward, HCMC",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/abg-ladies-night-906-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-24T12:00:00-05:00",
+            "ends_at": "2026-11-25T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-25T12:00:00-05:00",
+              "ends_at": "2026-11-26T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "56b05ef2-1c3b-4fb4-bc48-75c047a7aaa5",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "nightlife",
+          "title_vi": "DamnLay",
+          "description_vi": "Sự kiện tại Lagoon Penthouse, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "Lagoon Penthouse",
+          "address": "Level 14, 180 Nguyen Thi Minh Khai, D3, HCMC",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/damnlay-822-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-25T12:00:00-05:00",
+            "ends_at": "2026-11-26T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        }
+      ],
+      "generated_at": "2026-11-21T06:50:28Z",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "planning": {
+      "items": [
+        {
+          "timing_status": "planning",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "planning",
+          "occurrences": [
+            {
+              "starts_at": "2026-12-11T08:15:00-05:00",
+              "ends_at": "2026-12-11T10:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "dc2cc039-43ab-4f42-9afd-cb428bfb2c37",
+          "kind": "event",
+          "city_slug": "hcmc",
+          "category": "music",
+          "title_vi": "MUSIQUE DE SALON 23 - MÙA AN VUI | TP.HCM",
+          "description_vi": "Sự kiện tại GEM Center, TP. Hồ Chí Minh. Xem nguồn để biết chi tiết.",
+          "venue_name": "GEM Center",
+          "address": "GEM Center ,08 Nguyễn Bỉnh Khiêm,Sài Gòn,Hồ Chí Minh",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 900.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "TicketGo",
+              "url": "https://www.ticketgo.vn/event/musique-de-salon-23-mua-an-vui-Sai-Gon"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-12-11T08:15:00-05:00",
+            "ends_at": "2026-12-11T10:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:45:34.45224-05:00",
+          "evidence_label": "Lên lịch trước"
+        }
+      ],
+      "generated_at": "2026-11-21T06:50:28Z",
+      "timezone": "Asia/Ho_Chi_Minh"
+    }
+  },
+  "danang": {
+    "trending": {
+      "items": [
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-21T03:00:00-05:00",
+              "ends_at": "2026-11-21T04:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "7ddafd18-5822-46d5-ac0d-bd2bc849d2a6",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "workshop",
+          "title_vi": "Workshop thủ công Chú cú mèo ú òa cho bé dưới 6 tuổi ở Create Da Nang",
+          "description_vi": "Sự kiện tại Create Da Nang, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Create Da Nang",
+          "address": "18A Mỹ Đa Đông 8, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 170.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/create-danang-little-owl-2026-11-21"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-21T03:00:00-05:00",
+            "ends_at": "2026-11-21T04:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:22:36.042799-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-23T12:00:00-05:00",
+              "ends_at": "2026-11-24T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "f544aeea-946d-484d-b1f1-9aa5c2486727",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "nightlife",
+          "title_vi": "Candy Chicks",
+          "description_vi": "Sự kiện tại Sky36 Da Nang, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Sky36 Da Nang",
+          "address": "36 Bach Dang street, Thach Thang Ward, Hai Chau District, Da Nang City",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/candy-chicks-650-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-23T12:00:00-05:00",
+            "ends_at": "2026-11-24T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-21T07:00:00-05:00",
+              "ends_at": "2026-11-21T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "6fc662f9-8a5e-4f3c-94fe-e271a3f7b5cf",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "music",
+          "title_vi": "Ban nhạc Doc Holiday diễn ở Dirty Fingers",
+          "description_vi": "Sự kiện tại Dirty Fingers, 404-406 Võ Nguyên Giáp, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Dirty Fingers, 404-406 Võ Nguyên Giáp",
+          "address": "404-406 Vo Nguyen Giap, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/dirty-fingers-doc-holiday-2026-11-21"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-21T07:00:00-05:00",
+            "ends_at": "2026-11-21T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:22:36.042799-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-24T12:00:00-05:00",
+              "ends_at": "2026-11-25T12:00:00-05:00",
+              "precision": "date"
+            },
+            {
+              "starts_at": "2026-11-25T12:00:00-05:00",
+              "ends_at": "2026-11-26T12:00:00-05:00",
+              "precision": "date"
+            }
+          ],
+          "id": "6ea9a919-2662-4784-89e4-8a471a7466be",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "nightlife",
+          "title_vi": "HOTD x Bé Điệu Nights",
+          "description_vi": "Sự kiện tại Hair Of The Dog Da Nang, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Hair Of The Dog Da Nang",
+          "address": "06 Tran Quoc Toan, Hai Chau, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Vietnam Nightlife",
+              "url": "https://vietnamnightlife.com/en/hotd-x-be-dieu-nights-648-15.html"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-24T12:00:00-05:00",
+            "ends_at": "2026-11-25T12:00:00-05:00",
+            "precision": "date"
+          },
+          "verified_at": "2026-11-21T01:49:33.225242-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-21T07:00:00-05:00",
+              "ends_at": "2026-11-21T09:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "756430c0-2794-445d-aece-e11e05b7d93c",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "culture",
+          "title_vi": "Kịch thiếu nhi: Cuộc Phiêu Lưu Kỳ Thú",
+          "description_vi": "Sự kiện tại Sân khấu kịch Cầu Vồng, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Sân khấu kịch Cầu Vồng",
+          "address": "02 Vũ Văn Dũng, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/kids-play-cuoc-phieu-luu-ky-thu-cau-vong-2026-11-21"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-21T07:00:00-05:00",
+            "ends_at": "2026-11-21T09:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:22:36.042799-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-21T22:00:00-05:00",
+              "ends_at": "2026-11-22T00:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "ecb400ce-27c5-4d08-a826-eaf2ee7d3d92",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "sports",
+          "title_vi": "Giao lưu pickleball Spin City",
+          "description_vi": "Sự kiện tại Sân PICO Pickleball, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Sân PICO Pickleball",
+          "address": "21 Mỹ Đa Tây 1, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 65.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/spin-city-pickleball-social"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-21T22:00:00-05:00",
+            "ends_at": "2026-11-22T00:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:22:36.042799-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-22T03:00:00-05:00",
+              "ends_at": "2026-11-22T04:00:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "64565ab1-8671-4cf1-a1c1-dd51d867bf7f",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "workshop",
+          "title_vi": "Workshop thủ công Hang bí mật của sóc cho bé trên 6 tuổi ở Create Da Nang",
+          "description_vi": "Sự kiện tại Create Da Nang, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "Create Da Nang",
+          "address": "18A Mỹ Đa Đông 8, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 170.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/create-danang-squirrel-hollow-2026-11-22"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-22T03:00:00-05:00",
+            "ends_at": "2026-11-22T04:00:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:22:36.042799-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-22T08:00:00-05:00",
+              "ends_at": "2026-11-22T10:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "f419270a-fd8f-44e9-91a4-62d812a0fc3d",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "cafe",
+          "title_vi": "Đố vui theo đội",
+          "description_vi": "Sự kiện tại REALITY Đà Nẵng, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "REALITY Đà Nẵng",
+          "address": "86 Mai Thúc Lân, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 50.000 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/reality-pub-quiz"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-22T08:00:00-05:00",
+            "ends_at": "2026-11-22T10:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-21T01:22:36.042799-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-25T02:30:00-05:00",
+              "ends_at": "2026-11-25T04:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "5f8516f2-7c3d-4893-965a-520bf19ad0f4",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "cafe",
+          "title_vi": "Freelance Cafe Meetup ở Ace Hub, Đà Nẵng",
+          "description_vi": "Sự kiện tại ACE Hub, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "ACE Hub",
+          "address": "74 Bà Huyện Thanh Quan, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": "Giá niêm yết: 0 ₫",
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/freelance-cafe-meetup-ace-hub"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-25T02:30:00-05:00",
+            "ends_at": "2026-11-25T04:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:27:43.903377-05:00",
+          "evidence_label": "Sắp diễn ra"
+        },
+        {
+          "timing_status": "upcoming",
+          "independent_mentions": 0,
+          "authority_type": "website",
+          "section": "weekly",
+          "occurrences": [
+            {
+              "starts_at": "2026-11-26T22:00:00-05:00",
+              "ends_at": "2026-11-27T00:30:00-05:00",
+              "precision": "time"
+            }
+          ],
+          "id": "81090878-53da-49e1-ba68-579664e30438",
+          "kind": "event",
+          "city_slug": "danang",
+          "category": "sports",
+          "title_vi": "Học cờ vua với đại kiện tướng ở Ace Hub, Đà Nẵng",
+          "description_vi": "Sự kiện tại ACE Hub, Đà Nẵng. Xem nguồn để biết chi tiết.",
+          "venue_name": "ACE Hub",
+          "address": "74 Bà Huyện Thanh Quan, Da Nang",
+          "place_id": null,
+          "image_url": null,
+          "price_text": null,
+          "image_source": null,
+          "sources": [
+            {
+              "name": "Life of Da Nang",
+              "url": "https://lifeofdanang.com/vi/danang/ace-chess-grandmaster"
+            }
+          ],
+          "next_occurrence": {
+            "starts_at": "2026-11-26T22:00:00-05:00",
+            "ends_at": "2026-11-27T00:30:00-05:00",
+            "precision": "time"
+          },
+          "verified_at": "2026-11-15T02:27:43.903377-05:00",
+          "evidence_label": "Sắp diễn ra"
+        }
+      ],
+      "generated_at": "2026-11-21T06:50:28Z",
+      "timezone": "Asia/Ho_Chi_Minh"
+    },
+    "planning": {
+      "items": [],
+      "generated_at": "2026-11-21T06:50:28Z",
+      "timezone": "Asia/Ho_Chi_Minh"
+    }
+  }
+}

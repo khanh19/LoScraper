@@ -1,0 +1,80 @@
+{
+  "checks": [
+    {
+      "city": "hanoi",
+      "filter": "all",
+      "items": 1,
+      "status": "passed"
+    },
+    {
+      "city": "hanoi",
+      "filter": "event",
+      "items": 1,
+      "status": "passed"
+    },
+    {
+      "city": "hanoi",
+      "filter": "place",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "hanoi",
+      "section": "planning",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "hcmc",
+      "filter": "all",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "hcmc",
+      "filter": "event",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "hcmc",
+      "filter": "place",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "hcmc",
+      "section": "planning",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "danang",
+      "filter": "all",
+      "items": 1,
+      "status": "passed"
+    },
+    {
+      "city": "danang",
+      "filter": "event",
+      "items": 1,
+      "status": "passed"
+    },
+    {
+      "city": "danang",
+      "filter": "place",
+      "items": 0,
+      "status": "passed"
+    },
+    {
+      "city": "danang",
+      "section": "planning",
+      "items": 0,
+      "status": "passed"
+    }
+  ],
+  "page_errors": [],
+  "failed_requests": [],
+  "responses_mocked": false,
+  "social_publication": "blocked_pending_calibration"
+}

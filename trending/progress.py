@@ -1,11 +1,16 @@
 """Run receipts and bounded recovery; never replay a failed database operation."""
 from collections import Counter
+from time import monotonic
 
 import psycopg
 
 
+COLLECTION_HEARTBEAT_SECONDS = 30
+
+
 class Progress:
-    def __init__(self, store, sources, cities):
+    def __init__(self, store, sources, cities, mode="discovery"):
+        self.mode = mode
         self.store = store
         self.cities = list(cities)
         self.sources = list(sources)
@@ -22,6 +27,7 @@ class Progress:
         self.run_id = None
         self.source_id = None
         self.stats = {}
+        self.last_heartbeat = None
         if store:
             ok,self.run_id = self.call('start_run',sources,self.cities)
             if not ok:
@@ -35,7 +41,7 @@ class Progress:
         try:
             return True, getattr(self.store, method)(*args, **kwargs)
         except Exception as exc:
-            if isinstance(exc, ValueError) and str(exc) in {'identity_conflict','stale_roundup_evidence'}:
+            if isinstance(exc, ValueError) and str(exc) in {'identity_conflict','stale_roundup_evidence','stale_observation'}:
                 return False, str(exc)
             # SQL error details can include row contents, connection strings or secrets.
             self.errors[type(exc).__name__] += 1
@@ -101,21 +107,36 @@ class Progress:
             return 'partial' if any(s['accepted'] or s['status']=='complete' for s in self.stats.values()) else 'failed'
         return 'complete'
 
+    def collection_heartbeat(self):
+        if self.last_heartbeat is None or monotonic() - self.last_heartbeat >= COLLECTION_HEARTBEAT_SECONDS:
+            self.heartbeat()
+
     def heartbeat(self, final=False):
         if not self.store or not self.available:
             return
+        self.last_heartbeat = monotonic()
         if self.source_id:
             s = self.stats[self.source]
             self.call('progress',self.source_id,s['accepted'],s['rejected'],s['failed'],
-                      dict(parent_id=self.run_id,**s),s['status'])
+                      dict(parent_id=self.run_id,mode=self.mode,**s),s['status'])
         a,r,f = self.totals()
         self.call('progress',self.run_id,a,r,f+self.unassigned_failures,
-                  {'sources':self.stats,'persistence_errors':dict(self.errors)},self.status() if final else 'running')
+                  {'mode':self.mode,'sources':self.stats,'persistence_errors':dict(self.errors)},self.status() if final else 'running')
 
-    def finish_source(self):
+    def finish_source(self, final=False):
         s = self.stats[self.source]
         error_count = sum(self.errors.values())-self.source_error_start
         s['persistence_errors'] = error_count
         s['acceptance_yield'] = s['accepted']/s['extracted_entries'] if s.get('extracted_entries') else 0
         s['status'] = ('partial' if s['accepted'] else 'failed') if s['failed'] or error_count else 'complete'
-        self.heartbeat()
+        self.heartbeat(final=final)
+
+    def abort(self, error):
+        self.fatal = True
+        reason = type(error).__name__
+        self.errors[reason] += 1
+        if self.source and self.stats[self.source]['status'] == 'running':
+            self.fail(reason)
+            self.finish_source(final=True)
+        else:
+            self.heartbeat(final=True)

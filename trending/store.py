@@ -7,7 +7,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .model import Candidate
+from .model import CONFIRMED_SCHEDULE_CONFLICT, Candidate, parse_time
 
 
 class Store:
@@ -15,14 +15,24 @@ class Store:
         self.url = url
         self.initial_reconnect = False
         try:
-            self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+            self.db = self._connect()
         except (psycopg.OperationalError, psycopg.InterfaceError):
             self.initial_reconnect = True
-            self.db = psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+            self.db = self._connect()
+
+    def _connect(self):
+        db = psycopg.connect(self.url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+        try:
+            # A pooled session may retain older role defaults. Set the guard for each connection.
+            db.execute("SET idle_in_transaction_session_timeout = '60s'")
+        except psycopg.Error:
+            db.close()
+            raise
+        return db
 
     def reconnect(self):
         self.db.close()
-        self.db = psycopg.connect(self.url, connect_timeout=10, autocommit=True, row_factory=dict_row)
+        self.db = self._connect()
 
     def close(self):
         self.db.close()
@@ -40,6 +50,20 @@ class Store:
                     ON CONFLICT(id) DO UPDATE SET policy=excluded.policy,revoked=excluded.revoked""",
                     (p['id'],Jsonb(p),bool(p.get('revoked',False))))
 
+    def refresh_targets(self, slug, now, city=None):
+        """Existing website observations only; oldest checks first, no provider calls."""
+        return self.db.execute("""SELECT o.source_url,o.entry_key,i.city_slug,o.verified_at
+            FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id
+            JOIN discovery_sources s ON s.slug=o.source_slug
+            WHERE o.source_slug=%s AND s.platform='web' AND s.enabled AND o.status='active'
+            AND (%s::text IS NULL OR i.city_slug=%s)
+            AND ((i.kind='place' AND o.published_at BETWEEN %s::timestamptz-interval '7 days' AND %s)
+              OR (i.kind='event' AND (o.schedule_held_at > %s::timestamptz-interval '7 days'
+                   OR EXISTS (SELECT 1 FROM discovery_occurrences x
+                   WHERE x.observation_id=o.id AND x.ends_at>%s AND x.starts_at<%s::timestamptz+interval '30 days'))))
+            ORDER BY GREATEST(o.verified_at,o.schedule_held_at),o.source_url,o.entry_key""",
+            (slug,city,city,now,now,now,now,now)).fetchall()
+
     def upsert(self, c: Candidate, now: datetime):
         reasons = c.validate(now)
         if reasons:
@@ -47,12 +71,18 @@ class Store:
         p = c.payload()
         with self.db.transaction():
             self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
-            known = self.db.execute("SELECT o.item_id,i.kind,i.city_slug,o.published_at FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id WHERE source_slug=%s AND source_url=%s AND entry_key=%s",
+            known = self.db.execute("""SELECT o.item_id,i.kind,i.city_slug,o.published_at,o.verified_at,o.schedule_held_at
+                FROM discovery_observations o JOIN discovery_items i ON i.id=o.item_id
+                WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",
                                     (c.source_slug,c.source_url,c.entry_key)).fetchone()
             if known and (known['kind'] != c.kind or known['city_slug'] != c.city_slug):
                 raise ValueError('identity_conflict')
+            if known:
+                checked_at = parse_time(c.verified_at)
+                held_at = known['schedule_held_at']
+                if checked_at < known['verified_at'] or (held_at and checked_at <= held_at):
+                    raise ValueError('stale_observation')
             if known and c.entry_key and c.kind == 'place' and known['published_at']:
-                from .model import parse_time
                 # A rotating roundup date cannot rejuvenate an existing entry.
                 if parse_time(c.published_at) > known['published_at']:
                     from dataclasses import replace
@@ -89,19 +119,40 @@ class Store:
                         THEN discovery_observations.metrics ELSE discovery_observations.previous_metrics END,
                     previous_observed_at=CASE WHEN discovery_observations.verified_at < excluded.verified_at - interval '1 hour'
                         THEN discovery_observations.verified_at ELSE discovery_observations.previous_observed_at END,
-                    metrics=excluded.metrics,verified_at=excluded.verified_at,status='active',image_url=excluded.image_url,facts=excluded.facts
+                    metrics=excluded.metrics,verified_at=excluded.verified_at,status='active',schedule_held_at=NULL,
+                    image_url=excluded.image_url,facts=excluded.facts
                 RETURNING id""",(item_id,c.source_slug,c.source_url,c.entry_key,p['owner_key'],p['content_hash'],p['original_text'],c.location_evidence,
                                  c.published_at,c.verified_at,p['image_url'],Jsonb(c.metrics),Jsonb(facts))).fetchone()['id']
             # Replace occurrences for THIS successfully parsed page only, inside its transaction.
             self.db.execute("DELETE FROM discovery_occurrences WHERE observation_id=%s",(observation_id,))
-            for o in c.occurrences:
+            if c.occurrences:
                 self.db.execute("""INSERT INTO discovery_occurrences(observation_id,starts_at,ends_at,precision)
-                    VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",(observation_id,o.starts_at,o.ends_at,o.precision))
+                    SELECT %s, starts_at, ends_at, precision
+                    FROM unnest(%s::timestamptz[], %s::timestamptz[], %s::text[])
+                        AS sessions(starts_at, ends_at, precision)
+                    ON CONFLICT DO NOTHING""", (observation_id,
+                    [session.starts_at for session in c.occurrences],
+                    [session.ends_at for session in c.occurrences],
+                    [session.precision for session in c.occurrences]))
         return str(item_id)
 
     def cancel(self, source_slug, url, now, entry_key=""):
         self.db.execute("""UPDATE discovery_observations SET status='cancelled',verified_at=%s
             WHERE source_slug=%s AND source_url=%s AND entry_key=%s""",(now,source_slug,url,entry_key))
+
+    def hold_schedule(self, c: Candidate, now: datetime):
+        if c.kind != 'event' or c.platform != 'web' or CONFIRMED_SCHEDULE_CONFLICT not in c.reasons:
+            return False
+        with self.db.transaction():
+            self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
+            result = self.db.execute("""UPDATE discovery_observations o SET schedule_held_at=%s
+                FROM discovery_items i, discovery_sources s
+                WHERE o.item_id=i.id AND i.kind='event' AND i.city_slug=%s
+                  AND s.slug=o.source_slug AND s.enabled AND s.platform='web'
+                  AND o.source_slug=%s AND o.source_url=%s AND o.entry_key=%s AND o.status='active'
+                  AND o.verified_at<=%s AND (o.schedule_held_at IS NULL OR o.schedule_held_at<%s)""",
+                (now, c.city_slug, c.source_slug, c.source_url, c.entry_key, now, now))
+            return result.rowcount == 1
 
     def start_run(self, sources, cities, source='__run__', parent_id=None):
         run_id = str(uuid4())
@@ -184,7 +235,8 @@ class Store:
             updated_at=now() WHERE job_key=%s""",(status,provider_id,Jsonb(result) if result is not None else None,
                                                Jsonb(result) if result is not None else None,key))
 
-    def cleanup(self):
+    def cleanup(self, *, include_provider_jobs=False):
         self.db.execute("DELETE FROM discovery_ingestion_runs WHERE started_at < now() - interval '30 days'")
-        self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete' AND pilot_id IS NULL")
+        if include_provider_jobs:
+            self.db.execute("DELETE FROM discovery_provider_jobs WHERE created_at < now() - interval '90 days' AND status='complete' AND pilot_id IS NULL")
         self.db.execute("DELETE FROM discovery_items WHERE updated_at < now() - interval '90 days' AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.item_id=discovery_items.id AND o.verified_at > now() - interval '90 days')")

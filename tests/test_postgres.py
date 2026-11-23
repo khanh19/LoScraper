@@ -1,15 +1,20 @@
 """Real Postgres tests; run only against our dedicated disposable local database."""
+from argparse import Namespace
 import copy
+from contextlib import redirect_stdout
 from datetime import timedelta
+from io import StringIO
 import os
 from pathlib import Path
 import re
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 import psycopg
 
+from trending.model import CONFIRMED_SCHEDULE_CONFLICT, Occurrence
+from trending.__main__ import run
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
 from test_trending import candidate, NOW
@@ -52,6 +57,13 @@ class Persistence(unittest.TestCase):
         rows=self.store.db.execute(sql,args).fetchall()
         return [list(row.values())[0] for row in rows]
 
+    def test_idle_transaction_guard_is_set_when_reconnecting(self):
+        setting = 'idle_in_transaction_session_timeout'
+        self.assertEqual(self.store.db.execute(f'SHOW {setting}').fetchone()[setting], '1min')
+        self.store.db.execute(f'SET {setting} = 0')
+        self.store.reconnect()
+        self.assertEqual(self.store.db.execute(f'SHOW {setting}').fetchone()[setting], '1min')
+
     def test_stable_ids_cross_source_dedupe_and_partial_import(self):
         c=candidate();first=self.store.upsert(c,NOW)
         c.title='Workshop thử nghiệm (cập nhật)'
@@ -66,6 +78,27 @@ class Persistence(unittest.TestCase):
         self.assertEqual(len(self.feed()),1)
         self.assertEqual(len(self.feed()[0]['sources']),2)
 
+    def test_ticketbox_location_correction_preserves_observation_and_other_cards(self):
+        legacy = candidate()
+        legacy.source_url = 'https://ticketbox.vn/datnuocthienhungca-26630'
+        legacy.venue_name = 'VINPALACE OCEAN CITY'
+        legacy.address = 'Tầng 3 Vincom Mega Mall, Thành phố Hà Nội'
+        legacy_id = self.store.upsert(legacy, NOW)
+        other_id = self.store.upsert(candidate(), NOW)
+        migration = BACKEND/'supabase/migrations/20261122120000_discovery_correct_ticketbox_locations.sql'
+
+        self.store.db.execute(migration.read_text())
+        self.store.db.execute(migration.read_text())
+
+        observation = self.store.db.execute('''SELECT status, verified_at, facts FROM discovery_observations
+                                                WHERE item_id=%s''', (legacy_id,)).fetchone()
+        self.assertEqual(observation['status'], 'active')
+        self.assertEqual(observation['verified_at'], NOW)
+        self.assertNotIn('version', observation['facts'])
+        self.assertEqual(observation['facts']['address'], legacy.address)
+        self.assertEqual(observation['facts']['location_review']['reason'], 'outside_supported_cities')
+        self.assertEqual([row['id'] for row in self.feed()], [str(other_id)])
+
     def test_city_kind_expiry_and_window(self):
         self.store.upsert(candidate(),NOW)
         p=candidate('place');p.source_url='https://ticketbox.vn/place-12345'
@@ -73,8 +106,17 @@ class Persistence(unittest.TestCase):
         self.assertEqual([i['kind'] for i in self.feed()],['event','place'])
         self.assertEqual(len(self.feed(kind='event')),1)
         self.assertEqual(self.feed(city='danang'),[])
-        self.assertEqual(self.feed(now=NOW+timedelta(hours=73)),[])
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=169)),[])
         self.assertEqual(self.feed(now=NOW+timedelta(days=3),kind='event'),[])
+
+    def test_verification_lasts_seven_days_without_renewing_evidence(self):
+        c=candidate()
+        c.occurrences=[Occurrence(
+            (NOW+timedelta(days=6)).isoformat(),(NOW+timedelta(days=9)).isoformat())]
+        self.store.upsert(c,NOW)
+        for hours in [73,167]:
+            self.assertEqual(len(self.feed(now=NOW+timedelta(hours=hours))),1)
+        self.assertEqual(self.feed(now=NOW+timedelta(hours=168)),[])
 
     def test_cancel_immediate_and_disabled_source_hidden(self):
         c=candidate();self.store.upsert(c,NOW)
@@ -94,6 +136,58 @@ class Persistence(unittest.TestCase):
             o.ends_at=(datetime.fromisoformat(o.ends_at)+timedelta(days=2)).isoformat()
         self.store.upsert(d,NOW)
         self.assertEqual(self.feed(),[])
+
+    def test_confirmed_schedule_conflict_withholds_existing_item_until_verified(self):
+        c = candidate()
+        item_id = self.store.upsert(c, NOW)
+        self.store.register('ticketgo', 'TicketGo', True)
+        other = copy.deepcopy(c)
+        other.source_slug, other.source_url = 'ticketgo', 'https://ticketgo.vn/event/test'
+        self.assertEqual(self.store.upsert(other, NOW), item_id)
+        held_at = NOW + timedelta(minutes=2)
+        rejected = copy.deepcopy(c)
+        rejected.reasons.append('unresolved_cross_source_session_times')
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        self.assertEqual(self.feed(held_at)[0]['id'], item_id)
+        rejected.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+        rejected.city_slug = 'danang'
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        rejected.city_slug = 'hanoi'
+        rejected.verified_at = held_at.isoformat()
+        args = Namespace(sources='ticketbox', city='hanoi', write_db=True, providers=False,
+                         browser=False, pilot=False, supplemental=False, refresh_existing=True, out=None)
+
+        def collect(*args, on_candidate, **kwargs):
+            on_candidate(rejected)
+            return [], []
+
+        with (patch.dict(os.environ, {'DATABASE_URL': URL}),
+              patch('trending.__main__.datetime') as clock,
+              patch('trending.__main__.collect_source', side_effect=collect),
+              redirect_stdout(StringIO())):
+            clock.now.return_value = held_at
+            report = run(args)
+        self.assertEqual(report['status'], 'complete')
+        self.assertEqual(report['sources']['ticketbox']['reasons'][CONFIRMED_SCHEDULE_CONFLICT], 1)
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        observation = self.store.db.execute("""SELECT id,verified_at,status,schedule_held_at
+            FROM discovery_observations WHERE source_slug='ticketbox'""").fetchone()
+        self.assertEqual((observation['verified_at'], observation['status'], observation['schedule_held_at']),
+                         (NOW, 'active', held_at))
+        self.assertEqual(self.feed(held_at), [])
+        visibility = self.store.db.execute("""SELECT reason,payload FROM discovery_evaluate_all(%s,'hanoi')
+            WHERE item_id=%s""", (held_at, item_id)).fetchone()
+        self.assertEqual(visibility, {'reason': 'unresolved_sessions', 'payload': None})
+        self.assertEqual(len(self.store.refresh_targets('ticketbox', NOW + timedelta(days=2), 'hanoi')), 1)
+        with self.assertRaisesRegex(ValueError, 'stale_observation'):
+            self.store.upsert(c, held_at)
+        c.verified_at = (held_at + timedelta(minutes=1)).isoformat()
+        self.assertEqual(self.store.upsert(c, held_at + timedelta(minutes=1)), item_id)
+        resolved = self.store.db.execute("""SELECT id,schedule_held_at FROM discovery_observations
+            WHERE source_slug='ticketbox'""").fetchone()
+        self.assertEqual(resolved, {'id': observation['id'], 'schedule_held_at': None})
+        self.assertFalse(self.store.hold_schedule(rejected, held_at))
+        self.assertEqual(self.feed(held_at + timedelta(minutes=1))[0]['id'], item_id)
 
     def test_reservations_persist_no_refund_and_monthly_cap(self):
         first=self.store.reserve('serpapi','search-a',1,2,10,{},NOW)
@@ -267,8 +361,8 @@ class Persistence(unittest.TestCase):
         self.store.upsert(candidate('place'),NOW)
         run=self.store.start_run(['ticketbox'],['hanoi'],'ticketbox')
         self.store.db.execute('UPDATE discovery_ingestion_runs SET heartbeat_at=%s WHERE id=%s',(NOW-timedelta(minutes=31),run))
-        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=49))
-        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=49))))
+        health=report(self.store.db,['hanoi','hcmc','danang'],NOW+timedelta(hours=145))
+        self.assertEqual(health['cities']['hanoi']['eligible_total'],len(self.feed(now=NOW+timedelta(hours=145))))
         self.assertEqual(len(health['cities']['hanoi']['losing_last_fresh_evidence_within_24h']),1)
         self.assertTrue(health['cities']['danang']['empty'])
         self.assertEqual(health['runs'][0]['status'],'interrupted')
@@ -289,6 +383,27 @@ class Persistence(unittest.TestCase):
         self.assertEqual(self.store.db.execute('SELECT verified_at,facts FROM discovery_observations').fetchone(),old)
         self.assertEqual(len(self.feed()),1)
 
+    def test_multi_session_import_deduplicates_and_replaces_sessions(self):
+        event = candidate()
+        timed_start = NOW + timedelta(hours=2)
+        timed_end = timed_start + timedelta(hours=2)
+        date_start = NOW + timedelta(days=5)
+        date_end = date_start + timedelta(days=1)
+        timed = Occurrence(timed_start.isoformat(), timed_end.isoformat(), 'time')
+        day = Occurrence(date_start.isoformat(), date_end.isoformat(), 'date')
+        event.occurrences = [timed, timed, day]
+        item_id = self.store.upsert(event, NOW)
+
+        def sessions():
+            return self.store.db.execute('''SELECT starts_at,ends_at,precision
+                FROM discovery_occurrences ORDER BY starts_at''').fetchall()
+
+        self.assertEqual(sessions(), [dict(starts_at=timed_start, ends_at=timed_end, precision='time'),
+                                      dict(starts_at=date_start, ends_at=date_end, precision='date')])
+        event.occurrences = [day]
+        self.assertEqual(self.store.upsert(event, NOW), item_id)
+        self.assertEqual(sessions(), [dict(starts_at=date_start, ends_at=date_end, precision='date')])
+
     def test_connection_loss_reconnects_once_without_retrying_write(self):
         from trending.progress import Progress
         progress=Progress(self.store,['ticketbox'],['hanoi'])
@@ -304,6 +419,94 @@ class Persistence(unittest.TestCase):
         self.assertFalse(progress.available)
         self.store.reconnect()  # restore the test fixture only, not the run
         self.assertEqual(len(self.feed()),1)
+
+    def test_refresh_existing_filters_new_entries_and_failed_fetch_preserves_time(self):
+        from argparse import Namespace
+        from contextlib import redirect_stdout
+        import io
+        from trending.__main__ import run
+        existing=candidate();self.store.upsert(existing,NOW)
+        before=self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at']
+        self.assertEqual(len(self.store.refresh_targets('ticketbox',NOW)),1)
+        self.assertEqual(self.store.refresh_targets('ticketbox',NOW,'danang'),[])
+        args=Namespace(sources='ticketbox',city=None,pilot=False,write_db=True,browser=False,
+                       supplemental=False,providers=False,refresh_existing=True,limit=12,out=None)
+        class Clock:
+            @staticmethod
+            def now(tz):return NOW+timedelta(hours=1)
+        fresh=copy.deepcopy(existing);fresh.verified_at=(NOW+timedelta(hours=1)).isoformat()
+        sibling=copy.deepcopy(fresh);sibling.source_url='https://ticketbox.vn/new-unrequested'
+        def execute(rows,failures):
+            def collect(*args, on_candidate, **kwargs):
+                for row in rows:
+                    on_candidate(row)
+                return [], failures
+            with patch.dict(os.environ,{'DATABASE_URL':URL}),patch('trending.__main__.datetime',Clock), \
+                 patch('trending.__main__.Store',return_value=self.store),patch.object(self.store,'close'), \
+                 patch('trending.__main__.PublicClient'),patch('trending.__main__.collect_source',side_effect=collect), \
+                 redirect_stdout(io.StringIO()):
+                return run(args)
+        failed=execute([], [{'stage':'detail','reason':'http_503'}])
+        self.assertNotEqual(failed['status'],'complete')
+        self.assertEqual(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
+        success=execute([fresh,sibling],[])
+        self.assertEqual(success['sources']['ticketbox']['accepted'],1)
+        self.assertEqual(self.store.db.execute('SELECT count(*) AS n FROM discovery_observations').fetchone()['n'],1)
+        self.assertGreater(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
+
+    def test_default_recheck_saves_other_publishers_and_completed_pages_before_interrupt(self):
+        from bs4 import BeautifulSoup
+        self.store.register('ticketgo', 'TicketGo', True)
+        early = candidate()
+        early.source_slug = 'ticketgo'
+        early.source_url = 'https://ticketgo.vn/event/first-publisher'
+        early.title = 'First publisher'
+        saved = candidate()
+        pending = candidate()
+        pending.title = 'Unfetched event'
+        pending.source_url = 'https://ticketbox.vn/z-after-interrupt-12345'
+        for row in (early, saved, pending):
+            self.store.upsert(row, NOW)
+
+        later = NOW + timedelta(hours=1)
+        for row in (early, saved):
+            row.verified_at = later.isoformat()
+        clock = Mock()
+        clock.now.return_value = later
+        page = BeautifulSoup('<main></main>', 'html.parser')
+        ticketgo = Mock(spec=['fetch', 'parse_many'])
+        ticketgo.fetch.return_value = page
+        ticketgo.parse_many.return_value = [early]
+        ticketbox = Mock(spec=['fetch', 'parse_many'])
+        ticketbox.parse_many.return_value = [saved]
+
+        def verification_times():
+            return {r['source_url']: r['verified_at'] for r in self.store.db.execute(
+                'SELECT source_url,verified_at FROM discovery_observations')}
+
+        def fetch_ticketbox(_client, url):
+            self.assertEqual(verification_times()[early.source_url], later)
+            if url == pending.source_url:
+                self.assertEqual(verification_times()[saved.source_url], later)
+                raise KeyboardInterrupt
+            return page
+
+        ticketbox.fetch.side_effect = fetch_ticketbox
+        args = Namespace(sources=None, city=None, pilot=False, write_db=True, browser=False,
+                         supplemental=False, providers=False, refresh_existing=True, limit=12, out=None)
+        adapters = {'ticketbox': Mock(return_value=ticketbox), 'ticketgo': Mock(return_value=ticketgo)}
+        with patch.dict(os.environ, {'DATABASE_URL': URL}), patch('trending.__main__.datetime', clock), \
+             patch('trending.__main__.Store', return_value=self.store), patch.object(self.store, 'close'), \
+             patch.dict('trending.adapters.CLASSES', adapters, clear=True), \
+             patch('trending.__main__.PublicClient'), redirect_stdout(StringIO()):
+            with self.assertRaises(KeyboardInterrupt):
+                run(args)
+
+        self.assertEqual(verification_times()[pending.source_url], NOW)
+        receipts = {r['source_slug']: (r['status'], r['accepted']) for r in self.store.db.execute(
+            'SELECT source_slug,status,accepted FROM discovery_ingestion_runs')}
+        self.assertEqual(receipts, {'__run__': ('failed', 2), 'ticketgo': ('complete', 1),
+                                    'ticketbox': ('partial', 1)})
 
     def test_run_continues_after_bad_candidate_failed_write_and_source(self):
         from argparse import Namespace
@@ -345,6 +548,51 @@ class Persistence(unittest.TestCase):
         self.assertEqual(calls.count(write_bad.source_url),1)
         self.assertNotIn('secret',output.getvalue())
         self.assertEqual(self.store.db.execute('SELECT status FROM discovery_ingestion_runs WHERE id=%s',(result['run_id'],)).fetchone()['status'],'partial')
+
+    def test_handled_interrupt_closes_active_source_receipt_and_preserves_imports(self):
+        args = Namespace(sources='ticketbox,ticketgo,vnexpress', city=None, pilot=True,
+                         write_db=True, browser=False, supplemental=False, providers=False,
+                         limit=12, out=None)
+        first = candidate()
+        saved = candidate('place')
+        saved.source_slug = 'ticketgo'
+        saved.source_name = 'TicketGo'
+        saved.source_url = 'https://ticketgo.vn/event/saved-before-interrupt'
+        interrupted = copy.deepcopy(saved)
+        interrupted.source_url = 'https://ticketgo.vn/event/interrupted'
+        upsert = self.store.upsert
+        clock = Mock()
+        clock.now.return_value = NOW
+
+        def import_candidate(candidate, now):
+            if candidate is interrupted:
+                raise KeyboardInterrupt('private detail')
+            return upsert(candidate, now)
+
+        output = StringIO()
+        with patch.dict(os.environ, {'DATABASE_URL': URL}), \
+             patch('trending.__main__.datetime', clock), \
+             patch('trending.__main__.Store', return_value=self.store), patch.object(self.store, 'close'), \
+             patch('trending.__main__.PublicClient'), \
+             patch('trending.__main__.collect_source', side_effect=[([first], []), ([saved, interrupted], [])]) as collect, \
+             patch.object(self.store, 'upsert', side_effect=import_candidate), redirect_stdout(output):
+            with self.assertRaises(KeyboardInterrupt):
+                run(args)
+
+        rows = self.store.db.execute('''SELECT source_slug,status,accepted,failed,diagnostics
+            FROM discovery_ingestion_runs''').fetchall()
+        receipts = {row['source_slug']: row for row in rows}
+        self.assertEqual(set(receipts), {'__run__', 'ticketbox', 'ticketgo'})
+        self.assertEqual(receipts['ticketbox']['status'], 'complete')
+        self.assertEqual(receipts['ticketgo']['status'], 'partial')
+        self.assertEqual(receipts['ticketgo']['accepted'], 1)
+        self.assertEqual(receipts['ticketgo']['failed'], 1)
+        self.assertEqual(receipts['ticketgo']['diagnostics']['reasons'], {'KeyboardInterrupt': 1})
+        self.assertEqual(receipts['__run__']['status'], 'failed')
+        self.assertEqual(receipts['__run__']['accepted'], 2)
+        self.assertEqual(collect.call_count, 2)
+        self.assertEqual(len(self.feed()), 2)
+        self.assertNotIn('private detail', output.getvalue())
 
     def test_primary_place_match_and_price_follow_selected_observation(self):
         c=candidate();self.store.upsert(c,NOW)
@@ -415,10 +663,32 @@ class Persistence(unittest.TestCase):
         for n in range(6):
             self.assertTrue(self.store.reserve('serpapi',f'search-{n}',1,200,200,{},NOW,pilot_id='coverage-20261108'))
         self.assertIsNone(self.store.reserve('serpapi','search-overflow',1,200,200,{},NOW,pilot_id='coverage-20261108'))
+        from trending.pilot import open_pilot_ledger
+        restored = open_pilot_ledger(URL)
+        restored.close()
         self.store.update_job('facebook-0','unknown')
         old=self.store.reserve('brightdata','facebook-0',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108')
         self.assertFalse(old['created_now'])
         self.assertEqual(old['status'],'unknown')
+
+    def test_tiktok_profile_and_post_share_existing_pilot_budget(self):
+        pilot = 'coverage-20261108'
+        self.store.db.execute('INSERT INTO discovery_pilots(id) VALUES (%s)', (pilot,))
+        for n in (1, 2):
+            self.store.reserve('brightdata', f'old-post-{n}', 1, 4500, 4500,
+                               {'platform': 'tiktok'}, NOW, pilot_id=pilot)
+        request = Mock(side_effect=[{'snapshot_id': 'sd_example'}, {'status': 'ready'}, []])
+        with patch.dict(os.environ, {'BRIGHTDATA_API_KEY': 'test'}, clear=True), patch(
+            'trending.providers.bright_preflight', return_value=(40, NOW.isoformat())
+        ):
+            client = BrightSocial(self.store, request, pilot_id=pilot)
+            self.assertEqual(client.collect_tiktok_profile('https://www.tiktok.com/@venue', NOW), [])
+            self.assertEqual(client.collect_tiktok_profile('https://www.tiktok.com/@venue', NOW), [])
+            with self.assertRaisesRegex(ProviderDisabled, 'brightdata_monthly_cap'):
+                client.collect_tiktok_profile('https://www.tiktok.com/@another', NOW)
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(self.store.db.execute("""SELECT sum(reserved_units) AS units
+            FROM discovery_provider_jobs WHERE pilot_id=%s AND provider='brightdata'""", (pilot,)).fetchone()['units'], 3)
 
     def test_revoking_permission_hides_existing_image(self):
         c=candidate();c.image_url='https://example.com/image.jpg';c.image_permitted=True;c.image_association_verified=True
@@ -452,7 +722,7 @@ class Persistence(unittest.TestCase):
         item=self.store.upsert(c,NOW)
         self.assertEqual(next(x for x in self.feed() if x['id']==item)['timing_status'],'ongoing')
         # A changed evaluation clock must not rejuvenate evidence.
-        self.assertEqual(self.feed(NOW+timedelta(hours=73)),[])
+        self.assertEqual(self.feed(NOW+timedelta(hours=169)),[])
 
     def test_social_authority_requires_reviewed_account_venue_and_gate(self):
         c=candidate();c.platform='instagram';c.source_slug='instagram';c.source_url='https://www.instagram.com/p/sample'
@@ -473,6 +743,27 @@ class Persistence(unittest.TestCase):
         self.assertEqual(self.feed(),[])
         result=self.store.db.execute("SELECT reason,payload FROM discovery_evaluate_all(%s,'hanoi') WHERE item_id=%s::uuid",(NOW,item)).fetchone()
         self.assertEqual(result['reason'],'unresolved_sessions');self.assertIsNone(result['payload'])
+
+    def test_creator_authority_places_only_and_recent(self):
+        c=candidate('place');c.platform='instagram';c.source_slug='instagram'
+        c.source_url='https://www.instagram.com/p/creator';c.owner_key='creator';c.authority_type='creator'
+        self.store.register('instagram','Instagram',True,'instagram')
+        self.store.db.execute("INSERT INTO discovery_publisher_accounts(publisher_id,platform,owner_key,name,ownership_evidence_url,reviewed_at,authority_type,publication_enabled) VALUES('reviewer','instagram','creator','Reviewer','https://example.com/profile',%s,'creator',true)",(NOW,))
+        v=self.store.db.execute("INSERT INTO discovery_verified_venues(publisher_id,name,address,city_slug,evidence_url,reviewed_at) VALUES('reviewer',%s,%s,'hanoi','https://example.com/location',%s) RETURNING id",(c.venue_name,c.address,NOW)).fetchone()['id']
+        c.verified_venue_id=str(v);self.store.upsert(c,NOW)
+        self.assertEqual(self.feed()[0]['authority_type'],'creator')
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET authority_type='organizer'")
+        self.assertEqual(self.feed(),[])
+        self.store.db.execute("UPDATE discovery_publisher_accounts SET authority_type='creator'")
+        self.store.db.execute("UPDATE discovery_observations SET published_at=%s",(NOW-timedelta(days=8),))
+        self.assertEqual(self.feed(),[])
+        self.store.upsert(c,NOW)
+        e=candidate();e.platform='instagram';e.source_slug='instagram';e.source_url='https://www.instagram.com/p/creator-event'
+        e.owner_key=c.owner_key;e.authority_type='creator';e.verified_venue_id=str(v)
+        self.store.upsert(e,NOW)
+        self.assertEqual(self.feed(kind='event'),[])
+        self.store.db.execute('UPDATE discovery_verified_venues SET revoked=true')
+        self.assertEqual(self.feed(),[])
 
     def test_publisher_aliases_do_not_inflate_attention(self):
         c=candidate('place');c.original_text='Original review';self.store.upsert(c,NOW)

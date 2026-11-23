@@ -1,12 +1,55 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from trending.adapters import collect_source
+from trending.adapters import Grapevine, collect_source
+from trending.http import FetchError, fetch_failure_reason
 from trending.progress import Progress
 from test_trending import NOW, candidate
 
 
 class CollectionFailures(unittest.TestCase):
+    def test_grapevine_uses_verified_browser_after_http_client_tls_failure(self):
+        publisher = Grapevine('hanoigrapevine', {'hosts': ['hanoigrapevine.com']})
+        url = 'https://hanoigrapevine.com/vi/2026/11/exhibition/'
+        client = Mock(browser_enabled=True)
+        page = object()
+        client.get.side_effect = [FetchError('tls_handshake_failed'), page]
+        self.assertIs(publisher.fetch(client, url), page)
+        client.get.assert_called_with(url, publisher.hosts, render=True)
+
+        for reason, browser_enabled in [('tls_handshake_failed', False), ('http_403', True)]:
+            with self.subTest(reason=reason, browser_enabled=browser_enabled):
+                client = Mock(browser_enabled=browser_enabled)
+                client.get.side_effect = FetchError(reason)
+                with self.assertRaisesRegex(FetchError, reason):
+                    publisher.fetch(client, url)
+                client.get.assert_called_once()
+
+    def test_page_heartbeats_are_debounced_without_delaying_candidate_progress(self):
+        store = Mock()
+        with patch('trending.progress.monotonic', return_value=0) as clock:
+            progress = Progress(store, ['ticketbox'], ['hanoi'])
+            progress.start_source('ticketbox')
+            store.progress.reset_mock()
+
+            clock.return_value = 29
+            progress.collection_heartbeat()
+            progress.collection_heartbeat()
+            store.progress.assert_not_called()
+
+            clock.return_value = 30
+            progress.collection_heartbeat()
+            self.assertEqual(store.progress.call_count, 2)
+            progress.collection_heartbeat()
+            self.assertEqual(store.progress.call_count, 2)
+            progress.count('accepted', 'hanoi', kind='event')
+            self.assertEqual(store.progress.call_count, 4)
+
+    def test_fetch_reasons_keep_timeout_codes_and_omit_urls(self):
+        self.assertEqual(fetch_failure_reason(FetchError('ReadTimeout')), 'ReadTimeout')
+        self.assertEqual(fetch_failure_reason(FetchError('http_429')), 'http_429')
+        self.assertEqual(fetch_failure_reason(FetchError('rejected https://example.org/')), 'FetchError')
+
     def test_parser_exception_does_not_stop_remaining_pages_and_heartbeats(self):
         adapter=Mock()
         adapter.links.return_value=['https://example.org/bad','https://example.org/good']

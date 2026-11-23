@@ -41,8 +41,9 @@ into a new preview and treat that as a fresh allowance.
    Re-inspect the same account's shared free-credit pool, promotional-only balance,
    transaction history (no deposits), and both auto-recharge controls. Update the
    existing `BRIGHTDATA_FREE_VERIFICATION_JSON` receipt only after those checks.
-   `python -m trending.preflight --env-file .env` verifies billing and matching
-   credential account IDs; it does not initiate scraping.
+   `python -m trending.preflight --env-file .env` verifies billing, matching
+   credential account IDs, live shared credits and both auto-recharge switches.
+   It performs read-only account calls.
 4. Provide a local JSON manifest with `queries` (at most six strings) and `posts`
    (at most nine objects containing `url` and the collected `primary` candidate
    payload). The primary must already be imported and fresh in the isolated feed.
@@ -57,6 +58,11 @@ preserve 4,500-credit and 200-search monthly caps and any smaller verified remai
 Failed requests retain reservations. Unknown submissions cannot be retriggered;
 known snapshots resume polling. Pilot reservations survive routine cleanup, so
 recreating a preview or waiting 90 days cannot reset the pilot budget.
+The fixed-pilot commands check the existing ledger before contacting providers.
+They require at least the six SerpAPI reservations, one Facebook reservation,
+and two Instagram reservations established by the pilot receipts. An empty
+ledger or one missing this recorded history blocks collection. Restore the
+complete canonical ledger, including unresolved jobs, before further calls.
 
 No free allowance evidence means no submission. SerpAPI account reads must confirm
 an active zero-price free plan before search. Bright Data's receipt covers the
@@ -143,6 +149,20 @@ The endpoint audit found Reels incorrectly shared the Posts dataset. The collect
 now routes `/reel/` to `gd_lyclm20il4r5helnj`, keeping `/p/` on
 `gd_lk5ns7kz21pck8jpis`, as documented in the
 [Instagram endpoint reference](https://docs.brightdata.com/products/scrapers/instagram/send-first-request).
+
+## November 22 staging check
+
+The bounded Instagram run returned two recent public posts. Both remain lead
+evidence pending venue verification. A later read of the same run reconciled its
+included usage to $0.0062. Apify's campaign ledger retains all 132 reserved units.
+
+The TikTok submission returned HTTP 400. The actor's run list had no new run,
+and its live metadata advertised a $0.50 minimum value for `maxTotalChargeUsd`.
+The attempted $0.10 cap was below that minimum. The minimum is a ceiling the
+caller must be willing to reserve, with actual usage charged separately. Confirm
+the current `pricingInfos[].minimalMaxTotalChargeUsd` with the actor details API
+before a new authorized test. The outstanding reservation remains intact, and
+this diagnosis did not submit another run. [Actor API](https://apify.com/clockworks/tiktok-scraper/api)
 A second single-record reservation tests the organizer's
 [recent reel](https://www.instagram.com/reel/DfezjTRTU4a/).
 
@@ -167,3 +187,93 @@ attempts, 0 SerpAPI searches, 0 TikTok submissions**. Including the previous Fac
 attempt, this fixed pilot now holds 3 of 9 Bright Data attempts (Instagram 2 of 3).
 No reservations were reset. The follow-up PostgreSQL run passed all **74 tests**.
 [Sanitized live receipt](evidence/social-20261108/results.json).
+
+## November 23 public-source validation
+
+Discovery now reads original post links in Instagram embeds and matching
+TikTok video blockquotes. Alias links share one post identity and keep the
+dated publisher evidence. The website adapters supply detail links so calendar
+downloads and navigation links use none of the two detail fetches per publisher.
+
+The baseline attempted 20 pages and had five fetch failures. The updated run
+used the same source directory and opened all 22 selected pages successfully.
+Hanoi and Da Nang returned no original social links. HCMC returned two from
+Saigon Outcast, both confirmed against their live Instagram pages. The dance
+session advertised for November 22 had ended. The burger awards post was a
+recap. Neither became a feed item. [Organizer site](https://www.saigonoutcast.com/) ·
+[Dance reel](https://www.instagram.com/reel/Df4uHYdTFDg/) · [Awards post](https://www.instagram.com/p/DfzcxWlk-xE/)
+
+The two recent Da Nang reels from the previous pilot were also checked against
+their original pages. The covers confirmed the named venues. The engagement
+counts are a single public observation.
+
+| Original reel | Published | Venue evidence | Likes / comments |
+| --- | --- | --- | ---: |
+| [Tiệm Yến](https://www.instagram.com/reel/Df_0zs_oXt6/) | November 21 | The cover names the Da Nang branch. The [restaurant](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) confirms 347 Nguyễn Văn Linh. | 32 / 0 |
+| [Mì Cay Gangwon](https://www.instagram.com/reel/Df7X04roCHE/) | November 19 | The storefront in the cover shows 489 Hoàng Diệu. The promotion end date is unknown. | 137 / 1 |
+
+These remain review samples. No image reuse or public social publication was
+approved. TikTok returned no fresh original lead and its official public player
+failed TLS hostname verification on this machine. There were zero metered
+provider requests and the campaign reservation total stayed at 132.
+
+## Bounded TikTok profile discovery
+
+Use the manual dry run to find a reviewed publisher's public profile automatically.
+The publisher's current site must link to the exact profile. Ticketbox is a lead
+for Hanoi and HCMC, and the Da Nang tourism site links to its own profile. The city
+of the publisher is only a search hint.
+
+```sh
+python -m trending.social_collect --city danang --tiktok-profile
+```
+
+An explicit `--providers --env-file .env` switches this command to collection.
+It requires the existing canonical `QUOTA_DATABASE_URL` ledger with recorded
+history for the fixed pilot. Each profile shares the pilot's existing limits and
+can reserve one record. Profiles used for multiple cities reuse the same job.
+The request limits `num_of_posts` and the provider's response cap to one. The
+provider documents one free credit per delivered Web Scraper API record.
+[Profile input schema](https://docs.brightdata.com/scrapers/gd_m7n5v2gq296pex2f5m.json) ·
+[Async request limit](https://docs.brightdata.com/api-reference/rest-api/scraper/asynchronous-requests) ·
+[Free credit units](https://docs.brightdata.com/general/account/billing-and-pricing/free-tier)
+
+The command returns a matching fresh post for review, with its original URL and
+available engagement counts. It leaves publication to the existing review process.
+Re-running the command polls a known snapshot or checks cached publication time.
+
+Bright Data's Finance API now exposes [shared credits](https://docs.brightdata.com/api-reference/account-management-api/Get_free_tier_credits)
+and [both auto-recharge settings](https://docs.brightdata.com/api-reference/account-management-api/Get_auto_recharge_settings).
+The free-only check uses the smaller of the dashboard receipt and live allowance,
+with one credit left unreserved because the API rounds fractional usage. A fresh
+dashboard transaction check still reconciles the source of a positive wallet
+balance. At the November 23 Vietnam-time check both switches were off and the
+provider returned 4,996 credits left. The wallet had $5 and the prior receipt
+recorded $7 promotional. The collector did not spend credits.
+
+A public check of REALITY's Vietnamese site verified its Đà Nẵng venue and the
+outbound link to the organizer's Instagram profile. The page supplied a profile
+link only. A fresh post still needs its own timestamp and activity evidence.
+[Organizer site](https://realitydn.com/vn/) · [Organizer profile](https://www.instagram.com/reality.dn/)
+
+## November 23 public social recheck
+
+The retained review export contained 68 Instagram and 47 TikTok links.
+None of its dated posts fell within the rolling seven-day window at the check.
+Two separate Đà Nẵng review leads returned HTTP 200 and the requested original
+permalink from Meta's token-free Instagram oEmbed endpoint. The embed supplied
+no publication timestamp. The native Tiệm Yến reel showed a November 21 date
+and the venue name again. The restaurant's site confirms the branch at
+347 Nguyễn Văn Linh. The Mì Cay Gangwon reel showed November 19 in an initial
+read, consistent with the earlier review. Its repeat read timed out waiting for
+the post details, and the promotion end date remains unknown.
+[Instagram oEmbed](https://developers.facebook.com/docs/graph-api/reference/instagram-oembed) ·
+[Tiệm Yến reel](https://www.instagram.com/reel/Df_0zs_oXt6/) ·
+[Restaurant branch](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) ·
+[Mì Cay Gangwon reel](https://www.instagram.com/reel/Df7X04roCHE/)
+
+Official TikTok creator-profile oEmbed requests for Ticketbox and Da Nang's
+tourism profile both failed TLS before returning a post list. Fresh automatic
+TikTok discovery remains unverified. The canonical quota database was
+unreachable. The check made no metered requests and wrote no feed records.
+[TikTok creator-profile oEmbed](https://developers.tiktok.com/docs/en/embed-creator-profiles/)

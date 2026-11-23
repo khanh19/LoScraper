@@ -18,10 +18,21 @@ class WebsiteFetching(unittest.TestCase):
 
     def test_permanent_failure_not_retried(self):
         client=PublicClient()
-        for code in ['http_403','http_404','host_not_allowed','page_too_large']:
+        for code in ['http_403','http_404','host_not_allowed','page_too_large','tls_handshake_failed']:
             with patch.object(client,'_get_once',side_effect=FetchError(code)) as fetch:
                 with self.assertRaises(FetchError):client.get('https://vnexpress.net/',{'vnexpress.net'})
                 self.assertEqual(fetch.call_count,1)
+
+    def test_browser_navigation_preserves_only_the_transport_code(self):
+        client = PublicClient(browser=True)
+        client._browser = Mock()
+        page = client._browser.new_page.return_value
+        page.goto.side_effect = RuntimeError(
+            'Page.goto: net::ERR_SSL_PROTOCOL_ERROR at https://example.org/?token=private\nCall log: private')
+        with self.assertRaises(FetchError) as caught:
+            client._render('https://example.org/', {'example.org'})
+        self.assertEqual(str(caught.exception), 'browser_err_ssl_protocol_error')
+        page.close.assert_called_once()
 
     def test_listing_renderer_accepts_article_headings_and_checks_status(self):
         client=PublicClient(browser=True);page=Mock();client._browser=Mock();client._browser.new_page.return_value=page

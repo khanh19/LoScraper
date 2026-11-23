@@ -1,4 +1,6 @@
+import json
 import unittest
+from unittest.mock import patch
 from datetime import datetime,timezone,timedelta
 from trending.announcements import social_sessions
 from trending.intent import queries
@@ -40,3 +42,32 @@ class Timely(unittest.TestCase):
         self.assertEqual(len(result['posts']),1)
         self.assertEqual(result['posts'][0]['city_hint'],'hanoi')
         self.assertTrue(result['posts'][0]['requires_provider_validation'])
+
+    def test_website_detail_budget_skips_calendar_files_and_locale_switches(self):
+        life = 'https://lifeofdanang.com'
+        nightlife = 'https://vietnamnightlife.com'
+        sources = [
+            {'id': 'lifeofdanang', 'publisher_id': 'life', 'cities': ['danang'], 'categories': [], 'url': life + '/weekly'},
+            {'id': 'vietnamnightlife', 'publisher_id': 'nightlife', 'cities': ['danang'], 'categories': [],
+             'url': nightlife + '/en/upcoming-events-1-11.html'},
+        ]
+        pages = {
+            sources[0]['url']: '<main><a href="/api/event-ics/city-show">Calendar</a><a href="/vi/danang/city-show">Details</a></main>',
+            sources[1]['url']: '<a href="/ko/su-kien-1-11.html">Switch language</a><a href="/en/nightlife-show-115-15.html">Details</a>',
+            life + '/vi/danang/city-show': '<iframe src="https://www.instagram.com/reel/example/embed/"></iframe>',
+            nightlife + '/en/nightlife-show-115-15.html': '<main></main>',
+        }
+        requested = []
+
+        class Client:
+            def get(self, url, hosts):
+                requested.append(url)
+                return BeautifulSoup(pages[url], 'html.parser')
+
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps(sources)
+            result = discover('danang', Client(), NOW)
+        self.assertEqual(requested, [sources[0]['url'], life + '/vi/danang/city-show',
+                                     sources[1]['url'], nightlife + '/en/nightlife-show-115-15.html'])
+        post, = result['posts']
+        self.assertEqual(post['url'], 'https://www.instagram.com/reel/example')

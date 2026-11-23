@@ -1,5 +1,20 @@
 # What’s Trending: user walkthroughs
 
+## Live website collection — 8 November 2026
+
+[Watch/download the 53-second MP4](assets/demo/live-collection-20261108/walkthrough.mp4) · [Verification receipt](assets/demo/live-collection-20261108/verification.json)
+
+[![Live collection walkthrough](assets/demo/live-collection-20261108/thumbnail.jpg)](assets/demo/live-collection-20261108/walkthrough.mp4)
+
+Recorded from the actual local app with Vietnamese captions and click highlights. Collection starts separately; app reload reads stored results, without triggering scraping or AI. Waiting periods are shortened and labelled.
+
+Shows collection starting, Discover reloading, the Hanoi event filter, the “33.23.45” exhibition details, the original Hanoi Grapevine page, return navigation, and empty place/HCMC states. The source confirms the venue and Tuesday–Sunday 10:00–18:00 schedule. Illustrative imagery is labelled; it is not a photograph of this exhibition.
+
+A new isolated database received one Hanoi and one Da Nang item from Hanoi Grapevine and Life of Da Nang, bounded to five detail pages per source. Thirteen entries were rejected, with no collection failures. Only Hanoi is demonstrated; the Da Nang date-only/session representation remains a separate rollout review item. No provider requests or mocked responses. No app/API code changes, deployment or scheduling.
+
+Export: H.264, 1100 × 900, 52.53 seconds, approximately 854 KB. Chrome playback and seeking passed from the local MP4; a simple HTTP server without Range support could not seek. No page exceptions or failed requests. The receipt records source navigation, API/card consistency and collection outcomes.
+
+
 ## Step-by-step walkthrough — 8 November 2026
 
 [Watch/download the MP4](https://raw.githubusercontent.com/khanh19/LoScraper/stephen-trending-coverage/docs/assets/demo/walkthrough-20261108/whats-trending-walkthrough.mp4) · [Video file](assets/demo/walkthrough-20261108/whats-trending-walkthrough.mp4) · [Chapter list](assets/demo/walkthrough-20261108/chapters.json)

@@ -1,8 +1,10 @@
 # Tools and implementation status
 
+> **Latest code validation (15 November):** [CI scope and passing run](ci.md), [seven-day verification and coverage follow-up](weekly-verification-20261115.md). The provider balances, counts and capability table below are a historical 7–8 November snapshot, not current account clearance or the latest implementation inventory.
+
 > **Reliability update:** see [migration order, operator health, and current validation](reliability.md). The 55-test / 8-item website snapshot supersedes the earlier test and feed counts below; provider pilot history is unchanged.
 
-Evidence snapshot: **2026-11-07 America/New_York / 2026-11-08 Asia/Ho_Chi_Minh**. This is the last recorded validation, not a new live run. Current balances, source layouts, and feed eligibility must be rechecked. Start with the [teammate setup guide](teammate-setup.md).
+Evidence snapshot: **2026-11-07 America/New_York / 2026-11-08 Asia/Ho_Chi_Minh**. This is historical validation, not a new live run. Current balances, source layouts, and feed eligibility must be rechecked. Start with the [teammate setup guide](teammate-setup.md).
 
 ## Collection and providers
 

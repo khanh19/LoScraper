@@ -127,7 +127,7 @@ Switch HCMC/Hanoi/Da Nang and **Tất cả / Sự kiện / Địa điểm** in t
 
 Collection writes observations, occurrences, and ingestion receipts to PostgreSQL. The API validates eligibility and ranks on each read. Expo's trending query caches by city/filter (the request limit is fixed at 10), with a 60-second stale time and 60-second refetch interval while active; city/filter changes and the retry/refresh controls also request data. UI polling does **not** scrape websites.
 
-Events must overlap the next seven days in Vietnam time; places need dated mentions from the previous seven days. Unverified observations expire after 72 hours. Rerun website collection to refresh evidence; changing an old article's scrape time does not make it new. The planned daily 06:00 Vietnam GitHub job is currently **disabled**, so local data will age out without manual collection.
+Events must overlap the next seven days in Vietnam time; places need dated mentions from the previous seven days. Unverified observations expire after 72 hours. Rerun website collection to refresh evidence; changing an old article's scrape time does not make it new. The schedule remains **disabled pending rollout**: from December 1, 2026, Tuesday/Friday full website updates and existing-website checks on other days, all at 06:00 Vietnam time. See [schedule setup](collection-schedule.md). Local data still needs manual collection.
 
 Live Google search is expected to be unavailable with the guard enabled. Cached local venues can still open. Existing Call/Website/Hour/Menu action-row placeholders are not complete product functionality. Native-device, authenticated, and production behavior are separate validation work.
 

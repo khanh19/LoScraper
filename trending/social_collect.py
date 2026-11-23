@@ -2,14 +2,39 @@
 import argparse,json,os
 from datetime import datetime,timezone
 from urllib.parse import urlsplit
+import psycopg
 from .__main__ import load_env_files
-from .discover import discover
+from .discover import discover, reviewed_tiktok_profile
 from .http import PublicClient
 from .model import CITIES
-from .pilot import PILOT_ID
+from .pilot import PILOT_ID, open_pilot_ledger
 from .providers import BrightSocial,ProviderDisabled
 from .announcements import announcement
 from .store import Store
+
+
+def profile_pilot(city, now, live, ledger_url):
+    profile = reviewed_tiktok_profile(city, PublicClient())
+    report = {'city': city, 'profile': profile, 'maximum_records': 1, 'posts': [], 'published': 0}
+    if not profile:
+        return {**report, 'status': 'blocked', 'reason': 'no_reviewed_profile'}
+    if not live:
+        return {**report, 'status': 'dry_run'}
+    if urlsplit(ledger_url).hostname not in {'localhost', '127.0.0.1', '::1'}:
+        return {**report, 'status': 'blocked', 'reason': 'existing_local_quota_ledger_required'}
+    try:
+        ledger = open_pilot_ledger(ledger_url)
+        try:
+            rows = BrightSocial(ledger, pilot_id=PILOT_ID).collect_tiktok_profile(profile['url'], now)
+        finally:
+            ledger.close()
+    except ProviderDisabled as exc:
+        return {**report, 'status': 'blocked', 'reason': str(exc)}
+    except psycopg.Error:
+        return {**report, 'status': 'blocked', 'reason': 'existing_local_quota_ledger_unavailable'}
+    report['posts'] = rows
+    report['status'] = 'retrieved_for_review' if rows else 'no_fresh_post'
+    return report
 
 
 def main():
@@ -17,9 +42,16 @@ def main():
     p.add_argument('--city',choices=list(CITIES),required=True)
     p.add_argument('--env-file',action='append',default=[])
     p.add_argument('--providers',action='store_true',help='Use remaining existing pilot reservations; never resets caps')
+    p.add_argument('--tiktok-profile',action='store_true',help='Check one reviewed TikTok profile without publishing')
     p.add_argument('--write-db',action='store_true',help='Import only publication-enabled reviewed organizers in isolated preview')
     args=p.parse_args();load_env_files(args.env_file)
     now=datetime.now(timezone.utc)
+    if args.tiktok_profile:
+        if args.write_db:
+            p.error('the TikTok profile pilot produces review leads only')
+        report = profile_pilot(args.city, now, args.providers, os.environ.get('QUOTA_DATABASE_URL', ''))
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report['status'] in {'dry_run', 'retrieved_for_review'} else 2
     result=discover(args.city,PublicClient(),now)
     result['collection']=[]
     if not args.providers:
@@ -27,12 +59,20 @@ def main():
     feed_url=os.environ.get('DATABASE_URL','');ledger_url=os.environ.get('QUOTA_DATABASE_URL','')
     if feed_url==ledger_url or any(urlsplit(u).hostname not in {'127.0.0.1','localhost','::1'} for u in (feed_url,ledger_url)) or not urlsplit(feed_url).path.startswith('/lo_setup_check_'):
         p.error('separate isolated feed and existing canonical quota ledger required')
-    feed=Store(feed_url);ledger=Store(ledger_url)
     try:
+        ledger = open_pilot_ledger(ledger_url)
+    except ProviderDisabled as exc:
+        print(json.dumps({**result, 'status': 'blocked', 'reason': str(exc)}, ensure_ascii=False, indent=2))
+        return 2
+    feed = None
+    try:
+        feed = Store(feed_url)
         social=BrightSocial(ledger,pilot_id=PILOT_ID)
         attempted={}
         # Also resume existing known jobs if a webpage no longer lists the post.
-        pending=ledger.db.execute("SELECT input_data FROM discovery_provider_jobs WHERE pilot_id=%s AND provider='brightdata' AND status='submitted'",(PILOT_ID,)).fetchall()
+        pending=ledger.db.execute("""SELECT input_data FROM discovery_provider_jobs WHERE pilot_id=%s
+            AND provider='brightdata' AND status='submitted'
+            AND input_data->>'operation' IS DISTINCT FROM 'tiktok_profile'""",(PILOT_ID,)).fetchall()
         leads={r['url']:r for r in result['posts']}
         for r in pending:
             url=r['input_data']['url']
@@ -68,7 +108,10 @@ def main():
             result['collection'].append(status)
         result['published']=sum(r['published'] for r in result['collection'])
         result['accounting']=ledger.db.execute("SELECT provider,status,count(*) AS jobs,sum(reserved_units) AS units FROM discovery_provider_jobs WHERE pilot_id=%s GROUP BY 1,2",(PILOT_ID,)).fetchall()
-    finally:feed.close();ledger.close()
+    finally:
+        if feed:
+            feed.close()
+        ledger.close()
     print(json.dumps(result,ensure_ascii=False,default=str,indent=2))
     return 2 if any(r.get('reason') not in (None,'eligible') for r in result['collection']) else 0
 

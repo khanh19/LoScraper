@@ -1,8 +1,10 @@
 """Bounded public-page fetching. No proxy or paid browser fallback."""
 from __future__ import annotations
 
+import json
 import ipaddress
 import os
+import re
 import socket
 import time
 from urllib.parse import urlsplit, urlunsplit
@@ -15,6 +17,14 @@ from .model import canonical
 
 class FetchError(Exception):
     pass
+
+
+def fetch_failure_reason(error: Exception) -> str:
+    if isinstance(error, FetchError):
+        reason = str(error)
+        if re.fullmatch(r'[A-Za-z_0-9]{1,64}', reason):
+            return reason
+    return type(error).__name__
 
 
 def public_url(url: str) -> str:
@@ -42,22 +52,22 @@ class PublicClient:
         self.cache = {}
         self._playwright = self._browser = None
 
-    def get(self, url: str, allowed_hosts: set[str], render=False) -> BeautifulSoup:
+    def get(self, url: str, allowed_hosts: set[str], render=False, json_response=False):
         # Exactly one retry for transient failures. Only successful parses are cached.
         for attempt in range(2):
             try:
-                return self._get_once(url, allowed_hosts, render)
+                return self._get_once(url, allowed_hosts, render, json_response)
             except FetchError as exc:
                 if attempt or str(exc) not in {'http_408','http_429','http_500','http_502','http_503','http_504','Timeout','ReadTimeout','ConnectTimeout','ConnectionError','TimeoutError'}:
                     raise
                 time.sleep(2)
         raise FetchError('retry_exhausted')
 
-    def _get_once(self, url: str, allowed_hosts: set[str], render=False) -> BeautifulSoup:
+    def _get_once(self, url: str, allowed_hosts: set[str], render=False, json_response=False):
         url = public_url(url)
         if urlsplit(url).hostname not in allowed_hosts:
             raise FetchError("host_not_allowed")
-        key = (url, render)
+        key = (url, render, json_response)
         if key in self.cache:
             return self.cache[key]
         host = urlsplit(url).hostname
@@ -79,19 +89,22 @@ class PublicClient:
                             continue
                         if response.status_code != 200:
                             raise FetchError(f"http_{response.status_code}")
-                        if not any(t in response.headers.get("Content-Type", "") for t in ("html", "xml")):
+                        formats = ("json",) if json_response else ("html", "xml")
+                        if not any(t in response.headers.get("Content-Type", "") for t in formats):
                             raise FetchError("unsupported_content")
                         data = bytearray()
                         for chunk in response.iter_content(65536):
                             data.extend(chunk)
                             if len(data) > 4_000_000:
                                 raise FetchError("page_too_large")
-                        soup = BeautifulSoup(bytes(data), "html.parser")
+                        soup = json.loads(data) if json_response else BeautifulSoup(bytes(data), "html.parser")
                         break
                 else:
                     raise FetchError("redirect_limit")
             except requests.RequestException as exc:
                 # Do not log exception URLs or response bodies.
+                if isinstance(exc, requests.exceptions.SSLError):
+                    raise FetchError('tls_handshake_failed') from None
                 raise FetchError(type(exc).__name__) from None
         self.cache[key] = soup
         return soup
@@ -134,6 +147,9 @@ class PublicClient:
         except FetchError:
             raise
         except Exception as exc:
+            transport = re.match(r'Page\.goto: net::(ERR_[A-Z0-9_]{1,48})(?=\s|$)', str(exc))
+            if transport:
+                raise FetchError('browser_' + transport[1].lower()) from None
             raise FetchError(type(exc).__name__) from None
         finally:
             page.close()

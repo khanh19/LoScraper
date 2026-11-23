@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 CITIES = {"hcmc": "TP. Hồ Chí Minh", "hanoi": "Hà Nội", "danang": "Đà Nẵng"}
 CATEGORIES = {"restaurant", "cafe", "bar", "nightlife", "workshop", "culture", "music", "experience", "sports", "market"}
+CONFIRMED_SCHEDULE_CONFLICT = "confirmed_schedule_conflict"
 
 
 def folded(text: str) -> str:
@@ -38,11 +39,20 @@ def parse_time(value: str | None) -> datetime | None:
         return None
 
 
-def city_from_address(address: str) -> str | None:
+def outside_supported_cities(address: str) -> bool:
     text = folded(address)
     # These nearby destinations are not the three urban destinations in this feed.
-    if re.search(r"\b(hoi an|vung tau|binh duong|nha trang|phu quoc)\b", text) or text == 'hue' or text.endswith(' hue'):
+    return text == 'hue' or text.endswith(' hue') or bool(re.search(
+        r'\b(hoi an|vung tau|binh duong|nha trang|phu quoc|tinh quang ninh|yen tu|'
+        r'tinh lam dong|tinh khanh hoa|hung yen|vinpalace ocean city|'
+        r'vincom mega mall ocean city|vinhomes ocean park [23])\b', text))
+
+
+def city_from_address(address: str) -> str | None:
+    # Some publishers append a default supported city after another province.
+    if outside_supported_cities(address):
         return None
+    text = folded(address)
     aliases = {"hcmc": r"\b(ho chi minh|hcmc|hcm|tp hcm|tphcm|sai gon|saigon)\b",
                "hanoi": r"\b(ha noi|hanoi)\b", "danang": r"\b(da nang|danang)\b"}
     matches = [city for city, pattern in aliases.items() if re.search(pattern, text)]
@@ -119,7 +129,7 @@ class Candidate:
             except ValueError:
                 self.image_url = None  # Missing/unsafe artwork never prevents publication.
         verified = parse_time(self.verified_at)
-        if not verified or not now - timedelta(hours=72) <= verified <= now + timedelta(minutes=5):
+        if not verified or not now - timedelta(hours=168) < verified <= now + timedelta(minutes=5):
             reasons.append("stale_verification")
         if self.status != "active":
             reasons.append(self.status)

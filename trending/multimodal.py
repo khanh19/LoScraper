@@ -41,6 +41,11 @@ For image evidence transcribe the visible supporting words; do not claim visual 
 Use Vietnamese text where appropriate but preserve official names. Unknown session endpoints must be null,
 never empty strings, punctuation, or a copied start time. All session timestamps require timezone
 offsets. Keep separate sessions separate and overnight ends on the next day. City hints are NOT proof.
+Separate every destination: never borrow an address, price or schedule from another stop or a nearby business.
+Opening hours are NOT event occurrences. A generic city/district geotag is not a venue street address.
+Ignore unrelated music/background speech. ASR names need corroboration, not confident spelling correction.
+Gifted meals and advertising flags are commercial context; false flags do not prove independent organic evidence.
+Creator ratings are opinions, not Lo ratings. Distinguish shares from saves. Prioritize visible closing-card facts.
 Ownership and location registries are operator supplied, never inferred from a badge or a follower count.
 Allowed cities: hcmc,hanoi,danang. Allowed categories: restaurant,cafe,bar,nightlife,workshop,culture,music,
 experience,sports,market. Kind is event or place. Include cancellation and recap evidence. No confidence scores.'''
@@ -53,6 +58,8 @@ def normalize_record(row, platform, city, fetched_at):
     text=str(row.get('description') or row.get('content') or '')[:12000]
     transcript=row.get('transcript')
     sources=[{'id':'caption','type':'text','text':text}]
+    from .social_quality import parse_vtt
+    sources.extend(parse_vtt(row.get('subtitle_vtt'),row.get('subtitle_language')))
     if isinstance(transcript,str) and transcript.strip():
         sources.append({'id':'transcript','type':'transcript','text':transcript[:18000]})
     images=[]
@@ -70,6 +77,12 @@ def normalize_record(row, platform, city, fetched_at):
                 'media':[{'id':f'image_{i}','type':'image','url':v,'reuse_permitted':False} for i,v in enumerate(images[:6])],
                 'secondary_media':[v for v in [row.get('audio_url'),row.get('video_url')] if isinstance(v,str) and v.startswith('https://')][:2],
                 'media_incomplete':len(images)>6,'fetched_at':source_time,'authority':None,'verified_venues':[]}
+    normalized['engagement']={k:row.get(k) for k in ('play_count','digg_count','comment_count','share_count','collect_count')}
+    from .engagement import assess
+    normalized['engagement_review']=assess(row)
+    normalized['engagement_review']['comment_samples']=row.get('comment_samples',[])[:20]
+    normalized['engagement_review']['comment_sample_scope']=row.get('comment_sample_scope','unavailable')
+    normalized['commercial']={k:row.get(k) for k in ('is_ad','is_sponsored')}
     normalized['verification_known']=not row.get('_historical_snapshot') or bool(parse_time(row.get('_source_verified_at')))
     normalized['content_hash']=digest({k:v for k,v in normalized.items() if k not in {'fetched_at','city_hint'}})
     return normalized
@@ -137,6 +150,7 @@ def validate_extraction(value, package, now):
     if value['kind']=='place' and publication and publication<now-timedelta(days=7):reasons.append('stale_place_mention')
     sessions=value.get('occurrences')
     if not isinstance(sessions,list):return ['invalid_occurrences']
+    if value['kind']=='place' and sessions:reasons.append('place_has_event_sessions')
     if value['kind']=='event':
         if not sessions or 'occurrences' not in refs:reasons.append('unsupported_sessions')
         for s in sessions:
@@ -167,8 +181,8 @@ def judge_reasons(judgment, package):
     return reasons
 
 
-def process(package, ai, ledger, now, fetch_images=False, media_permissions=()):
-    package=copy.deepcopy(package);package['image_inputs']=[];media_errors=[]
+def process(package, ai, ledger, now, fetch_images=False, media_permissions=(), extracted=None, allow_media=True):
+    package=copy.deepcopy(package);package['image_inputs']=package.pop('_prepared_images',[]);media_errors=[]
     if fetch_images and package['platform']!='youtube':
         for media in package['media'][:6]:
             try:package['image_inputs'].append(image_input(media['url'],media['id']))
@@ -176,8 +190,8 @@ def process(package, ai, ledger, now, fetch_images=False, media_permissions=()):
     data={k:v for k,v in package.items() if k not in {'image_inputs','content_hash','fetched_at'}}
     data['evaluation_date']=now.astimezone(ICT).date().isoformat();data['prompt_version']=PROMPT_VERSION
     data['image_order']=[i['id'] for i in package['image_inputs']]
-    extraction=ai.structured('extract',EXTRACTION_SCHEMA,RULES,data,package['image_inputs'])
-    if extraction.get('missing') and package.get('secondary_media'):
+    extraction=extracted if extracted is not None else ai.structured('extract',EXTRACTION_SCHEMA,RULES,data,package['image_inputs'])
+    if allow_media and extraction.get('missing') and package.get('secondary_media'):
         from .media import permitted,analyze_media
         for url in package['secondary_media']:
             if not permitted(url,media_permissions,now):continue
@@ -187,16 +201,17 @@ def process(package, ai, ledger, now, fetch_images=False, media_permissions=()):
                 package['image_inputs'].extend(media['frames'][:12])
                 data['sources']=package['sources'];data['image_order']=[i['id'] for i in package['image_inputs']]
                 data['video_coverage']=media['coverage']
+                data['frame_timestamps']=[{'id':f['id'],'time_seconds':f.get('time_seconds')} for f in media['frames']]
                 extraction=ai.structured('extract',EXTRACTION_SCHEMA,RULES,data,package['image_inputs'])
             except (ProviderDisabled,FetchError) as exc:media_errors.append(str(exc))
             break
     reasons=validate_extraction(extraction,package,now)
-    if package['fetched_at']<now-timedelta(hours=72):reasons.append('stale_verification')
+    if package['fetched_at']<=now-timedelta(hours=168):reasons.append('stale_verification')
     if not package['verification_known']:reasons.append('snapshot_verification_time_unknown')
     # The judge receives original evidence + claims, not extraction reasoning,
     # confidence, or the extractor's missing-field explanations.
     judge_input={'original_evidence':data,'claims':{k:v for k,v in extraction.items() if k!='missing'},
-                 'rules':{'weekly_days':7,'planning_days':30,'verification_hours':72}}
+                 'rules':{'weekly_days':7,'planning_days':30,'verification_hours':168}}
     instructions=RULES+'''\nYou are the separate evidence judge. Assess EVERY check. Reject unsupported claims,
     mark unknown when necessary, and cite source IDs. A city hint, creator location, verified badge or model output
     is not independent venue/ownership proof. Unknown authority requires needs_review. If facts disagree, hold
@@ -206,9 +221,10 @@ def process(package, ai, ledger, now, fetch_images=False, media_permissions=()):
     reasons+=judge_reasons(judgment,package)
     if package['media_incomplete']:reasons.append('media_coverage_incomplete')
     reasons+=media_errors
+    reasons+=package.get('collection_holds',[])
     result={'extraction':extraction,'judgment':judgment,'reasons':sorted(set(reasons)),
             'image_count':len(package['image_inputs']),'published':False,'human_calibration':'pending'}
-    package['analyzed_images']=[{'id':i['id'],'sha256':i.get('sha256',digest(i['data_url']))} for i in package['image_inputs']]
+    package['analyzed_images']=[{'id':i['id'],'sha256':i.get('sha256',digest(i['data_url'])),'time_seconds':i.get('time_seconds')} for i in package['image_inputs']]
     result['evidence_id']=ledger.evidence(package,extraction,judgment,result['reasons'])
     return result
 
@@ -219,6 +235,9 @@ def candidate_from_evidence(package, extraction, account, venue, now):
         account.get('publisher_id')!=venue.get('publisher_id') or account.get('platform')!=package['platform'] or
         account.get('owner_key','').rstrip('/')!=package['owner_key']):
         return None,'unreviewed_authority'
+    authority=account.get('authority_type','organizer')
+    if authority not in {'organizer','creator'} or (authority=='creator' and extraction.get('kind')!='place'):
+        return None,'creator_cannot_establish_event'
     if any(folded(str(extraction.get(k) or ''))!=folded(str(venue.get(v) or ''))
            for k,v in [('venue_name','name'),('address','address'),('city_slug','city_slug')]):
         return None,'independent_venue_mismatch'
@@ -230,7 +249,7 @@ def candidate_from_evidence(package, extraction, account, venue, now):
         published_at=package['published_at'],verified_at=package['fetched_at'].isoformat(),
         occurrences=[Occurrence(**s) for s in extraction['occurrences']],price_text=extraction['price_text'],
         location_evidence=venue['evidence_url'],platform=package['platform'],owner_key=account['owner_key'],
-        authority_type='organizer',verified_venue_id=str(venue['id']))
+        authority_type=authority,verified_venue_id=str(venue['id']))
     invalid=c.validate(now)
     return (None,','.join(invalid)) if invalid else (c,None)
 
@@ -243,3 +262,87 @@ def similar_candidates(vector, candidates, city, category):
         return sum(a*b for a,b in zip(vector,other))/denominator if denominator else -1
     return sorted([{'id':c['id'],'similarity':cosine(c['embedding'])} for c in candidates
                    if c['city_slug']==city and c['category']==category],key=lambda c:(-c['similarity'],c['id']))[:5]
+
+
+def process_destinations(package, ai, ledger, now, fetch_images=False, media_permissions=()):
+    """Versioned multi-stop extraction; each child receives independent validation.
+
+    Parent evidence is retained. A failed sibling does not publish or erase another.
+    Video escalation stays on the legacy single-item path until destination-scoped
+    media provenance is available; this function never bypasses media permissions.
+    """
+    prepared=copy.deepcopy(package)
+    images=[]
+    image_errors=[]
+    if fetch_images and prepared['platform']!='youtube':
+        for media in prepared['media'][:6]:
+            try: images.append(image_input(media['url'],media['id']))
+            except (ProviderDisabled,FetchError) as exc: image_errors.append(str(exc))
+    data={k:v for k,v in prepared.items() if k not in {'content_hash','fetched_at'}}
+    data['evaluation_date']=now.astimezone(ICT).date().isoformat()
+    data['image_order']=[i['id'] for i in images]
+    schema=obj({'destinations':{'type':'array','maxItems':6,'items':EXTRACTION_SCHEMA}})
+    output=ai.structured('extract_destinations_v1',schema,RULES+
+        '\nReturn each independently identifiable destination separately. No destination: empty array. '
+        'Do not create an item for a background shop. Do not merge itinerary stops.',data,images)
+    destinations=output.get('destinations')
+    if not isinstance(destinations,list) or len(destinations)>6:
+        raise ProviderDisabled('invalid_destination_bundle')
+    # A full page is not proof that a roundup ends there. Continue with an
+    # explicit exclusion list; every page still uses the provider's durable
+    # reservations and cache. Never restart or silently discard an overflow.
+    def identity(item):
+        if not isinstance(item,dict):
+            raise ProviderDisabled('invalid_destination_bundle')
+        return (folded(str(item.get('venue_name') or '')),
+                folded(str(item.get('address') or '')))
+    seen={identity(item) for item in destinations}
+    page_size=len(destinations)
+    while page_size==6 and len(destinations)<30:
+        page_data={**data,'already_extracted_destinations':[
+            {'venue_name':item.get('venue_name'),'address':item.get('address')}
+            for item in destinations]}
+        page=ai.structured('extract_destinations_continue_v2',schema,RULES+
+            '\nExtract up to six ADDITIONAL destinations not in already_extracted_destinations. '
+            'Return an empty array when no more are supported. Never invent stops to fill the page.',
+            page_data,images).get('destinations')
+        if not isinstance(page,list) or len(page)>6:
+            raise ProviderDisabled('invalid_destination_bundle')
+        page_size=len(page)
+        additions=[]
+        for item in page:
+            key=identity(item)
+            if key in seen:
+                # Repeated or changed claims need review, not an automatic merge.
+                image_errors.append('destination_pagination_overlap')
+                continue
+            seen.add(key);additions.append(item)
+        remaining=30-len(destinations)
+        if len(additions)>remaining:
+            image_errors.append('destination_limit_reached')
+        destinations.extend(additions[:remaining])
+        if page and not additions:
+            image_errors.append('destination_coverage_unresolved')
+            break
+    if page_size==6 and len(destinations)>=30:
+        image_errors.append('destination_limit_reached')
+    results=[]
+    # Keep the original complete source available; destination names distinguish
+    # evidence identities without depending on article order or mutable dates.
+    for extraction in destinations:
+        child=copy.deepcopy(prepared)
+        child['content_hash']=digest([prepared['content_hash'], extraction.get('venue_name'), extraction.get('address'),'destinations-v2'])
+        child['destination_coverage']={'extracted':len(destinations),'limit':30,
+            'complete':not any(r.startswith('destination_') for r in image_errors)}
+        child['collection_holds']=sorted(set(image_errors))
+        child['_prepared_images']=images
+        child['analyzed_images']=[{'id':i['id'],'sha256':i.get('sha256')} for i in images]
+        try:
+            # Reuse loaded images for both validation and judge, without refetching.
+            result=process(child,ai,ledger,now,extracted=extraction,media_permissions=media_permissions,allow_media=len(destinations)==1)
+            result['reasons']=sorted(set(result['reasons']+image_errors))
+            result['destination_name']=extraction.get('venue_name')
+            results.append(result)
+        except (ProviderDisabled,ValueError,TypeError) as exc:
+            results.append({'published':False,'extraction_status':'failed','reason':type(exc).__name__})
+    return results
