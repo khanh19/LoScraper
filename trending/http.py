@@ -52,22 +52,22 @@ class PublicClient:
         self.cache = {}
         self._playwright = self._browser = None
 
-    def get(self, url: str, allowed_hosts: set[str], render=False, json_response=False):
+    def get(self, url: str, allowed_hosts: set[str], render=False, json_response=False, redirect_only=False):
         # Exactly one retry for transient failures. Only successful parses are cached.
         for attempt in range(2):
             try:
-                return self._get_once(url, allowed_hosts, render, json_response)
+                return self._get_once(url, allowed_hosts, render, json_response, redirect_only)
             except FetchError as exc:
                 if attempt or str(exc) not in {'http_408','http_429','http_500','http_502','http_503','http_504','Timeout','ReadTimeout','ConnectTimeout','ConnectionError','TimeoutError'}:
                     raise
                 time.sleep(2)
         raise FetchError('retry_exhausted')
 
-    def _get_once(self, url: str, allowed_hosts: set[str], render=False, json_response=False):
+    def _get_once(self, url: str, allowed_hosts: set[str], render=False, json_response=False, redirect_only=False):
         url = public_url(url)
         if urlsplit(url).hostname not in allowed_hosts:
             raise FetchError("host_not_allowed")
-        key = (url, render, json_response)
+        key = (url, render, json_response, redirect_only, frozenset(allowed_hosts))
         if key in self.cache:
             return self.cache[key]
         host = urlsplit(url).hostname
@@ -83,12 +83,21 @@ class PublicClient:
                     with self.session.get(url, timeout=(10, 25), allow_redirects=False, stream=True) as response:
                         if response.is_redirect:
                             from urllib.parse import urljoin
-                            url = public_url(urljoin(url, response.headers.get("Location", "")))
+                            target = urljoin(url, response.headers["Location"])
+                            if redirect_only:
+                                # Identity lookup must not open the destination or fetch media.
+                                if urlsplit(canonical(target)).hostname not in allowed_hosts:
+                                    raise FetchError("redirect_not_allowed")
+                                self.cache[key] = target
+                                return target
+                            url = public_url(target)
                             if urlsplit(url).hostname not in allowed_hosts:
                                 raise FetchError("redirect_not_allowed")
                             continue
                         if response.status_code != 200:
                             raise FetchError(f"http_{response.status_code}")
+                        if redirect_only:
+                            raise FetchError("redirect_expected")
                         formats = ("json",) if json_response else ("html", "xml")
                         if not any(t in response.headers.get("Content-Type", "") for t in formats):
                             raise FetchError("unsupported_content")

@@ -10,7 +10,7 @@ from urllib.parse import urlsplit,urljoin
 from .adapters import CLASSES, is_type, load_sources, structured
 from .http import PublicClient,FetchError
 from .model import CITIES,canonical
-from .social_links import extract_posts, remember_lead
+from .social_links import TikTokShareResolver, extract_posts, remember_lead
 from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
@@ -60,6 +60,7 @@ def discover(city,client,now,counts=None,limit=6):
     seeds=[s for s in json.loads(DIRECTORY.read_text()) if city in s['cities']]
     seeds.sort(key=lambda s:(sum((counts or {}).get(c,0) for c in s['categories']),s['id']))
     configs = load_sources()
+    resolver = TikTokShareResolver(client)
     posts={};pages=[]
     for seed in seeds[:limit]:
         try:
@@ -82,7 +83,7 @@ def discover(city,client,now,counts=None,limit=6):
                 try:targets.append((u,client.get(u,{host})))
                 except (FetchError,ValueError) as e:pages.append({'source':seed['id'],'url':u,'status':'failed','reason':str(e)})
             for u,html in targets:
-                found=extract_posts(str(html),u,now)
+                found=extract_posts(str(html),u,now,resolve_share=resolver.resolve)
                 pages.append({'source':seed['id'],'url':u,'status':'complete','leads':len(found)})
                 for post in found:
                     post['publisher_id']=seed['publisher_id']
@@ -90,6 +91,7 @@ def discover(city,client,now,counts=None,limit=6):
                     remember_lead(posts, post)
         except (FetchError,ValueError) as e:pages.append({'source':seed['id'],'status':'failed','reason':str(e)})
     return {'city':city,'pages':pages,'posts':list(posts.values())[:30],
+            'tiktok_share_links':resolver.results,
             'queries':queries(city,counts),'provider_requests':0,'published':0}
 
 def main():

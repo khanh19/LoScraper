@@ -315,3 +315,19 @@ organizer sites across all three cities. Four profiles loaded without any
 original video links after rendering. The official Da Nang tourism profile
 returned HTTP 400 from oEmbed. That check recorded zero fresh posts and zero
 metered provider requests. [Hosted audit](https://github.com/khanh19/LoScraper/actions/runs/45113777936)
+
+### TikTok links shared from the phone
+
+The contributor workbook uses 33 distinct `vm.tiktok.com` or `vt.tiktok.com`
+links. Publisher discovery now resolves up to three distinct TikTok share links
+per city with at most two redirect hops each. It accepts a TikTok video or photo
+permalink, deduplicates the post with any full URL already found, and preserves
+any dated evidence from the publisher. A redirect only establishes identity.
+The post still needs its own fresh date, relevant activity, and venue evidence.
+Shop destinations, profiles, and off-platform redirects do not create leads.
+
+Use `python -m trending.social_links --url <public-publisher-page>` for a
+free-only transport check. If the local network cannot reach TikTok, dispatch
+**Scraper CI** with `public_tiktok_audit=true` and `public_share_publisher_url`
+set to a public page. The job reads link metadata, omits post text from the log,
+and keeps metered collection and publication disabled.

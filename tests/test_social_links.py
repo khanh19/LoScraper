@@ -5,12 +5,46 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from bs4 import BeautifulSoup
 from trending.discover import reviewed_tiktok_profile
-from trending.social_links import extract_posts, remember_lead
+from trending.social_links import TikTokShareResolver, extract_posts, remember_lead
+from trending.http import FetchError
 from trending.providers import BrightSocial, ProviderDisabled
 
 NOW = datetime(2026, 11, 8, 12, tzinfo=timezone.utc)
 
 class SocialDiscoveryTests(unittest.TestCase):
+    def test_shared_tiktok_link_keeps_publication_evidence_and_deduplicates(self):
+        client = Mock()
+        post = 'https://www.tiktok.com/@venue/video/123'
+        client.get.side_effect = ['https://www.tiktok.com/t/second/', post + '?share=1']
+        resolver = TikTokShareResolver(client)
+        record = {'link': 'https://vt.tiktok.com/first/?utm_medium=share',
+                  'datePublished': '2026-11-07T07:00:00+07:00'}
+        markup = '<script type="application/json">' + json.dumps(record) + '</script>'
+        markup += f'<a href="{post}">Full URL</a><a href="https://vt.tiktok.com/first/">Share</a>'
+        row, = extract_posts(markup, 'https://example.com/event', NOW, resolve_share=resolver.resolve)
+        self.assertEqual(row['url'], post)
+        self.assertEqual(row['published_at'], '2026-11-07T07:00:00+07:00')
+        self.assertTrue(row['requires_provider_validation'])
+        self.assertEqual([call.args[0] for call in client.get.call_args_list],
+                         ['https://vt.tiktok.com/first/', 'https://www.tiktok.com/t/second/'])
+        self.assertTrue(all(call.kwargs['redirect_only'] for call in client.get.call_args_list))
+
+    def test_short_links_hold_nonposts_and_stop_after_three_inputs(self):
+        client = Mock()
+        client.get.side_effect = ['https://www.tiktok.com/shop/pdp/123', FetchError('redirect_not_allowed'),
+                                  'https://www.tiktok.com/@venue/photo/789']
+        resolver = TikTokShareResolver(client)
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com.evil.example/one/'))
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/shop/?page=TikTokShop'))
+        self.assertIsNone(resolver.resolve('https://vm.tiktok.com/one/'))
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/two/'))
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/two/?utm_source=other'))
+        self.assertEqual(resolver.resolve('https://vt.tiktok.com/three/'), 'https://www.tiktok.com/@venue/photo/789')
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/four/'))
+        self.assertEqual(client.get.call_count, 3)
+        self.assertEqual([row['status'] for row in resolver.results.values()],
+                         ['no_original_post', 'redirect_not_allowed', 'original_post_found'])
+
     def test_nested_embeds_freshness_and_dedup(self):
         recent = {'link':'https://www.instagram.com/p/example/', 'timestamp':'2026-11-07T01:00:00Z', 'description':'A local festival'}
         stale = dict(recent, link='https://www.instagram.com/p/old/', timestamp='2025-11-07T00:00:00Z')

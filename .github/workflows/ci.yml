@@ -10,6 +10,10 @@ on:
         description: Check reviewed organizers through the public TikTok endpoints
         type: boolean
         default: false
+      public_share_publisher_url:
+        description: Check TikTok share links on a public publisher page in the manual audit
+        type: string
+        default: ''
       staging_collection:
         description: Manually rehearse website collection against isolated staging
         type: choice
@@ -68,4 +72,13 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
+        if: inputs.public_share_publisher_url == ''
       - run: python -m trending.tiktok_public --browser
+        if: inputs.public_share_publisher_url == ''
+      - name: Check original post links without fetching post media
+        if: inputs.public_share_publisher_url != ''
+        env:
+          PUBLISHER_PAGE: ${{ inputs.public_share_publisher_url }}
+        run: |
+          set -o pipefail
+          python -m trending.social_links --url "$PUBLISHER_PAGE" | jq 'del(.pages[].posts[]?.text)'
