@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 from datetime import timedelta
 from bs4 import BeautifulSoup
-from trending.adapters import HoGuomOpera, LifeOfDaNang, category, collect_source, load_sources
+from trending.adapters import HoanKiemHeritage, HoGuomOpera, LifeOfDaNang, VaranVietnam, category, collect_source, load_sources
 from test_trending import NOW, candidate
 from trending.model import CONFIRMED_SCHEDULE_CONFLICT, city_from_address
 from trending.http import FetchError
@@ -157,6 +157,46 @@ class WeeklyCoverage(unittest.TestCase):
         adapter.enrich(broken, catalogue, Client(wrong_article=True), NOW)
         self.assertIn('unresolved_individual_sessions', broken.validate(NOW))
         self.assertEqual(broken.occurrences, [])
+
+    def test_varan_daily_exhibition_uses_admission_hours_instead_of_opening_ceremony(self):
+        config = load_sources()['varanvietnam']
+        adapter = VaranVietnam('varanvietnam', config)
+        html = '''<main><h2>Varan Vietnam tại Triển lãm Một bát thương</h2>
+          <div class="project-content"><p><b>THÔNG TIN SỰ KIỆN</b><br>
+            * Khai mạc: 15:00, ngày 12 tháng 11 năm 2026<br>
+            * Thời gian triển lãm: Từ ngày 12 đến ngày 30 tháng 11 năm 2026<br>
+            * Địa điểm: Bảo tàng Phụ nữ Việt Nam, 36 Lý Thường Kiệt, Hà Nội<br>
+            * Giờ mở cửa: Hàng ngày, 08:00–17:00<br>
+            * Vào cửa miễn phí</p></div>
+            <p>Giờ mở cửa: Hàng ngày, 05:00–23:00</p></main>'''
+        url = config['detail_pages'][0]
+        event = adapter.parse(BeautifulSoup(html, 'html.parser'), url, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.price_text, 'Miễn phí')
+        self.assertEqual(len(event.occurrences), 19)
+        self.assertEqual((event.occurrences[0].starts_at, event.occurrences[-1].ends_at),
+                         ('2026-11-12T08:00:00+07:00', '2026-11-30T17:00:00+07:00'))
+        broken = html.replace('Giờ mở cửa: Hàng ngày, 08:00–17:00', 'Giờ mở cửa: Xem thông báo sau')
+        self.assertIn('unresolved_individual_sessions',
+                      adapter.parse(BeautifulSoup(broken, 'html.parser'), url, NOW).validate(NOW))
+
+    def test_heritage_tea_uses_only_the_reviewed_section(self):
+        config = load_sources()['hoankiemheritage']
+        adapter = HoanKiemHeritage('hoankiemheritage', config)
+        html = '''<div class="lang-vi">
+            <h3>7. Di tích 40 Lãn Ông</h3>
+            <p>Thời gian: 04/11 – 30/11/2026.</p>
+            <p>Trải nghiệm văn hóa “Dược trà” tại tầng hai khu nhà Pháp.</p>
+            <h3>8. Địa điểm khác</h3><p>Thời gian: 12/11 – 13/11/2026.</p></div>'''
+        url = config['detail_pages'][0]
+        event = adapter.parse(BeautifulSoup(html, 'html.parser'), url, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.entry_key, 'duoc-tra-40-lan-ong')
+        self.assertEqual(event.occurrences[0].ends_at, '2026-12-01T00:00:00+07:00')
+        self.assertEqual(event.occurrences[0].precision, 'date')
+        incomplete = html.replace('<p>Thời gian: 04/11 – 30/11/2026.</p>', '')
+        self.assertIn('unresolved_individual_sessions',
+                      adapter.parse(BeautifulSoup(incomplete, 'html.parser'), url, NOW).validate(NOW))
 
     def test_seven_day_verification_boundary(self):
         c=candidate('place')

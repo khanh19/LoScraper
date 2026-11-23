@@ -1026,9 +1026,93 @@ class HanoiGo(Adapter):
         c.occurrences=[Occurrence(a.isoformat(),b.isoformat()) for a,b in sorted(sessions)]
         return c
 
+class VaranVietnam(Adapter):
+    def parse(self, soup, url, now):
+        heading = next((tag.get_text(' ', strip=True) for tag in soup.select('main h2')
+                        if tag.get_text(' ', strip=True).startswith('Varan Vietnam tại Triển lãm ')), '')
+        title = heading.removeprefix('Varan Vietnam tại ')
+        sections = [list(p.stripped_strings) for p in soup.select('main .project-content p')
+                    if p.get_text(' ', strip=True).startswith('THÔNG TIN SỰ KIỆN')]
+        event = Candidate(self.slug, self.config['name'], url, title, 'event',
+                          category='culture', verified_at=now.isoformat())
+        if len(sections) != 1:
+            event.reasons.append('missing_primary_content')
+            return event
+        lines = [text.removeprefix('* ').strip() for text in sections[0][1:]]
+        event.original_text = '\n'.join(lines)
+        venue_rows = [line.removeprefix('Địa điểm: ') for line in lines if line.startswith('Địa điểm: ')]
+        if len(venue_rows) == 1:
+            venue, _, address = venue_rows[0].partition(',')
+            event.venue_name, event.address = venue, address.strip()
+            event.city_slug = city_from_address(event.address)
+            if event.city_slug and re.match(r'^\d+\s', event.address):
+                event.location_evidence = url
+        status_text = folded(heading + ' ' + event.original_text)
+        if re.search(r'\b(?:trang thai da huy|da huy trien lam)\b', status_text):
+            event.status = 'cancelled'
+            return event
+        if re.search(r'\b(?:trang thai hoan lich|hoan trien lam)\b', status_text):
+            event.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+            return event
+        if 'Vào cửa miễn phí' in lines:
+            event.price_text = 'Miễn phí'
+        dates = [m for line in lines if (m := re.fullmatch(
+            r'thoi gian trien lam: tu ngay (\d{1,2}) den ngay (\d{1,2}) thang (\d{1,2}) nam (20\d{2})', plain(line)))]
+        hours = [m for line in lines if (m := re.fullmatch(
+            r'gio mo cua: hang ngay, ([0-2]\d:[0-5]\d)\s*-\s*([0-2]\d:[0-5]\d)', plain(line)))]
+        if len(dates) == len(hours) == 1:
+            first, last, month, year = map(int, dates[0].groups())
+            start, end = hours[0].groups()
+            if 1 <= first <= last <= 31 and start < end:
+                daily = [schedule_occurrences(f'{day}/{month}/{year} {start}-{end}', now)
+                         for day in range(first, last + 1)]
+                if all(len(one_day) == 1 for one_day in daily):
+                    event.occurrences = [one_day[0] for one_day in daily]
+        if not event.occurrences:
+            event.reasons.append('unresolved_individual_sessions')
+        return event
+
+
+class HoanKiemHeritage(Adapter):
+    def parse(self, soup, url, now):
+        # This is the separately announced tea experience, on the second floor.
+        # Do not treat the multi-venue press release as a single festival card.
+        event = Candidate(self.slug, self.config['name'], url, 'Trải nghiệm Dược trà', 'event',
+                          category='experience', verified_at=now.isoformat(), entry_key='duoc-tra-40-lan-ong')
+        headings = [h for h in soup.select('.lang-vi > h3') if re.fullmatch(
+            r'\d+\. Di tích 40 Lãn Ông', h.get_text(' ', strip=True))]
+        if len(headings) != 1:
+            event.reasons.append('missing_primary_content')
+            return event
+        paragraphs = []
+        for sibling in headings[0].next_siblings:
+            if getattr(sibling, 'name', None) in {'h2', 'h3'}:
+                break
+            if getattr(sibling, 'name', None) == 'p':
+                paragraphs.append(sibling.get_text(' ', strip=True))
+        descriptions = [p for p in paragraphs if p.startswith('Trải nghiệm văn hóa “Dược trà” tại tầng hai')]
+        schedules = [p.removeprefix('Thời gian: ').rstrip('.') for p in paragraphs if p.startswith('Thời gian: ')]
+        if len(descriptions) == 1 and len(schedules) == 1 and url in self.config['detail_pages']:
+            span = re.fullmatch(r'\d{1,2}/\d{1,2}\s*-\s*\d{1,2}/\d{1,2}/20\d{2}', plain(schedules[0]))
+            event.occurrences = schedule_occurrences(span[0], now) if span else []
+            event.city_slug, event.venue_name = 'hanoi', 'Di tích 40 Lãn Ông'
+            event.address, event.location_evidence = '40 Lãn Ông, Hoàn Kiếm, Hà Nội', url
+            event.original_text = descriptions[0]
+            event.evidence_locator = headings[0].get_text(' ', strip=True)
+            update = folded(' '.join(paragraphs))
+            if re.search(r'\bda huy\b', update):
+                event.status = 'cancelled'
+            elif re.search(r'\b(?:hoan lich|hoan trai nghiem)\b', update):
+                event.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+        if not event.occurrences:
+            event.reasons.append('unresolved_individual_sessions')
+        return event
+
+
 CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang,
-           "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer}
+           "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer,
+           "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage}
 
 
 def load_sources():
@@ -1043,6 +1127,8 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     links = list(extra_urls)
     failures = []
     seeds = [] if existing_only else list(config['seeds'])
+    if not existing_only:
+        links.extend(config.get('detail_pages', ()))
     if slug == 'ticketbox' and not existing_only:
         heartbeat()
         try:

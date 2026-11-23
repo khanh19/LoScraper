@@ -135,6 +135,22 @@
       }
     }
   },
+  "varanvietnam": {
+    "name": "Varan Vietnam",
+    "seeds": [],
+    "detail_pages": [
+      "https://varanvietnam.com/project/varan-vietnam-tai-trien-lam-mot-bat-thuong"
+    ],
+    "hosts": ["varanvietnam.com"],
+    "enabled": true
+  },
+  "hoankiemheritage": {
+    "name": "Ban Quản lý Hồ Hoàn Kiếm và Phố cổ Hà Nội",
+    "seeds": [],
+    "detail_pages": ["https://phocohanoi.hoankiem.vn/tin-tuc/ngay-di-san"],
+    "hosts": ["phocohanoi.hoankiem.vn"],
+    "enabled": true
+  },
   "saigoneer": {
     "name": "Saigoneer",
     "seeds": [

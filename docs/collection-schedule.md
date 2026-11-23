@@ -87,6 +87,16 @@ The gala remains outside this fallback while its second slot is unresolved.
 [St. Petersburg booking](https://hoguomopera.vn/dat-ve/127) ·
 [Don Quixote booking](https://hoguomopera.vn/dat-ve/131)
 
+Two Hanoi sources seed reviewed public announcements directly. Varan Vietnam's
+exhibition block gives the admission dates and daily hours for Một bát thương.
+The collector creates one session for each published day. The Hoàn Kiếm
+heritage announcement gives a date range for Dược trà at 40 Lãn Ông. Its card
+uses date precision because the section omits hours. The other activities in
+the press release require separate review, including reconciliation of dates
+that differ from the Creative Design Festival listings.
+[Varan Vietnam](https://varanvietnam.com/project/varan-vietnam-tai-trien-lam-mot-bat-thuong/) ·
+[Hoàn Kiếm announcement](https://phocohanoi.hoankiem.vn/tin-tuc/ngay-di-san)
+
 Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
 Market publications disagree on the start day and opening hour. Pullman's official
 pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
