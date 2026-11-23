@@ -96,7 +96,7 @@ evidence cannot overwrite the current status. [Notification collector PR](https:
 ## Activation checklist — not yet active
 
 The November 23 check found that `main` still contains only the legacy scraper
-workflow. The reviewed schedule and its two staging rehearsals are in the
+workflow. The reviewed schedule and its staging rehearsals are in the
 open PR stack. The repository has the staging database secrets. The scheduled
 database secret and enable switch are still absent.
 
@@ -105,7 +105,12 @@ database secret and enable switch are still absent.
    for `staging_collection`. That job calls the branch's collection workflow
    with the two staging secrets. It does not use the schedule settings.
 2. Apply all discovery migrations to the intended feed database and verify the app
-   backend reads that same database. Never point this job at the local accounting ledger.
+   backend reads that same database. The coverage summary needs backend migration
+   `20261123100000_discovery_coverage_snapshot.sql` and `EXECUTE` on
+   `public.discovery_coverage_snapshot()` for that environment's collector role.
+   The function returns counts and does not require table access to publisher
+   approvals, verified venue records or provider accounting. Keep the target
+   separate from the local accounting database.
 3. Run manual `mode=full`, `pilot=true`; inspect source coverage.
 4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging feed. For Supabase, use `sslmode=verify-full` and set `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published database root certificate. Run `pilot=false`, then `mode=refresh`
    with `pilot=false`. Check stable IDs, timestamps and health without erasing data.

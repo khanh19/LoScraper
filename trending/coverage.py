@@ -1,6 +1,5 @@
 """Soft collection targets, measured only from eligible database results."""
 from collections import Counter
-from datetime import datetime, timezone
 import os
 from urllib.parse import urlsplit
 
@@ -41,16 +40,25 @@ def summarize(rows, city):
             'note':'Soft section targets; surplus weekly items cannot fill planning gaps. Multi-source items count once.'}
 
 
-def read_coverage(db, now):
+def read_coverage(db):
     with db.transaction():
         db.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
-        return {
-            city: summarize(db.execute(
-                'SELECT item_id, reason, payload FROM public.discovery_evaluate_all(%s,%s)',
-                (now, city),
-            ).fetchall(), city)
-            for city in SECTION_TARGETS
+        rows = db.execute('SELECT * FROM public.discovery_coverage_snapshot()').fetchall()
+    by_section = {(row['city_slug'], row['section']): row for row in rows}
+    results = {}
+    for city, targets in SECTION_TARGETS.items():
+        city_rows = {section: by_section[city, section] for section in targets}
+        counts = {section: row['item_count'] for section, row in city_rows.items()}
+        results[city] = {
+            'sections': counts,
+            'section_targets': targets,
+            'items_by_supporting_platform': {
+                name: sum(row[name + '_count'] for row in city_rows.values())
+                for name in ('instagram', 'tiktok')
+            },
+            'target_met': all(counts[section] >= target for section, target in targets.items()),
         }
+    return results, rows[0]['evaluated_at']
 
 
 def markdown_coverage(results, now):
@@ -83,10 +91,9 @@ def main():
         url = os.environ['DATABASE_URL']
         if not url:
             raise ValueError('missing_database')
-        now = datetime.now(timezone.utc)
         with psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row) as db:
             db.execute("SET statement_timeout = '30s'")
-            result = read_coverage(db, now)
+            result, now = read_coverage(db)
         print(markdown_coverage(result, now))
     except (KeyError, ValueError, psycopg.Error) as exc:
         print(f'Verified discovery coverage unavailable ({type(exc).__name__}).')

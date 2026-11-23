@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import psycopg
 
 from trending.model import CONFIRMED_SCHEDULE_CONFLICT, Occurrence
+from trending.coverage import read_coverage
 from trending.__main__ import run
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
@@ -77,6 +78,33 @@ class Persistence(unittest.TestCase):
         with self.assertRaises(ValueError):self.store.upsert(bad,NOW)
         self.assertEqual(len(self.feed()),1)
         self.assertEqual(len(self.feed()[0]['sources']),2)
+
+    def test_coverage_snapshot_counts_eligible_items_by_section_and_platform(self):
+        now = self.store.db.execute('SELECT statement_timestamp() AS now').fetchone()['now']
+        weekly = candidate()
+        weekly.published_at = (now - timedelta(hours=1)).isoformat()
+        weekly.verified_at = now.isoformat()
+        weekly.occurrences = [Occurrence((now + timedelta(days=1)).isoformat(),
+                                         (now + timedelta(days=1, hours=2)).isoformat())]
+        item_id = self.store.upsert(weekly, now)
+        self.store.register('instagram', 'Instagram', True, 'instagram')
+        for source_url in ['https://www.instagram.com/p/test1', 'https://www.instagram.com/p/test2']:
+            supporting = copy.deepcopy(weekly)
+            supporting.source_slug = supporting.platform = 'instagram'
+            supporting.source_url = source_url
+            self.assertEqual(self.store.upsert(supporting, now), item_id)
+        planning = copy.deepcopy(weekly)
+        planning.title = 'Kịch thiếu nhi tháng sau'
+        planning.source_url = 'https://ticketbox.vn/event/planning'
+        planning.occurrences = [Occurrence((now + timedelta(days=12)).isoformat(),
+                                           (now + timedelta(days=12, hours=2)).isoformat())]
+        self.store.upsert(planning, now)
+
+        counts, checked_at = read_coverage(self.store.db)
+        self.assertGreaterEqual(checked_at, now)
+        self.assertEqual(counts['hanoi']['sections'], {'weekly': 1, 'planning': 1})
+        self.assertEqual(counts['hanoi']['items_by_supporting_platform'], {'instagram': 1, 'tiktok': 0})
+        self.assertEqual(counts['danang']['sections'], {'weekly': 0, 'planning': 0})
 
     def test_ticketbox_location_correction_preserves_observation_and_other_cards(self):
         legacy = candidate()

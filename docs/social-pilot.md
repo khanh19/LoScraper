@@ -277,3 +277,13 @@ tourism profile both failed TLS before returning a post list. Fresh automatic
 TikTok discovery remains unverified. The canonical quota database was
 unreachable. The check made no metered requests and wrote no feed records.
 [TikTok creator-profile oEmbed](https://developers.tiktok.com/docs/en/embed-creator-profiles/)
+
+A read-only audit of the separate multimodal ledger on 23 November confirmed
+the exact provider dates for the two Instagram reels. The saved November 22
+snapshot recorded 4,495 plays for Tiệm Yến and 21,395 for Mì Cay Gangwon. Tiệm
+Yến's own article confirmed the Da Nang branch on November 21. Gangwon's
+promotion end date still needs evidence. The Instagram samples are for review.
+The 30 cached TikTok results have no publication later than November 15, and
+the November 22 reservation contains no records. Apify has 132 of 132 reserved
+units, including two unresolved requests. The old Bright Data/SerpAPI ledger
+was absent from this cluster. No new provider request or feed import was made.
