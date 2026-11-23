@@ -147,6 +147,9 @@ class PublicClient:
         except FetchError:
             raise
         except Exception as exc:
+            transport = re.match(r'Page\.goto: net::(ERR_[A-Z0-9_]{1,48})(?=\s|$)', str(exc))
+            if transport:
+                raise FetchError('browser_' + transport[1].lower()) from None
             raise FetchError(type(exc).__name__) from None
         finally:
             page.close()
