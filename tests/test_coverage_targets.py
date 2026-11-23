@@ -2,9 +2,12 @@ from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from trending.coverage import main, markdown_coverage, platform, summarize
+from psycopg.errors import InsufficientPrivilege
+
+from trending.coverage import collector_write_blocker, main, markdown_coverage, platform, summarize
+from trending.store import IMAGE_PERMISSION_UPSERT, OBSERVATION_UPSERT, WEBSITE_COLLECTION_PLANS
 
 
 def row(identity,reason='eligible',section='weekly',urls=()):
@@ -54,3 +57,35 @@ class CoverageTargets(unittest.TestCase):
                 self.assertIn('verify_full_required', output.getvalue())
                 self.assertNotIn('fixture', output.getvalue())
                 connect.assert_not_called()
+
+    def test_preflight_explains_the_website_statements_without_executing_them(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = {'replica': False, 'read_only': False}
+
+        self.assertIsNone(collector_write_blocker(db))
+
+        calls = db.execute.call_args_list
+        self.assertEqual(calls[1].args, ('SET TRANSACTION READ ONLY',))
+        self.assertEqual(
+            [call.args for call in calls[2:]],
+            [('EXPLAIN (COSTS OFF) ' + query, (None,) * query.count('%s'))
+             for _, query in WEBSITE_COLLECTION_PLANS],
+        )
+
+    def test_preflight_reports_missing_permissions_for_website_writes(self):
+        for stage, statement in (
+            ('image_permission_upsert', IMAGE_PERMISSION_UPSERT),
+            ('observation_upsert', OBSERVATION_UPSERT),
+        ):
+            with self.subTest(stage=stage):
+                db = MagicMock()
+                state = {'replica': False, 'read_only': False}
+                db.execute.return_value.fetchone.return_value = state
+
+                def execute(query, *args):
+                    if query == 'EXPLAIN (COSTS OFF) ' + statement:
+                        raise InsufficientPrivilege('fixture permission denial')
+                    return db.execute.return_value
+
+                db.execute.side_effect = execute
+                self.assertEqual(collector_write_blocker(db), stage + '_forbidden')

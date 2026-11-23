@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 
 from psycopg.errors import InsufficientPrivilege
 
+from .store import WEBSITE_COLLECTION_PLANS
+
 SECTION_TARGETS = {'hanoi': {'weekly':14,'planning':7},
                    'hcmc': {'weekly':18,'planning':7},
                    'danang': {'weekly':12,'planning':5}}
@@ -94,19 +96,13 @@ def collector_write_blocker(db):
     if state['read_only']:
         return 'read_only_connection'
 
-    # EXPLAIN without ANALYZE checks permissions without executing the writes.
-    # Probe both receipt recording and the collector's session replacement.
-    probes = (
-        ('receipt_insert', 'INSERT INTO public.discovery_ingestion_runs (id) SELECT NULL::uuid WHERE false'),
-        ('receipt_update', "UPDATE public.discovery_ingestion_runs SET status='running' WHERE id IS NULL"),
-        ('session_replace', 'DELETE FROM public.discovery_occurrences WHERE observation_id IS NULL'),
-    )
+    # PostgreSQL checks planning-time privileges without executing these statements.
     stage = 'collector'
     try:
         with db.transaction():
             db.execute('SET TRANSACTION READ ONLY')
-            for stage, statement in probes:
-                db.execute('EXPLAIN (COSTS OFF) ' + statement)
+            for stage, statement in WEBSITE_COLLECTION_PLANS:
+                db.execute('EXPLAIN (COSTS OFF) ' + statement, (None,) * statement.count('%s'))
     except InsufficientPrivilege:
         return stage + '_forbidden'
     return None
@@ -138,7 +134,7 @@ def main():
                     raise SystemExit(1)
             result, now = read_coverage(db)
         if args.check_collector_writes:
-            print('Collector connection and receipt/session grants passed read-only checks.\n')
+            print('Collector connection and website collection grants passed read-only planning checks.\n')
         print(markdown_coverage(result, now))
     except (KeyError, ValueError, psycopg.Error) as exc:
         print(f'Verified discovery coverage unavailable ({type(exc).__name__}).')

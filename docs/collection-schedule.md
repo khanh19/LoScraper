@@ -205,7 +205,7 @@ database secret and enable switch are still absent.
    feed with `sslmode=verify-full`. For Supabase, set
    `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published root certificate.
    Select `check-staging` under `staging_collection` to verify TLS, check the
-   collector connection and selected write grants, and read the feed counts.
+   collector connection and website collection grants, and read the feed counts.
    This runs without starting a collection. Select `full`, then `refresh` for the
    staging writes. Check stable IDs, timestamps and health without erasing data.
 5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
@@ -214,9 +214,12 @@ database secret and enable switch are still absent.
    `mode=check-scheduled` while the enable variable is still off. Compare the
    read-only coverage summary against the intended deployment. Every scheduled
    run repeats this check before starting collection. The check rejects replicas
-   and read-only connections. It uses PostgreSQL EXPLAIN without ANALYZE for
-   receipt inserts, receipt updates, and session replacement. The manual full
-   and refresh runs still verify actual writes and row access.
+   and read-only connections. It plans the collector's website statements with
+   PostgreSQL EXPLAIN in a read-only transaction. It covers source registration,
+   image permissions, recheck selection, place matching, item and observation
+   writes, session replacement, and receipt and item cleanup. The manual full
+   and refresh runs still verify actual writes and row access, including policies
+   that can only be evaluated for real rows.
 6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
    Keep both database secrets separate from the legacy workflow target.
 
