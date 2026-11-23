@@ -173,6 +173,23 @@
       }
     }
   },
+  "yogalabhanoi": {
+    "name": "Yoga Lab Hanoi",
+    "seeds": [],
+    "detail_pages": ["https://www.yogalabhanoi.com/events"],
+    "hosts": ["www.yogalabhanoi.com"],
+    "booking_url": "https://www.yogalabhanoi.com/book-a-class",
+    "enabled": true,
+    "reviewed_class": {
+      "key": "detox-your-posture-20261129",
+      "title": "Lớp yoga 90 phút: Detox Your Posture",
+      "publisher_title": "Detox Your Posture: 90-min Special Class",
+      "schedule_line": "sunday, 29th november | 10:00 - 11:30",
+      "date": "29/11/2026",
+      "address": "Tầng 5, 19–21 ngõ Yên Ninh, Ba Đình, Hà Nội",
+      "booking_address": "address level 5 no 19 21 yen ninh alley turn right from no 23 yen ninh ba dinh"
+    }
+  },
   "saigoneer": {
     "name": "Saigoneer",
     "seeds": [

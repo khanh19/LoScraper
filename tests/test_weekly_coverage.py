@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from datetime import timedelta
 from bs4 import BeautifulSoup
 from trending.adapters import (
-    HanoiYouthTheatre, HoanKiemHeritage, HoGuomOpera, LifeOfDaNang, VaranVietnam,
+    HanoiYouthTheatre, HoanKiemHeritage, HoGuomOpera, LifeOfDaNang, VaranVietnam, YogaLabHanoi,
     category, collect_source, load_sources,
 )
 from test_trending import NOW, candidate
@@ -222,6 +222,30 @@ class WeeklyCoverage(unittest.TestCase):
         adapter.enrich(event, page, client, NOW)
         self.assertEqual(event.validate(NOW), [])
         self.assertEqual(event.occurrences[0].ends_at, '2026-11-29T17:00:00+07:00')
+
+    def test_yoga_workshop_uses_its_own_session_and_booking_address(self):
+        config = load_sources()['yogalabhanoi']
+        adapter = YogaLabHanoi('yogalabhanoi', config)
+        html = f'''<main><a href="{config["booking_url"]}">Booking page</a>
+          <div data-testid="mesh-container-content">
+            <p>Detox Your Posture: 90-min Special Class</p>
+            <p>Sunday, 29th November | 10:00 – 11:30</p>
+          </div><div data-testid="mesh-container-content">
+            <p>The Intelligent Backbend</p><p>Sunday, 06th December | 14:00 – 15:30</p>
+          </div></main>'''
+        page = BeautifulSoup(html, 'html.parser')
+        url = config['detail_pages'][0]
+        event = adapter.parse(page, url, NOW)
+        client = Mock()
+        client.get.return_value = BeautifulSoup('''<main><p>Address: Level 5, no.19-21 Yen Ninh Alley
+          (turn right from no.23 Yen Ninh), Ba Dinh</p></main>''', 'html.parser')
+        adapter.enrich(event, page, client, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.occurrences[0].starts_at, '2026-11-29T10:00:00+07:00')
+        self.assertEqual(event.occurrences[0].ends_at, '2026-11-29T11:30:00+07:00')
+        changed = html.replace('10:00 – 11:30', '10:00 – 12:00')
+        unsupported = adapter.parse(BeautifulSoup(changed, 'html.parser'), url, NOW)
+        self.assertIn('unresolved_individual_sessions', unsupported.validate(NOW))
 
     def test_seven_day_verification_boundary(self):
         c=candidate('place')

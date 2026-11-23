@@ -1154,11 +1154,51 @@ class HanoiYouthTheatre(Adapter):
         return candidate
 
 
+class YogaLabHanoi(Adapter):
+    def parse(self, soup, url, now):
+        review = self.config['reviewed_class']
+        event = Candidate(self.slug, self.config['name'], url, review['title'], 'event',
+                          category='sports', venue_name='Yoga Lab Hanoi',
+                          address=review['address'], city_slug='hanoi',
+                          verified_at=now.isoformat(), entry_key=review['key'])
+        publisher_title = review['publisher_title']
+        headings = [p for p in soup.select('main p, main h3')
+                    if p.get_text(' ', strip=True) == publisher_title]
+        block = headings[0].find_parent(attrs={'data-testid': 'mesh-container-content'}) if len(headings) == 1 else None
+        if not block or not any(urljoin(url, node['href']) == self.config['booking_url']
+                                for node in soup.select('main a[href]')):
+            event.reasons.append('missing_primary_content')
+            return event
+        lines = [plain(p.get_text(' ', strip=True)).strip('\u200b ') for p in block.select('p')]
+        if any(re.fullmatch(r'(?:this class has been )?(?:cancelled|canceled)', line) for line in lines):
+            event.status = 'cancelled'
+            return event
+        expected = review['schedule_line']
+        if lines.count(expected) != 1 or any(re.search(r'\b(?:postponed|hoan lich)\b', line) for line in lines):
+            event.reasons.append('unresolved_individual_sessions')
+            return event
+        hours = expected.split('|', 1)[1].strip()
+        event.occurrences = schedule_occurrences(f'{review["date"]} {hours}', now)
+        event.original_text = f'{publisher_title}\n{expected}'
+        event.evidence_locator = publisher_title
+        return event
+
+    def enrich(self, candidate, soup, client, now):
+        if not candidate.occurrences:
+            return candidate
+        booking = self.config['booking_url']
+        page = client.get(booking, self.hosts)
+        address_rows = [folded(node.get_text(' ', strip=True)) for node in page.select('main p')]
+        if self.config['reviewed_class']['booking_address'] in address_rows:
+            candidate.location_evidence = booking
+        return candidate
+
+
 CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang,
            "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer,
            "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage,
-           "hanoiyouththeatre": HanoiYouthTheatre}
+           "hanoiyouththeatre": HanoiYouthTheatre, "yogalabhanoi": YogaLabHanoi}
 
 
 def load_sources():

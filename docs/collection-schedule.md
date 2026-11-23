@@ -104,6 +104,13 @@ the theatre's contact page confirms the Hanoi address. Run this source with
 `--browser`. [Theatre booking calendar](https://datve.nhahattuoitre.vn/) ·
 [Ministry announcement](https://bvhttdl.gov.vn/nha-hat-tuoi-tre-to-chuc-tuan-bieu-dien-nghe-thuat-huong-ung-ngay-van-hoa-viet-nam-2411-20260228171220914.htm)
 
+The Yoga Lab Hanoi adapter pairs the reviewed November 29 class with its
+own timetable block, then verifies the Hanoi address on the booking page
+linked from that timetable. The reviewed date resolves the workshop page's
+omitted year for this class. Other workshop slots require separate evidence.
+[Workshop calendar](https://www.yogalabhanoi.com/events) ·
+[Booking and directions](https://www.yogalabhanoi.com/book-a-class)
+
 Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
 Market publications disagree on the start day and opening hour. Pullman's official
 pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
