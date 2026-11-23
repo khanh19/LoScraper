@@ -49,6 +49,42 @@ class WeeklyCoverage(unittest.TestCase):
     def test_vietnamese_stage_play_has_a_category(self):
         self.assertEqual(category('Sân khấu kịch huyền ảo: Nguyễn Du – Hồ Xuân Hương Ngoại Truyện'), 'culture')
 
+    def test_named_fitness_activities_use_sports_category(self):
+        for title in (
+            'HYROX 90: buổi tập theo cặp sáng thứ Bảy',
+            'CrossFit cho người mới',
+            'Hướng dẫn padel ở Padel Xtra',
+            'Lớp Muay Thái cho người mới',
+        ):
+            with self.subTest(title=title):
+                self.assertEqual(category(title), 'sports')
+        self.assertEqual(category('Hướng dẫn tìm phòng tập'), '')
+
+    def test_hyrox_listing_keeps_venue_and_dated_sessions(self):
+        adapter = LifeOfDaNang('lifeofdanang', load_sources()['lifeofdanang'])
+        location = {
+            'name': 'Engine Room, 05-07 Dương Khuê',
+            'address': {'addressLocality': 'Da Nang'},
+        }
+        sessions = [{
+            '@type': 'Event',
+            'name': 'HYROX 90: buổi tập theo cặp sáng thứ Bảy ở Engine Room',
+            'location': location,
+            'startDate': f'2026-11-{day}T09:00:00+07:00',
+            'endDate': f'2026-11-{day}T10:30:00+07:00',
+        } for day in (14, 21)]
+        html = f'<script type="application/ld+json">{json.dumps(sessions)}</script>'
+        event, = adapter.parse_many(
+            BeautifulSoup(html, 'html.parser'),
+            'https://lifeofdanang.com/vi/danang/weekly-engine-room-hyrox-90',
+            NOW,
+        )
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual((event.category, event.city_slug, event.address),
+                         ('sports', 'danang', '05-07 Dương Khuê, Da Nang'))
+        self.assertEqual([session.starts_at for session in event.occurrences],
+                         [session['startDate'] for session in sessions])
+
     def test_opera_uses_individual_program_days_and_primary_venue(self):
         url = 'https://hoguomopera.vn/chuong-trinh-bieu-dien/don-quixote-2099'
         html = '''<h1>Ballet Cuba: Don Quixote</h1>
