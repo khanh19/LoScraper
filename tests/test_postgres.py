@@ -663,6 +663,9 @@ class Persistence(unittest.TestCase):
         for n in range(6):
             self.assertTrue(self.store.reserve('serpapi',f'search-{n}',1,200,200,{},NOW,pilot_id='coverage-20261108'))
         self.assertIsNone(self.store.reserve('serpapi','search-overflow',1,200,200,{},NOW,pilot_id='coverage-20261108'))
+        from trending.pilot import open_pilot_ledger
+        restored = open_pilot_ledger(URL)
+        restored.close()
         self.store.update_job('facebook-0','unknown')
         old=self.store.reserve('brightdata','facebook-0',1,4500,4500,{'platform':'facebook'},NOW,pilot_id='coverage-20261108')
         self.assertFalse(old['created_now'])

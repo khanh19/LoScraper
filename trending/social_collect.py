@@ -7,7 +7,7 @@ from .__main__ import load_env_files
 from .discover import discover, reviewed_tiktok_profile
 from .http import PublicClient
 from .model import CITIES
-from .pilot import PILOT_ID
+from .pilot import PILOT_ID, open_pilot_ledger
 from .providers import BrightSocial,ProviderDisabled
 from .announcements import announcement
 from .store import Store
@@ -23,10 +23,8 @@ def profile_pilot(city, now, live, ledger_url):
     if urlsplit(ledger_url).hostname not in {'localhost', '127.0.0.1', '::1'}:
         return {**report, 'status': 'blocked', 'reason': 'existing_local_quota_ledger_required'}
     try:
-        ledger = Store(ledger_url)
+        ledger = open_pilot_ledger(ledger_url)
         try:
-            if not ledger.db.execute('SELECT 1 FROM discovery_provider_jobs WHERE pilot_id=%s LIMIT 1', (PILOT_ID,)).fetchone():
-                return {**report, 'status': 'blocked', 'reason': 'existing_pilot_history_required'}
             rows = BrightSocial(ledger, pilot_id=PILOT_ID).collect_tiktok_profile(profile['url'], now)
         finally:
             ledger.close()
@@ -61,8 +59,14 @@ def main():
     feed_url=os.environ.get('DATABASE_URL','');ledger_url=os.environ.get('QUOTA_DATABASE_URL','')
     if feed_url==ledger_url or any(urlsplit(u).hostname not in {'127.0.0.1','localhost','::1'} for u in (feed_url,ledger_url)) or not urlsplit(feed_url).path.startswith('/lo_setup_check_'):
         p.error('separate isolated feed and existing canonical quota ledger required')
-    feed=Store(feed_url);ledger=Store(ledger_url)
     try:
+        ledger = open_pilot_ledger(ledger_url)
+    except ProviderDisabled as exc:
+        print(json.dumps({**result, 'status': 'blocked', 'reason': str(exc)}, ensure_ascii=False, indent=2))
+        return 2
+    feed = None
+    try:
+        feed = Store(feed_url)
         social=BrightSocial(ledger,pilot_id=PILOT_ID)
         attempted={}
         # Also resume existing known jobs if a webpage no longer lists the post.
@@ -104,7 +108,10 @@ def main():
             result['collection'].append(status)
         result['published']=sum(r['published'] for r in result['collection'])
         result['accounting']=ledger.db.execute("SELECT provider,status,count(*) AS jobs,sum(reserved_units) AS units FROM discovery_provider_jobs WHERE pilot_id=%s GROUP BY 1,2",(PILOT_ID,)).fetchall()
-    finally:feed.close();ledger.close()
+    finally:
+        if feed:
+            feed.close()
+        ledger.close()
     print(json.dumps(result,ensure_ascii=False,default=str,indent=2))
     return 2 if any(r.get('reason') not in (None,'eligible') for r in result['collection']) else 0
 
