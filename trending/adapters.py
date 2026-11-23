@@ -273,12 +273,36 @@ class Ticketbox(Adapter):
             c.reasons.append("unresolved_individual_sessions")
             return c
         c.occurrences = self._exclude_multi_show_windows(sessions)
+        if self._has_admission_windows(data, c.occurrences):
+            c.occurrences = []
+            c.reasons.extend(('unresolved_admission_session_times', CONFIRMED_SCHEDULE_CONFLICT))
         categories = {"music": "music", "sport": "sports", "theatersandart": "culture",
                       "attractionsexperiences": "experience", "seminarsworkshops": "workshop"}
         if not c.category:
             c.category = next((categories[value] for value in (data.get("categoriesV2") or [])
                                if value in categories), "")
         return c
+
+    @staticmethod
+    def _has_admission_windows(data, sessions):
+        description = data.get('description')
+        if 'attractionsexperiences' not in (data.get('categoriesV2') or []) or not isinstance(description, str):
+            return False
+        details = folded(BeautifulSoup(description, 'html.parser').get_text(' ', strip=True))
+        # A flexible visit begins at the guest's check-in, even if the API labels the gate hours a showing.
+        if 'tinh tu thoi diem check in tai quay ve' in details:
+            return True
+        # For daily passes, require the publisher's park-hours and on-site session instructions
+        # before interpreting a midnight-to-23:59 showing as an admission date.
+        if 'gio hoat dong cua cong vien' not in details or 'kiem tra thoi diem bat dau trai nghiem' not in details:
+            return False
+        for slot in sessions:
+            start = parse_time(slot.starts_at).astimezone(ICT)
+            end = parse_time(slot.ends_at).astimezone(ICT)
+            if (slot.precision == 'time' and start.date() == end.date()
+                    and start.time() == time(0) and end.time() == time(23, 59)):
+                return True
+        return False
 
     @staticmethod
     def _exclude_multi_show_windows(sessions):

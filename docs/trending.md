@@ -41,6 +41,17 @@ An API key alone never enables a provider. Add `--providers` explicitly and prov
 
 Six adapters have passed the bounded local pilot and are enabled in `trending/sources.json`. Ticketbox resolves its individual **Lịch diễn** sessions; TicketGo uses structured events. Hanoi Grapevine reads editorial schedule/address blocks and rejects multi-venue roundups. Fantasticity follows official campaign links to individual activities. Nightlife corroborates destinations against its venue pages. VnExpress uses original article publication dates and explicit destination/address evidence in the opening article paragraphs; it does not use sidebar/footer locations.
 
+Ticketbox attraction listings can put flexible admission into their showings.
+The collector holds a pass when its own description starts the visit at
+check-in, or confirms separate on-site start times while the API shows an
+all-day admission window. Rechecks record `unresolved_admission_session_times`
+and withhold the event and its reminder times until a verified schedule
+replaces the hold. The observations stay active and retain their verification
+timestamps. This rule was checked against the live [KidZania pass](https://ticketbox.vn/ve-trai-nghiem-kidzania-ha-noi-24678),
+[GenZania pass](https://ticketbox.vn/ve-trai-nghiem-genzania-2-tieng-25886),
+and the timed [Hanoi Fashion Week](https://ticketbox.vn/aquafina-fashionweek-thudong2026-26826)
+and [DẾ GARDEN](https://ticketbox.vn/de-garden-terrarium-workshop-25079) controls.
+
 `--supplemental` discovers primary-source links from Life of Da Nang Weekly, Saigoneer and Visit HCMC. These are not assumed to publish daily. Wikipedia is not ingested. Unknown formats, unsupported cities, missing destinations, cancellations and unresolved schedules are rejected with reason codes. Source failures appear in run receipts. `no_detail_links` flags a likely layout change instead of reporting a silent success.
 
 Every candidate retains canonical source and location-evidence URLs, original text, publication and verification dates, event occurrences, image provenance, and Vietnamese display fields. Structured VND prices are captured when supplied. Official names remain unchanged. Image URLs are collected, but all publishers currently have `image_permission: false`; cards therefore use neutral placeholders. Enable image reuse only after recording the publisher's permission/licence and attribution requirements.
