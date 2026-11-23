@@ -6,6 +6,10 @@ on:
     branches: [main, develop, 'stephen-*']
   workflow_dispatch:
     inputs:
+      review_commit:
+        description: Test an earlier stack commit by its full SHA
+        type: string
+        default: ''
       public_tiktok_audit:
         description: Check reviewed organizers through the public TikTok endpoints
         type: boolean
@@ -26,7 +30,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'checks' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'checks' }}-${{ inputs.review_commit || 'current' }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
@@ -35,9 +39,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require an immutable review commit
+        if: inputs.review_commit != ''
+        env:
+          REVIEW_COMMIT: ${{ inputs.review_commit }}
+        run: |
+          if ! [[ "$REVIEW_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Provide the full 40-character commit SHA." >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.review_commit || '' }}
           persist-credentials: false
+      - name: Record the scraper revision under test
+        run: |
+          printf 'Scraper commit under test\n\n' >> "$GITHUB_STEP_SUMMARY"
+          git rev-parse HEAD | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install media test dependency
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - uses: actions/setup-python@v5
@@ -47,10 +65,14 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m pip check
       - run: python scripts/ci_tests.py
+        if: inputs.review_commit == ''
+      - name: Test the earlier scraper revision
+        if: inputs.review_commit != ''
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
 
   staging_collection:
     name: Isolated staging collection
-    if: github.event_name == 'workflow_dispatch' && inputs.staging_collection != 'none'
+    if: github.event_name == 'workflow_dispatch' && inputs.review_commit == '' && inputs.staging_collection != 'none'
     needs: unit
     uses: ./.github/workflows/trending.yml
     with:
@@ -63,7 +85,7 @@ jobs:
 
   public_tiktok:
     name: Review public TikTok metadata
-    if: github.event_name == 'workflow_dispatch' && (inputs.public_tiktok_audit || inputs.public_tiktok_video_url != '')
+    if: github.event_name == 'workflow_dispatch' && inputs.review_commit == '' && (inputs.public_tiktok_audit || inputs.public_tiktok_video_url != '')
     needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 8
