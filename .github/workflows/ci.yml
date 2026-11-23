@@ -74,6 +74,10 @@ jobs:
     name: Isolated staging collection
     if: github.event_name == 'workflow_dispatch' && inputs.review_commit == '' && inputs.staging_collection != 'none'
     needs: unit
+    # Reusable workflows may restrict the caller's token but cannot add permissions.
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/trending.yml
     with:
       mode: ${{ inputs.staging_collection }}
