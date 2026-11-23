@@ -792,7 +792,8 @@ def load_sources():
     return json.loads(Path(__file__).with_name('sources.json').read_text())
 
 
-def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None, metrics=None, existing_only=False):
+def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat=lambda: None,
+                   metrics=None, existing_only=False, on_candidate=None):
     adapter = CLASSES[slug](slug, config)
     metrics = metrics if metrics is not None else {}
     metrics.update(listing_pages=0,detail_pages=0,extracted_entries=0)
@@ -852,6 +853,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     consecutive_fetch_failures = 0
     for url in links:
         heartbeat()
+        page_candidates = []
         try:
             soup = adapter.fetch(client, url)
             consecutive_fetch_failures = 0
@@ -874,7 +876,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                             c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
                     from .images import authorize
                     authorize(c,now)
-                    candidates.append(c)
+                    page_candidates.append(c)
                     metrics['extracted_entries']+=1
                 except Exception as exc:
                     failures.append({'stage':'entry','reason':fetch_failure_reason(exc)})
@@ -885,6 +887,11 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                 if consecutive_fetch_failures >= 3:
                     failures.append({'stage':'detail','reason':'source_fetch_circuit_open'})
                     break
+        if on_candidate is None:
+            candidates.extend(page_candidates)
+        else:
+            for c in page_candidates:
+                on_candidate(c)
         heartbeat()
     return candidates, failures
 

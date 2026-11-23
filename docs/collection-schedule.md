@@ -32,13 +32,17 @@ The existing receipts/health command report failures and interrupted work.
 Each source checks at most 200 distinct pages, oldest verification first. Exceeding
 that bound produces `refresh_page_limit` and a deferred-page count, not a false
 complete result. Missing known entries produce `existing_entry_not_recovered`.
+The default recheck visits the other publishers before Ticketbox, which had the
+largest set of pending pages in staging. Explicit `--sources` order still works.
+Verified observations are saved as each page finishes. A slow or interrupted page
+leaves previously committed work and the unfetched observations intact.
 Full discovery retains the bounded 20 detail pages per source plus existing checks;
 “full” means all enabled sources/cities, not unlimited scraping or a minimum feed size.
-The workflow allows 25 minutes for a recheck alone and 75 minutes for a full
+The workflow allows 45 minutes for a recheck alone and 90 minutes for a full
 run, including setup and its recheck. A slow serial staging run spent more than
-40 minutes on discovery alone, and a separate full recheck took about ten
-minutes. The page limits and per-request retries stay the same. Inspect
-interrupted receipts if either timeout is reached.
+40 minutes on discovery alone, and two later rechecks hit the previous 25-minute
+cutoff. Page limits and per-request retries stay the same. Inspect interrupted
+receipts if either timeout is reached.
 Collector connections enforce a one-minute idle-in-transaction timeout so an
 abandoned pooled session cannot retain the import lock. Run staging imports
 serially when validating outside GitHub Actions.
@@ -123,7 +127,7 @@ failures, preserved the item IDs, and made no metered requests.
 On 23 November, a separate full run imported 25 candidates before database
 connection errors prevented its final database receipt. The Mac slept during
 that run, so the 42-minute result is a poor baseline for a hosted runner.
-The latest manual recheck ended at a 25-minute cutoff after 9 accepted and
+A subsequent manual recheck ended at a 25-minute cutoff after 9 accepted and
 3 rejected candidates and 4 fetch or extraction failures. Vietnam Nightlife
 finished partially and Ticketbox was still processing. The parent receipt
 recorded a failed run and the feed evaluator still returned the 73 cards above.

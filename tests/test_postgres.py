@@ -156,9 +156,14 @@ class Persistence(unittest.TestCase):
         rejected.verified_at = held_at.isoformat()
         args = Namespace(sources='ticketbox', city='hanoi', write_db=True, providers=False,
                          browser=False, pilot=False, supplemental=False, refresh_existing=True, out=None)
+
+        def collect(*args, on_candidate, **kwargs):
+            on_candidate(rejected)
+            return [], []
+
         with (patch.dict(os.environ, {'DATABASE_URL': URL}),
               patch('trending.__main__.datetime') as clock,
-              patch('trending.__main__.collect_source', return_value=([rejected], [])),
+              patch('trending.__main__.collect_source', side_effect=collect),
               redirect_stdout(StringIO())):
             clock.now.return_value = held_at
             report = run(args)
@@ -432,9 +437,13 @@ class Persistence(unittest.TestCase):
         fresh=copy.deepcopy(existing);fresh.verified_at=(NOW+timedelta(hours=1)).isoformat()
         sibling=copy.deepcopy(fresh);sibling.source_url='https://ticketbox.vn/new-unrequested'
         def execute(rows,failures):
+            def collect(*args, on_candidate, **kwargs):
+                for row in rows:
+                    on_candidate(row)
+                return [], failures
             with patch.dict(os.environ,{'DATABASE_URL':URL}),patch('trending.__main__.datetime',Clock), \
                  patch('trending.__main__.Store',return_value=self.store),patch.object(self.store,'close'), \
-                 patch('trending.__main__.PublicClient'),patch('trending.__main__.collect_source',return_value=(rows,failures)), \
+                 patch('trending.__main__.PublicClient'),patch('trending.__main__.collect_source',side_effect=collect), \
                  redirect_stdout(io.StringIO()):
                 return run(args)
         failed=execute([], [{'stage':'detail','reason':'http_503'}])
@@ -444,6 +453,60 @@ class Persistence(unittest.TestCase):
         self.assertEqual(success['sources']['ticketbox']['accepted'],1)
         self.assertEqual(self.store.db.execute('SELECT count(*) AS n FROM discovery_observations').fetchone()['n'],1)
         self.assertGreater(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
+
+    def test_default_recheck_saves_other_publishers_and_completed_pages_before_interrupt(self):
+        from bs4 import BeautifulSoup
+        self.store.register('ticketgo', 'TicketGo', True)
+        early = candidate()
+        early.source_slug = 'ticketgo'
+        early.source_url = 'https://ticketgo.vn/event/first-publisher'
+        early.title = 'First publisher'
+        saved = candidate()
+        pending = candidate()
+        pending.title = 'Unfetched event'
+        pending.source_url = 'https://ticketbox.vn/z-after-interrupt-12345'
+        for row in (early, saved, pending):
+            self.store.upsert(row, NOW)
+
+        later = NOW + timedelta(hours=1)
+        for row in (early, saved):
+            row.verified_at = later.isoformat()
+        clock = Mock()
+        clock.now.return_value = later
+        page = BeautifulSoup('<main></main>', 'html.parser')
+        ticketgo = Mock(spec=['fetch', 'parse_many'])
+        ticketgo.fetch.return_value = page
+        ticketgo.parse_many.return_value = [early]
+        ticketbox = Mock(spec=['fetch', 'parse_many'])
+        ticketbox.parse_many.return_value = [saved]
+
+        def verification_times():
+            return {r['source_url']: r['verified_at'] for r in self.store.db.execute(
+                'SELECT source_url,verified_at FROM discovery_observations')}
+
+        def fetch_ticketbox(_client, url):
+            self.assertEqual(verification_times()[early.source_url], later)
+            if url == pending.source_url:
+                self.assertEqual(verification_times()[saved.source_url], later)
+                raise KeyboardInterrupt
+            return page
+
+        ticketbox.fetch.side_effect = fetch_ticketbox
+        args = Namespace(sources=None, city=None, pilot=False, write_db=True, browser=False,
+                         supplemental=False, providers=False, refresh_existing=True, limit=12, out=None)
+        adapters = {'ticketbox': Mock(return_value=ticketbox), 'ticketgo': Mock(return_value=ticketgo)}
+        with patch.dict(os.environ, {'DATABASE_URL': URL}), patch('trending.__main__.datetime', clock), \
+             patch('trending.__main__.Store', return_value=self.store), patch.object(self.store, 'close'), \
+             patch.dict('trending.adapters.CLASSES', adapters, clear=True), \
+             patch('trending.__main__.PublicClient'), redirect_stdout(StringIO()):
+            with self.assertRaises(KeyboardInterrupt):
+                run(args)
+
+        self.assertEqual(verification_times()[pending.source_url], NOW)
+        receipts = {r['source_slug']: (r['status'], r['accepted']) for r in self.store.db.execute(
+            'SELECT source_slug,status,accepted FROM discovery_ingestion_runs')}
+        self.assertEqual(receipts, {'__run__': ('failed', 2), 'ticketgo': ('complete', 1),
+                                    'ticketbox': ('partial', 1)})
 
     def test_run_continues_after_bad_candidate_failed_write_and_source(self):
         from argparse import Namespace
