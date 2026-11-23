@@ -187,7 +187,7 @@ class Adapter:
 
 
 class Ticketbox(Adapter):
-    def public_listing_links(self, client):
+    def public_listing_links(self, client, city_hint=None):
         host = "api-v2.ticketbox.vn"
         url = f"https://{host}/gin/api/v2/discovery/onsale-sections/newly-on-sale"
         data = client.get(url, {host}, json_response=True).get("data")
@@ -198,6 +198,13 @@ class Ticketbox(Adapter):
         for item in results:
             if not isinstance(item, dict) or item.get("saleStage") != "on_sale":
                 continue
+            if city_hint:
+                city = item.get("city")
+                if not isinstance(city, dict):
+                    continue
+                names = [city.get(key) for key in ("vi", "en")]
+                if city_from_address(" ".join(name for name in names if isinstance(name, str))) != city_hint:
+                    continue
             raw_url = item.get("deeplink")
             if not isinstance(raw_url, str):
                 continue

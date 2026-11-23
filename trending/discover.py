@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit,urljoin
 from .adapters import CLASSES, is_type, load_sources, structured
-from .http import PublicClient,FetchError
+from .http import PublicClient, FetchError, fetch_failure_reason
 from .model import CITIES,canonical
 from .social_links import TikTokShareResolver, extract_posts, remember_lead
 from .intent import queries
@@ -64,15 +64,31 @@ def discover(city,client,now,counts=None,limit=6):
     posts={};pages=[]
     for seed in seeds[:limit]:
         try:
-            host=urlsplit(seed['url']).hostname
-            soup=client.get(seed['url'],{host})
-            targets=[(seed['url'],soup)]
             slug = seed['id']
+            host = urlsplit(seed['url']).hostname
+            adapter = CLASSES[slug](slug, configs[slug]) if slug in CLASSES and slug in configs else None
+
+            def fetch(url):
+                if adapter and getattr(client, 'browser_enabled', False):
+                    return adapter.fetch(client, url)
+                return client.get(url, {host})
+
+            soup = fetch(seed['url'])
+            targets = [(seed['url'], soup)]
             seed_url = canonical(seed['url'])
-            if slug in CLASSES and slug in configs:
+            if slug == 'ticketbox' and adapter:
+                # Listing city labels route the limited detail reads. The
+                # destination still needs independent verification.
+                try:
+                    links = adapter.public_listing_links(client, city_hint=city)
+                except (FetchError, ValueError) as error:
+                    pages.append({'source': slug, 'stage': 'on_sale_listing',
+                                  'status': 'failed', 'reason': fetch_failure_reason(error)})
+                    links = []
+            elif adapter:
                 # Website adapters already distinguish detail links from calendar
                 # exports, related indexes, and locale switches.
-                links = CLASSES[slug](slug, configs[slug]).links(soup, seed['url'])
+                links = adapter.links(soup, seed['url'])
             else:
                 links = (
                     urljoin(seed['url'], a['href']) for a in soup.select('a[href]')
@@ -80,8 +96,10 @@ def discover(city,client,now,counts=None,limit=6):
                 )
             details = (u for u in dict.fromkeys(links) if urlsplit(u).hostname == host and u != seed_url)
             for u in islice(details, 2):
-                try:targets.append((u,client.get(u,{host})))
-                except (FetchError,ValueError) as e:pages.append({'source':seed['id'],'url':u,'status':'failed','reason':str(e)})
+                try:
+                    targets.append((u, fetch(u)))
+                except (FetchError, ValueError) as error:
+                    pages.append({'source': slug, 'url': u, 'status': 'failed', 'reason': fetch_failure_reason(error)})
             for u,html in targets:
                 found=extract_posts(str(html),u,now,resolve_share=resolver.resolve)
                 pages.append({'source':seed['id'],'url':u,'status':'complete','leads':len(found)})
@@ -89,7 +107,8 @@ def discover(city,client,now,counts=None,limit=6):
                     post['publisher_id']=seed['publisher_id']
                     post['city_hint']=city  # NEVER independent location evidence.
                     remember_lead(posts, post)
-        except (FetchError,ValueError) as e:pages.append({'source':seed['id'],'status':'failed','reason':str(e)})
+        except (FetchError, ValueError) as error:
+            pages.append({'source': slug, 'url': seed['url'], 'status': 'failed', 'reason': fetch_failure_reason(error)})
     return {'city':city,'pages':pages,'posts':list(posts.values())[:30],
             'tiktok_share_links':resolver.results,
             'queries':queries(city,counts),'provider_requests':0,'published':0}
@@ -98,6 +117,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--city',choices=list(CITIES),required=True)
     p.add_argument('--max-sources',type=int,default=6)
+    p.add_argument('--browser', action='store_true', help='Use website adapters with browser support for public publisher pages')
     p.add_argument('--write-leads',action='store_true')
     p.add_argument('--env-file',action='append',default=[])
     args=p.parse_args()
@@ -105,6 +125,7 @@ def main():
     from .__main__ import load_env_files
     load_env_files(args.env_file)
     store=None;counts={};now=datetime.now(timezone.utc)
+    client = PublicClient(browser=args.browser)
     try:
         if args.write_leads:
             url=os.environ.get('DATABASE_URL','');parts=urlsplit(url)
@@ -113,7 +134,7 @@ def main():
             from .store import Store
             store=Store(url)
             counts={r['category']:r['n'] for r in store.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,args.city)).fetchall()}
-        report=discover(args.city,PublicClient(),now,counts,args.max_sources)
+        report=discover(args.city,client,now,counts,args.max_sources)
         if store:
             for row in report['posts']:
                 store.db.execute("""INSERT INTO discovery_leads(url,platform,discovered_on,published_at,publisher_id,city_slug)
@@ -121,6 +142,7 @@ def main():
         print(json.dumps(report,ensure_ascii=False,indent=2))
         return 2 if any(r['status']=='failed' for r in report['pages']) else 0
     finally:
+        client.close()
         if store:store.close()
 
 if __name__=='__main__':raise SystemExit(main())

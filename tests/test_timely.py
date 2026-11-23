@@ -7,6 +7,7 @@ from trending.intent import queries
 from trending.model import city_from_address
 from trending.adapters import category
 from trending.discover import discover
+from trending.http import FetchError
 from bs4 import BeautifulSoup
 
 NOW=datetime(2026,11,8,12,tzinfo=timezone.utc)
@@ -71,3 +72,33 @@ class Timely(unittest.TestCase):
                                      sources[1]['url'], nightlife + '/en/nightlife-show-115-15.html'])
         post, = result['posts']
         self.assertEqual(post['url'], 'https://www.instagram.com/reel/example')
+
+    def test_social_discovery_reuses_publisher_tls_fallback_in_browser_mode(self):
+        root = 'https://hanoigrapevine.com/vi/'
+        detail = 'https://hanoigrapevine.com/vi/2026/11/di-xem-trien-lam'
+        source = {'id': 'hanoigrapevine', 'publisher_id': 'grapevine',
+                  'cities': ['hanoi'], 'categories': [], 'url': root}
+        pages = {
+            root: '<a href="' + detail + '">Event</a>',
+            detail: '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/reel/example/"></blockquote>',
+        }
+        requested = []
+
+        class Client:
+            browser_enabled = True
+
+            def get(self, url, hosts, render=False):
+                requested.append((url, render))
+                if not render:
+                    raise FetchError('tls_handshake_failed')
+                return BeautifulSoup(pages[url], 'html.parser')
+
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps([source])
+            result = discover('hanoi', Client(), NOW)
+        self.assertEqual(requested, [(root, False), (root, True), (detail, False), (detail, True)])
+        self.assertEqual([p['status'] for p in result['pages']], ['complete', 'complete'])
+        post, = result['posts']
+        self.assertEqual(post['url'], 'https://www.instagram.com/reel/example')
+        self.assertIsNone(post['published_at'])
+        self.assertEqual(result['provider_requests'], 0)

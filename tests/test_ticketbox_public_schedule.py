@@ -73,3 +73,19 @@ class TicketboxPublicSchedule(unittest.TestCase):
         self.client.get.return_value = {"data": {}}
         with self.assertRaisesRegex(FetchError, "invalid_public_listing"):
             self.adapter.public_listing_links(self.client)
+
+    def test_public_listing_city_is_a_bounded_discovery_hint(self):
+        self.client.get.return_value = {"data": {"results": [
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/hcmc-1234",
+             "city": {"vi": "TP.HCM", "en": "HCMC"}},
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/hanoi-1235",
+             "city": {"vi": "Hà Nội", "en": "Ha Noi"}},
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/conflict-1236",
+             "city": {"vi": "Đà Nẵng", "en": "Ha Noi"}},
+            {"saleStage": "on_sale", "deeplink": "https://ticketbox.vn/online-1237", "city": None},
+        ]}}
+        self.assertEqual(self.adapter.public_listing_links(self.client, city_hint="hanoi"),
+                         ["https://ticketbox.vn/hanoi-1235"])
+        self.assertEqual(self.adapter.public_listing_links(self.client, city_hint="hcmc"),
+                         ["https://ticketbox.vn/hcmc-1234"])
+        self.assertEqual(len(self.adapter.public_listing_links(self.client)), 4)

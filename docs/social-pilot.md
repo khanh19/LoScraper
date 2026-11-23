@@ -331,3 +331,42 @@ free-only transport check. If the local network cannot reach TikTok, dispatch
 **Scraper CI** with `public_tiktok_audit=true` and `public_share_publisher_url`
 set to a public page. The job reads link metadata, omits post text from the log,
 and keeps metered collection and publication disabled.
+
+### Publisher transport and city-targeted links
+
+Social lead discovery can use the existing website adapters' browser support
+for public publisher pages. For example, the Hanoi Grapevine adapter can
+retry its TLS handshake failure in a browser while keeping normal certificate
+verification. The CLI reports the remaining error when the browser also
+fails.
+
+```sh
+python -m trending.discover --city hanoi --browser
+```
+
+Ticketbox social discovery selects its two detail pages from public on-sale
+entries that match the requested city. A mixed homepage put a Sài Gòn event
+into the Hanoi detail budget. Listing city labels now route the fetches.
+Venue verification still comes from the event and independent location
+evidence. Dated post evidence still comes from the original post or a matching
+provider record.
+
+On 23 November, an audit opened 14 of 18 official detail pages from the
+verified staging feed. Four Hanoi Grapevine pages failed TLS on the local
+network. None of the 14 readable pages linked to an original Instagram or
+TikTok post. The venue site for Mì Cay Sasin An Hải did link to an original
+TikTok video. Its article is dated 15 November, and TikTok's source did not
+return a verifiable publication timestamp. The link remains held.
+[Venue's original-post reference](https://micayhanquoc.com/tin-nha-hang/sasin-an-hai-tren-tiktok-nicherryy)
+
+Five public Instagram profile embeds returned no original-post links.
+The source directory now records the publisher-confirmed Life of Da Nang,
+Da Nang Fantasticity, REALITY and 1900 accounts as discovery leads.
+New checks made zero metered requests and published zero records. The
+Bright Data preflight found no currently verified free allowance. The
+legacy quota ledger is still unavailable, and Apify's existing campaign
+remains fully reserved.
+[Life of Da Nang](https://lifeofdanang.com/weekly) ·
+[Da Nang Fantasticity](https://danangfantasticity.com/vi) ·
+[REALITY](https://realitydn.com/vn/) ·
+[1900 Le Théâtre](https://1900club.vn/vi/ve-chung-toi/)
