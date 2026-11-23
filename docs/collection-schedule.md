@@ -326,3 +326,22 @@ were still HTTP 404. The daily recheck continues to use stored event URLs.
 The manual Furama run imported one eligible event without a failed fetch or
 provider usage. Controlled tests cover matching dates and times, competing
 sessions, missing address evidence, and venue ambiguity. Scheduling remains disabled.
+
+### Reviewed HCMC listings on Vio
+
+The website collector reads four reviewed Vio event URLs. Each page must
+match the reviewed event title, organizer and branch. The adapter uses
+individual timestamped sessions and compares their days, start and end
+times against the visible booking timetable and event description. When a
+booking row groups multiple sessions on one day, the description must
+corroborate all of that day's times. Conflicting schedules hold the event.
+
+On November 24, three live pages passed. Kloud Art Thảo Điền listed one
+November 27 session, Kloud Art The Estella listed two November 29 sessions,
+and Saigon Wine Fair listed December 19 and 20 sessions at Saigon Outcast.
+Vinhomes Central Park's workshop description gives 19:00–21:00 while its
+booking row gives 20:00–22:00 on November 28. The collector rejected it.
+Run the same website-only check with `python -m trending --sources vio --city hcmc --limit 4`.
+[Vio wine fair](https://vioapp.io/vi-vn/event/saigon-wine-fair-2026) ·
+[Kloud Art branches](https://kloudart.com/) ·
+[Vinhomes booking page](https://vioapp.io/vi-vn/event/kloud-art-vinhomes-central-park-workshop-gom-giang-sinh)

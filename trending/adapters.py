@@ -1231,11 +1231,134 @@ class YogaLabHanoi(Adapter):
         return candidate
 
 
+class Vio(Adapter):
+    link_pattern = r'^/vi-vn/event/[^/]+$'
+    hours_pattern = r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})'
+    scheduled = 'https://schema.org/EventScheduled'
+
+    def parse(self, soup, url, now):
+        url = canonical(url)
+        c = Candidate(self.slug, self.config['name'], url, '', 'event', verified_at=now.isoformat())
+        review = self.config['reviewed_detail_pages'].get(url)
+        if not review:
+            c.reasons.append('unreviewed_vio_event')
+            return c
+        events = [event for event in structured(soup) if is_type(event, 'Event')]
+        headings = soup.select('h1')
+        if len(events) != 1 or len(headings) != 1:
+            c.reasons.append('event_identity_conflict')
+            return c
+        event = events[0]
+        c.title = headings[0].get_text(' ', strip=True)
+        organizer = event.get('organizer')
+        if (event.get('url') != url or event.get('name') != c.title or folded(c.title) != folded(review['title'])
+                or not isinstance(organizer, dict) or organizer.get('name') != review['organizer']):
+            c.reasons.append('event_identity_conflict')
+            return c
+        c.category = review['category']
+        c.venue_name = review['venue']
+        c.owner_key = review['publisher_id']
+        location = event.get('location')
+        postal = location.get('address') if isinstance(location, dict) else None
+        if not isinstance(postal, dict) or postal.get('streetAddress') != review['booking_street']:
+            c.reasons.append('unverified_destination')
+            return c
+        _, c.address = location_fields(event)
+        c.city_slug = city_from_address(c.address)
+        if c.city_slug != 'hcmc':
+            c.reasons.append('unverified_destination')
+            return c
+        c.location_evidence = url
+
+        if event.get('eventStatus') == 'https://schema.org/EventCancelled':
+            c.status = 'cancelled'
+            c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
+            return c
+        details = soup.select_one('section#info')
+        if details is None or not details.get_text(strip=True) or event.get('eventStatus') != self.scheduled:
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+        c.original_text = details.get_text('\n', strip=True)
+        if re.search(r'\b(?:su kien|chuong trinh|workshop) (?:(?:da|bi) (?:huy|hoan)|(?:huy bo|hoan lich))\b',
+                     folded(c.original_text)):
+            c.reasons.extend(['unresolved_individual_sessions', CONFIRMED_SCHEDULE_CONFLICT])
+            return c
+        slots = self._structured_sessions(event)
+        if not slots:
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+
+        by_day = {}
+        for start, end in slots:
+            day = start.strftime('%d/%m/%Y')
+            by_day.setdefault(day, []).append((start.strftime('%H:%M'), end.strftime('%H:%M')))
+        expected = {day: (*times[0], len(times)) for day, times in by_day.items()}
+        visible = self._visible_sessions(soup)
+        described = {tuple(hour.zfill(5) for hour in match)
+                     for match in re.findall(self.hours_pattern, c.original_text)}
+        described_days = set(re.findall(r'\b\d{2}/\d{2}/20\d{2}\b', c.original_text))
+        expected_hours = {hours for times in by_day.values() for hours in times}
+        if ((described and described != expected_hours) or (described_days and described_days != expected.keys())
+                or (visible and visible != expected)):
+            c.reasons.extend(['unresolved_individual_sessions', CONFIRMED_SCHEDULE_CONFLICT])
+            return c
+        if visible != expected or (any(len(times) > 1 for times in by_day.values()) and not described):
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+        c.occurrences = [iso_occurrence(start.isoformat(), end.isoformat()) for start, end in slots]
+        return c
+
+    @classmethod
+    def _structured_sessions(cls, event):
+        sessions = event.get('subEvent')
+        if not isinstance(sessions, list) or not sessions:
+            return []
+        slots, identities = set(), set()
+        prefix = event['url'] + '#showtime-'
+        for row in sessions:
+            if (not isinstance(row, dict) or not is_type(row, 'Event') or row.get('eventStatus') != cls.scheduled
+                    or row.get('location') != event['location'] or row.get('organizer') != event['organizer']):
+                return []
+            identity = row.get('@id')
+            if not isinstance(identity, str) or not identity.startswith(prefix) or identity in identities:
+                return []
+            identities.add(identity)
+            hours = row.get('startDate'), row.get('endDate')
+            if not all(isinstance(clock, str) and re.search(r'T\d{2}:\d{2}.*(?:Z|[+-]\d{2}:\d{2})$', clock)
+                       for clock in hours):
+                return []
+            start, end = map(parse_time, hours)
+            if not start or not end or not timedelta(0) < end - start <= timedelta(hours=24):
+                return []
+            slots.add((start.astimezone(ICT), end.astimezone(ICT)))
+        return sorted(slots) if len(slots) == len(sessions) else []
+
+    @classmethod
+    def _visible_sessions(cls, soup):
+        schedule = {}
+        for button in soup.select('section#tickets button[aria-expanded]'):
+            match = re.fullmatch(
+                rf'(CN|T[2-7]), (\d{{2}}/\d{{2}}/20\d{{2}}) {cls.hours_pattern}(?: \| (\d+) suất)?(?: Mua vé)?',
+                button.get_text(' ', strip=True),
+            )
+            if not match:
+                return {}
+            weekday, day, start, end, count = match.groups()
+            try:
+                local_date = datetime.strptime(day, '%d/%m/%Y').date()
+            except ValueError:
+                return {}
+            if day in schedule or weekday != ('CN' if local_date.weekday() == 6 else f'T{local_date.weekday() + 2}'):
+                return {}
+            schedule[day] = (start.zfill(5), end.zfill(5), int(count or '1'))
+        return schedule
+
+
 CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang,
            "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer,
            "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage,
-           "hanoiyouththeatre": HanoiYouthTheatre, "yogalabhanoi": YogaLabHanoi}
+           "hanoiyouththeatre": HanoiYouthTheatre, "yogalabhanoi": YogaLabHanoi, "vio": Vio}
 
 
 def load_sources():
@@ -1252,6 +1375,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     seeds = [] if existing_only else list(config['seeds'])
     if not existing_only:
         links.extend(config.get('detail_pages', ()))
+        links.extend(config.get('reviewed_detail_pages', ()))
     if slug == 'ticketbox' and not existing_only:
         heartbeat()
         try:
