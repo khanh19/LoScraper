@@ -1,6 +1,6 @@
 """Review public Instagram post previews and recent posts from public profile embeds."""
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import re
 from urllib.parse import urlsplit
@@ -200,6 +200,18 @@ def review(url, client, now):
               else 'outside_review_window')
     return {**report, 'status': status, 'publication_day': day.isoformat(),
             'account': owner, 'likes': likes, 'comments': comments}
+
+
+def original_attribution(post, original):
+    if (original['status'] != 'recent_day_needs_venue_review'
+            or lead_identity(original['url']) != lead_identity(post['url'])):
+        return 'original_unverified'
+    if original['account'] != post['profile_account']:
+        return 'different_original_account'
+    embed_day = datetime.fromisoformat(post['published_at']).astimezone(ICT).date()
+    if abs((date.fromisoformat(original['publication_day']) - embed_day).days) > 1:
+        return 'publication_day_conflict'
+    return 'confirmed_profile_account'
 
 
 def main():

@@ -2,10 +2,11 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 import json
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from bs4 import BeautifulSoup
 
+from trending.discover import review_instagram_leads
 from trending.http import FetchError
 from trending.instagram_public import instagram_profile, review, review_profile
 
@@ -47,6 +48,37 @@ def media(code='Abc123', hour=2):
 
 
 class InstagramPublicTests(unittest.TestCase):
+    def test_collaboration_needs_same_original_account_and_a_consistent_day(self):
+        shared = [{
+            'url': POST + str(i), 'status': 'coauthored_or_unknown_attribution',
+            'published_at': '2026-11-22T18:00:00+00:00', 'caption': 'Event caption',
+            'profile_account': 'sample.account',
+        } for i in range(4)]
+        originals = [{
+            'url': post['url'], 'status': 'recent_day_needs_venue_review',
+            'publication_day': day, 'account': account,
+        } for post, day, account in zip(
+            shared, ('2026-11-22', '2026-11-23', '2026-11-20'),
+            ('sample.account', 'another.account', 'sample.account'),
+        )]
+        profile = {'url': PROFILE, 'embed_url': PROFILE + 'embed/', 'publisher_id': 'sample', 'posts': shared}
+        report = {'city': 'hanoi', 'posts': [], 'published': 0}
+        client = Mock()
+        with (patch('trending.discover.reviewed_profiles', return_value=iter([profile])),
+              patch('trending.instagram_public.review_profile', return_value=profile),
+              patch('trending.instagram_public.review', side_effect=originals) as reads):
+            review_instagram_leads(report, client, NOW)
+        self.assertEqual(reads.call_count, 3)
+        self.assertEqual([r['attribution'] for r in report['public_instagram_attribution_reviews']], [
+            'confirmed_profile_account', 'different_original_account', 'publication_day_conflict',
+            'attribution_read_limit',
+        ])
+        self.assertEqual([post['url'] for post in report['posts']], [shared[0]['url']])
+        self.assertEqual(report['posts'][0]['attribution_evidence'], 'verified_original_post_preview')
+        self.assertEqual(report['posts'][0]['published_at'], shared[0]['published_at'])
+        self.assertTrue(report['posts'][0]['requires_provider_validation'])
+        self.assertEqual(report['published'], 0)
+
     def test_profile_embed_returns_only_fresh_original_owned_posts(self):
         clip = media()
         unrelated = {**media('Other'), 'owner': {**clip['owner'], 'id': '124'}}

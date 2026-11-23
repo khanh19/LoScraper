@@ -514,11 +514,16 @@ publication timestamp is a session date. City hints route review and do not
 verify a place. No contact with a metered provider is needed.
 
 Coauthored posts and posts with missing attribution metadata stay in the
-profile review output. The embed can report the profile account as the owner
-of a shared post. In the Nghề Nghệ sample, the COMPLEX 01 embed named itself
-while the original Instagram page credited `nghenghe.vn`. Shared posts are
-withheld from automatic profile lead import until original attribution is
-established. [Original Instagram post](https://www.instagram.com/p/DgDCfuTnxt8/)
+profile review output. The audit reuses any checked previews and reads up to
+three additional original posts per city. An ambiguous post can become a
+review lead when the direct preview verifies the same shortcode and reviewed
+profile account and gives a date within one calendar day of the embed's local
+date. The lead retains the exact timestamp from the embed. The optional
+`attribution_evidence` field records this independent original-page check.
+Venue, timing, and publication review still apply. In the Nghề Nghệ sample,
+the COMPLEX 01 embed named itself while the original Instagram page credited
+`nghenghe.vn`, so the post remained held under COMPLEX 01.
+[Original Instagram post](https://www.instagram.com/p/DgDCfuTnxt8/)
 
 The November 23 live run found **29** recent records from six publisher-linked
 profiles. Hanoi returned six posts from 1900, HCMC eight from Saigon Outcast
@@ -537,3 +542,12 @@ Nghề Nghệ corresponds to an ongoing exhibition through November 28. In the
 Discover:Saigon market roundup, Dấu Sắc Việt has a separately corroborated
 venue and window through November 24. Its other entries require individual
 review. These are discovery leads awaiting publication review. [COMPLEX 01](https://complex01.vn/) · [Nghề Nghệ Instagram](https://www.instagram.com/p/DgDCfuTnxt8/) · [Exhibition listing](https://hanoigrapevine.com/vi/2026/11/nghe-nghe-art-salon-mau-xua-sac-nay/) · [Discover:Saigon](https://www.discoversaigon.vn/) · [Market roundup](https://www.instagram.com/p/Df9uPUGoL37/) · [Dấu Sắc Việt venue evidence](https://codongson.vn/co-dong-son-le-hoi-van-hoa-dau-sac-viet-2026/)
+
+On November 24 Vietnam time, direct previews confirmed four previously
+ambiguous author attributions. The three Da Nang place leads were New Phương
+Đông, Bếp Hên, and PRIME Pilates. The November 18 Saigon Outcast post's event
+had already ended. Three Hanoi previews named a different original account,
+and the run left two more attribution checks deferred under the read limit.
+The Hanoi website scan was partial. All three city checks used zero metered
+requests and published zero cards.
+[New Phương Đông post](https://www.instagram.com/p/Df_4KPoGvG9/) · [Bếp Hên post](https://www.instagram.com/p/Df6vOXfmjhg/) · [PRIME Pilates post](https://www.instagram.com/p/Df4YX_jmqEb/) · [PRIME venue](https://primepilates.vn/)

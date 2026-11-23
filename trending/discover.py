@@ -10,10 +10,11 @@ from urllib.parse import urlsplit,urljoin
 from .adapters import CLASSES, is_type, load_sources, structured
 from .http import PublicClient, FetchError, fetch_failure_reason
 from .model import CITIES,canonical
-from .social_links import TikTokShareResolver, extract_posts, remember_lead
+from .social_links import TikTokShareResolver, extract_posts, lead_identity, remember_lead
 from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
+MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS = 3
 
 def canonical_tiktok_profile(url):
     if not isinstance(url, str):
@@ -116,6 +117,49 @@ def discover(city,client,now,counts=None,limit=6):
             'tiktok_share_links':resolver.results,
             'queries':queries(city,counts),'provider_requests':0,'published':0}
 
+
+def review_instagram_leads(report, client, now):
+    from .instagram_public import instagram_profile, original_attribution, review, review_profile
+
+    urls = (post['url'] for post in report['posts'] if post['platform'] == 'instagram')
+    original_reviews = report['public_instagram_reviews'] = [review(url, client, now) for url in islice(urls, 3)]
+    originals = {lead_identity(post['url']): post for post in original_reviews}
+    profiles = reviewed_profiles(report['city'], client, 'instagram', instagram_profile)
+    profile_reports = report['public_instagram_profile_reviews'] = [
+        review_profile(profile, client, now) for profile in islice(profiles, 3)
+    ]
+    attribution_reviews = report['public_instagram_attribution_reviews'] = []
+    remaining = MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS
+    leads = {}
+    for lead in report['posts']:
+        remember_lead(leads, lead)
+    for profile in profile_reports:
+        for post in profile['posts']:
+            extra_evidence = {}
+            if post['status'] == 'coauthored_or_unknown_attribution':
+                identity = lead_identity(post['url'])
+                if identity not in originals and remaining:
+                    originals[identity] = review(post['url'], client, now)
+                    remaining -= 1
+                original = originals.get(identity)
+                attribution = original_attribution(post, original) if original else 'attribution_read_limit'
+                attribution_reviews.append({**(original or {}), 'url': post['url'],
+                                            'profile_account': post['profile_account'], 'attribution': attribution})
+                if attribution != 'confirmed_profile_account':
+                    continue
+                extra_evidence['attribution_evidence'] = 'verified_original_post_preview'
+            elif post['status'] != 'fresh_needs_venue_review':
+                continue
+            remember_lead(leads, {
+                'url': post['url'], 'platform': 'instagram', 'city_hint': report['city'],
+                'published_at': post['published_at'], 'text': post['caption'],
+                'discovered_on': profile['embed_url'], 'publisher_id': profile['publisher_id'],
+                'publication_evidence': 'verified_profile_embed', 'requires_provider_validation': True,
+                **extra_evidence,
+            })
+    report['posts'] = sorted(leads.values(), key=lambda row: (row['published_at'] or '', row['url']), reverse=True)[:30]
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--city',choices=list(CITIES),required=True)
@@ -141,30 +185,7 @@ def main():
             counts={r['category']:r['n'] for r in store.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,args.city)).fetchall()}
         report=discover(args.city,client,now,counts,args.max_sources)
         if args.review_instagram:
-            from .instagram_public import instagram_profile, review, review_profile
-            urls = (post['url'] for post in report['posts'] if post['platform'] == 'instagram')
-            report['public_instagram_reviews'] = [review(url, client, now) for url in islice(urls, 3)]
-            profiles = reviewed_profiles(args.city, client, 'instagram', instagram_profile)
-            report['public_instagram_profile_reviews'] = [
-                review_profile(profile, client, now) for profile in islice(profiles, 3)
-            ]
-            leads = {}
-            for lead in report['posts']:
-                remember_lead(leads, lead)
-            for profile in report['public_instagram_profile_reviews']:
-                for post in profile['posts']:
-                    if post['status'] != 'fresh_needs_venue_review':
-                        continue
-                    remember_lead(leads, {
-                        'url': post['url'], 'platform': 'instagram', 'city_hint': args.city,
-                        'published_at': post['published_at'], 'text': post['caption'],
-                        'discovered_on': profile['embed_url'], 'publisher_id': profile['publisher_id'],
-                        'publication_evidence': 'verified_profile_embed',
-                        'requires_provider_validation': True,
-                    })
-            report['posts'] = sorted(
-                leads.values(), key=lambda row: (row['published_at'] or '', row['url']), reverse=True,
-            )[:30]
+            review_instagram_leads(report, client, now)
         if store:
             for row in report['posts']:
                 store.db.execute("""INSERT INTO discovery_leads(url,platform,discovered_on,published_at,publisher_id,city_slug)
