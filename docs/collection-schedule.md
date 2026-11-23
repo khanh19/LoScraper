@@ -84,7 +84,8 @@ through the publisher's catalogue. It matches every visible local-time slot to
 the program ID and its own booking page, checks the theatre address, and updates
 the existing observation and card IDs. The app opens the reachable programme
 catalogue. An incomplete or inconsistent slot set never renews verification.
-The gala remains outside this fallback while its second slot is unresolved.
+The gala needs its announced and booked dates to agree before this fallback
+can verify the whole event.
 [St. Petersburg booking](https://hoguomopera.vn/dat-ve/127) ·
 [Don Quixote booking](https://hoguomopera.vn/dat-ve/131)
 
@@ -111,8 +112,13 @@ If every linked programme is a confirmed archive entry, the source completes
 with zero new candidates. Missing programme links still surface as a failure.
 On November 24, a read-only comparison against the live catalogue kept the
 same three eligible programmes and reduced missing detail pages from seven to
-one. The ballet gala remained the one failure. The catalogue describes two
-nights but lists a timetable and booking for only December 8.
+one. The ballet gala remained the one failure in that rehearsal. The catalogue
+describes two nights but lists a timetable and booking for only December 8.
+When the collector confirms that discrepancy, it withholds the event until
+both dates agree. The hold preserves the prior verification time and IDs.
+A hold from the catalogue applies to the old programme URL only when the
+event identity matches. If both dates later have agreeing bookings, the
+collector can clear the hold and show the existing card again.
 [Publisher catalogue](https://hoguomopera.vn/chuong-trinh-bieu-dien?page=1) ·
 [December 8 booking](https://hoguomopera.vn/dat-ve/128)
 

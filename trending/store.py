@@ -166,15 +166,19 @@ class Store:
     def hold_schedule(self, c: Candidate, now: datetime):
         if c.kind != 'event' or c.platform != 'web' or CONFIRMED_SCHEDULE_CONFLICT not in c.reasons:
             return False
+        previous_identity = c.payload()['fingerprint'] if c.replaces_source_url else None
         with self.db.transaction():
             self.db.execute("SELECT pg_advisory_xact_lock(hashtextextended('lo-discovery-import',0))")
             result = self.db.execute("""UPDATE discovery_observations o SET schedule_held_at=%s
                 FROM discovery_items i, discovery_sources s
                 WHERE o.item_id=i.id AND i.kind='event' AND i.city_slug=%s
                   AND s.slug=o.source_slug AND s.enabled AND s.platform='web'
-                  AND o.source_slug=%s AND o.source_url=%s AND o.entry_key=%s AND o.status='active'
+                  AND o.source_slug=%s AND o.status='active'
+                  AND ((o.source_url=%s AND o.entry_key=%s)
+                    OR (o.source_url=%s AND o.entry_key='' AND i.fingerprint=%s))
                   AND o.verified_at<=%s AND (o.schedule_held_at IS NULL OR o.schedule_held_at<%s)""",
-                (now, c.city_slug, c.source_slug, c.source_url, c.entry_key, now, now))
+                (now, c.city_slug, c.source_slug, c.source_url, c.entry_key,
+                 c.replaces_source_url, previous_identity, now, now))
             return result.rowcount == 1
 
     def start_run(self, sources, cities, source='__run__', parent_id=None):

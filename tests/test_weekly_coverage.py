@@ -231,6 +231,46 @@ class WeeklyCoverage(unittest.TestCase):
         self.assertIn('unresolved_individual_sessions', broken.validate(NOW))
         self.assertEqual(broken.occurrences, [])
 
+    def test_opera_holds_gala_when_verified_bookings_omit_an_announced_night(self):
+        config = load_sources()['hoguomopera']
+        adapter = HoGuomOpera('hoguomopera', config)
+        programme = 'ballet-cuba-a-gala-of-ballet-masterpiecies-2098'
+        title = 'BALLET CUBA: A GALA OF BALLET MASTERPIECES'
+        path = f'/chuong-trinh-bieu-dien/{programme}'
+        original = f'https://hoguomopera.vn{path}'
+        now = NOW + timedelta(days=17)
+
+        def page(data, body):
+            node = {'props': {'pageProps': {'data': data}}}
+            return BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(node)}</script>{body}', 'html.parser')
+
+        for days, expected_hold in (((8,), True), ((8, 9), False)):
+            with self.subTest(days=days):
+                slots = [{'showId': 120 + day, 'articleId': 2098, 'isAvailFS': True,
+                           'startTime': f'2026-12-{day:02d}T20:00:00Z', 'endTime': f'2026-12-{day:02d}T23:00:00Z'}
+                         for day in days]
+                visible = ''.join(f'<p>20:00 - 23:00, {day:02d}/12/2026</p>' for day in days)
+                catalogue = page({'items': [
+                    {'slug': programme, 'articleId': 2098, 'isShow': True, 'name': title, 'showSches': slots,
+                     'shortDescription': 'Chương trình diễn ra trong hai đêm 08 và 09/12/2026.'},
+                ]}, f'<section><a href="{path}">{title}</a><img alt="calendar">{visible}</section>')
+                bookings = [page({**slot, 'id': slot['showId'], 'article': {'id': 2098}, 'articleName': title},
+                                 '<p>Địa chỉ: 40 Hàng Bài, Phường Cửa Nam, TP. Hà Nội</p>') for slot in slots]
+                client = Mock()
+                client.get.side_effect = [FetchError('http_404'), catalogue, *bookings]
+                rows, failures = collect_source('hoguomopera', config, client, now,
+                                                extra_urls=[original], existing_only=True)
+                self.assertEqual(failures, [])
+                event, = rows
+                self.assertEqual(event.replaces_source_url, original)
+                self.assertEqual(event.status, 'active')
+                if expected_hold:
+                    self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, event.validate(now))
+                    self.assertEqual(event.occurrences, [])
+                else:
+                    self.assertEqual(event.validate(now), [])
+                    self.assertEqual(len(event.occurrences), 2)
+
     def test_varan_daily_exhibition_uses_admission_hours_instead_of_opening_ceremony(self):
         config = load_sources()['varanvietnam']
         adapter = VaranVietnam('varanvietnam', config)

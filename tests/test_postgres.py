@@ -276,6 +276,35 @@ class Persistence(unittest.TestCase):
         self.assertFalse(self.store.hold_schedule(rejected, held_at))
         self.assertEqual(self.feed(held_at + timedelta(minutes=1))[0]['id'], item_id)
 
+    def test_catalogue_hold_requires_the_legacy_event_identity_and_preserves_it(self):
+        original = candidate()
+        item_id = self.store.upsert(original, NOW)
+        old = self.store.db.execute('SELECT id FROM discovery_observations').fetchone()['id']
+        alternative = copy.deepcopy(original)
+        alternative.source_url = 'https://ticketbox.vn/catalogue'
+        alternative.entry_key = 'reviewed-event'
+        alternative.replaces_source_url = original.source_url
+        alternative.reasons = [CONFIRMED_SCHEDULE_CONFLICT]
+        checked = NOW + timedelta(minutes=1)
+        wrong_title = copy.deepcopy(alternative)
+        wrong_title.title = 'Sự kiện khác'
+        self.assertFalse(self.store.hold_schedule(wrong_title, checked))
+        self.assertEqual(self.feed(checked)[0]['id'], item_id)
+        self.assertTrue(self.store.hold_schedule(alternative, checked))
+        self.assertEqual(self.feed(checked), [])
+        observation = self.store.db.execute("""SELECT id,verified_at,status,schedule_held_at
+            FROM discovery_observations""").fetchone()
+        self.assertEqual(observation, {'id': old, 'verified_at': NOW, 'status': 'active',
+                                       'schedule_held_at': checked})
+        recovered = checked + timedelta(minutes=1)
+        alternative.verified_at = recovered.isoformat()
+        alternative.reasons = []
+        self.assertEqual(self.store.upsert(alternative, recovered), item_id)
+        self.assertEqual(self.feed(recovered)[0]['sources'][0]['url'], alternative.source_url)
+        self.assertEqual(self.store.db.execute(
+            'SELECT id,schedule_held_at FROM discovery_observations').fetchone(),
+            {'id': old, 'schedule_held_at': None})
+
     def test_reservations_persist_no_refund_and_monthly_cap(self):
         first=self.store.reserve('serpapi','search-a',1,2,10,{},NOW)
         self.assertTrue(first['created_now'])

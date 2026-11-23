@@ -856,7 +856,10 @@ class HoGuomOpera(Adapter):
         slots = row.get('showSches')
         visible = self._visible_slots(soup, urlsplit(candidate.replaces_source_url).path, candidate.title)
         count = review['sessions']
-        if (not isinstance(slots, list) or len(slots) != count or len(visible) != count
+        reconcile = review.get('reconcile_announcement', False)
+        announced_days = self._announced_days(candidate.original_text) if reconcile else set()
+        if (not isinstance(slots, list) or not slots or len(slots) != len(visible)
+                or (len(announced_days) != count if reconcile else len(slots) != count)
                 or re.search(r'\b(?:da huy|hoan lich|hoan chuong trinh|cancelled|postponed)\b',
                              folded(candidate.original_text))):
             candidate.reasons.append('unresolved_individual_sessions')
@@ -885,12 +888,28 @@ class HoGuomOpera(Adapter):
                     r'dia chi 40 hang bai phuong cua nam tp ha noi', folded(text))):
                 break
             confirmed[clock] = booking_url
-        if len(confirmed) != count:
+        if len(confirmed) != len(slots):
             candidate.reasons.append('unresolved_individual_sessions')
             return candidate
-        candidate.occurrences = sorted(visible.values(), key=lambda session: session.starts_at)
         candidate.location_evidence = next(iter(confirmed.values()))
+        if reconcile and (len(confirmed) != count or announced_days != {
+                parse_time(session.starts_at).date() for session in visible.values()}):
+            candidate.reasons.extend(['unresolved_individual_sessions', CONFIRMED_SCHEDULE_CONFLICT])
+            return candidate
+        candidate.occurrences = sorted(visible.values(), key=lambda session: session.starts_at)
         return candidate
+
+    @staticmethod
+    def _announced_days(text):
+        matches = re.findall(r'\bdiễn ra trong hai đêm\s+(\d{1,2})\s+và\s+(\d{1,2})/(\d{1,2})/(20\d{2})\b',
+                             text, re.IGNORECASE)
+        if len(matches) != 1:
+            return set()
+        first, second, month, year = map(int, matches[0])
+        try:
+            return {date(year, month, first), date(year, month, second)}
+        except ValueError:
+            return set()
 
     @staticmethod
     def _visible_slots(soup, path, title):
