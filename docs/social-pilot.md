@@ -332,6 +332,20 @@ free-only transport check. If the local network cannot reach TikTok, dispatch
 set to a public page. The job reads link metadata, omits post text from the log,
 and keeps metered collection and publication disabled.
 
+### Social links in streamed page data
+
+The public-page extractor reads complete JSON records in inline React Flight
+chunks without running scripts. It keeps the same original-permalink checks,
+freshness filter, deduplication, and per-page result bound. A link found in
+page data still needs a publication date from the platform and verified venue
+evidence before promotion.
+
+On 23 November, the public ANs Vegetarian Cuisine page yielded seven original
+TikTok permalinks from its inline data. The same page and clock yielded zero
+links with the previous parser. The page supplied no publication dates, so
+all seven links stayed in review. The check started no provider jobs and
+wrote no feed records. [Public venue page used for link discovery](https://airial.travel/restaurants/vietnam/da-nang/ans-vegetarian-cuisine-S9TuRweh)
+
 ### Check an original TikTok video
 
 ```sh

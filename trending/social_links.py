@@ -108,6 +108,34 @@ def remember_lead(leads, row):
     leads[identity] = chosen
 
 
+def inline_records(soup):
+    flight_prefix = 'self.__next_f.push('
+    chunks = []
+    for script in soup.find_all('script'):
+        content = (script.string or '').strip().removesuffix(';')
+        streamed = content.startswith(flight_prefix) and content.endswith(')')
+        try:
+            record = json.loads(content[len(flight_prefix):-1] if streamed else content)
+        except (ValueError, RecursionError):
+            continue
+        if not streamed:
+            yield record
+        elif (isinstance(record, list) and len(record) == 2
+              and record[0] == 1 and isinstance(record[1], str)):
+            chunks.append(record[1])
+
+    # A JSON record may span several inline React Flight chunks. Decode only
+    # literal frames and complete JSON rows, without executing page scripts.
+    for line in ''.join(chunks).split('\n'):
+        row_id, separator, payload = line.partition(':')
+        if not separator or not re.fullmatch(r'[0-9a-f]+', row_id) or not payload.startswith(('{', '[')):
+            continue
+        try:
+            yield json.loads(payload)
+        except (ValueError, RecursionError):
+            continue
+
+
 def extract_posts(html, source_url, now, limit=30, resolve_share=None):
     source_url = canonical(source_url)
     found = {}
@@ -144,11 +172,8 @@ def extract_posts(html, source_url, now, limit=30, resolve_share=None):
                 walk(value, depth+1)
 
     soup = BeautifulSoup(html, 'html.parser')
-    for script in soup.find_all('script'):
-        try:
-            walk(json.loads(script.string or ''))
-        except (ValueError, RecursionError):
-            continue
+    for record in inline_records(soup):
+        walk(record)
     for anchor in soup.select('a[href]'):
         add(anchor['href'], anchor.get_text(' ', strip=True))
     for block in soup.select('blockquote.instagram-media[data-instgrm-permalink]'):

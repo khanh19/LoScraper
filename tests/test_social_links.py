@@ -82,6 +82,31 @@ class SocialDiscoveryTests(unittest.TestCase):
         markup += '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/venue/reel/example/"></blockquote>'
         self.assertEqual(extract_posts(markup, 'https://example.com/event', NOW), [])
 
+    def test_public_streamed_page_data_keeps_original_links_as_leads(self):
+        fresh_url = 'https://www.tiktok.com/@venue/video/123'
+        old_url = 'https://www.tiktok.com/@venue/video/234'
+        undated_url = 'https://www.instagram.com/reel/review'
+        records = [
+            {'url': fresh_url, 'timestamp': '2026-11-07T01:00:00Z', 'caption': 'Xưởng gốm'},
+            {'url': old_url, 'timestamp': '2025-11-07T01:00:00Z'},
+            {'url': undated_url},
+            {'url': 'https://www.tiktok.com.example/@venue/video/567'},
+        ]
+        wire = '4:I["Component"]\nc:' + json.dumps(['$', '$L14', None, {'data': records}]) + '\n'
+        boundary = wire.index(fresh_url) + 14
+        markup = ''.join(
+            '<script>self.__next_f.push(' + json.dumps([1, part]) + ')</script>'
+            for part in (wire[:boundary], wire[boundary:])
+        )
+        markup += f'<a href="{fresh_url}?ref=dupe">Duplicate</a><a href="{old_url}">Stale link</a>'
+        markup += '<script>self.__next_f.push([1,"c:{\\"url\\":\\"https://www.tiktok.com/@venue/video/555\\"}"]); other()</script>'
+        rows = extract_posts(markup, 'https://example.com/event', NOW)
+        self.assertEqual([row['url'] for row in rows], [fresh_url, undated_url])
+        self.assertEqual(rows[0]['published_at'], '2026-11-07T01:00:00+00:00')
+        self.assertEqual(rows[0]['text'], 'Xưởng gốm')
+        self.assertIsNone(rows[1]['published_at'])
+        self.assertTrue(all(row['requires_provider_validation'] for row in rows))
+
     def test_repeated_post_prefers_dated_page_and_reel_link(self):
         links = {}
         embed, = extract_posts('<a href="https://www.instagram.com/venue/reel/valid/">Reel</a>',
