@@ -303,6 +303,14 @@ tourism profile returned HTTP 400 at oEmbed. The expanded check also tries the
 profiles linked by 1900 Le Théâtre, Visit HCMC, and DANAGO. [Direct HTTP check](https://github.com/khanh19/LoScraper/actions/runs/45112850240) ·
 [First browser check](https://github.com/khanh19/LoScraper/actions/runs/45113197703)
 
+On 23 November, the local HTTPS diagnostic identified the certificate
+presented for TikTok as Virginia Tech's DNS-block certificate. The curl and
+browser checks both correctly rejected the hostname mismatch. This diagnosis
+applies to the local network. The hosted audit reached creator oEmbed for
+several reviewed profiles and still found no original videos. Treat these as
+separate results. Keep hostname verification enabled and use a permitted
+environment for subsequent TikTok checks. [Virginia Tech application restrictions](https://it.vt.edu/projects/app-restrictions.html) · [Hosted audit](https://github.com/khanh19/LoScraper/actions/runs/45124845084)
+
 The report requires a timestamp with a timezone from structured video metadata
 bound to the exact original post. City hints from the organizer still need
 venue corroboration. A fresh date produces a lead for review. The command keeps
@@ -459,3 +467,11 @@ announcement was corroborated by the organizer's public November 26
 11:00–13:00 ICT listing. The Bếp Hên caption's address agrees with Michelin's
 listing. Both are review candidates. This run published zero cards and used
 zero metered requests. [Instagram Buildathon](https://www.instagram.com/p/DgEl9LqI6AH/) · [Organizer listing](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) · [Bếp Hên post](https://www.instagram.com/p/Df6vOXfmjhg/) · [Michelin listing](https://guide.michelin.com/vn/en/da-nang-region/da-nang_2984390/restaurant/bep-hen)
+
+The same path now covers COMPLEX 01 in Hanoi and Discover:Saigon in HCMC.
+Their publisher sites link to the exact Instagram profiles and the pilot
+returned six and three recent posts respectively. The COMPLEX 01 post about
+Nghề Nghệ corresponds to an ongoing exhibition through November 28. In the
+Discover:Saigon market roundup, Dấu Sắc Việt has a separately corroborated
+venue and window through November 24. Its other entries require individual
+review. These are discovery leads awaiting publication review. [COMPLEX 01](https://complex01.vn/) · [Nghề Nghệ Instagram](https://www.instagram.com/p/DgDCfuTnxt8/) · [Exhibition listing](https://hanoigrapevine.com/vi/2026/11/nghe-nghe-art-salon-mau-xua-sac-nay/) · [Discover:Saigon](https://www.discoversaigon.vn/) · [Market roundup](https://www.instagram.com/p/Df9uPUGoL37/) · [Dấu Sắc Việt venue evidence](https://codongson.vn/co-dong-son-le-hoi-van-hoa-dau-sac-viet-2026/)
