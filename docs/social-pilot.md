@@ -350,6 +350,14 @@ tourism profile returned HTTP 400 at oEmbed. The expanded check also tries the
 profiles linked by 1900 Le Théâtre, Visit HCMC, and DANAGO. [Direct HTTP check](https://github.com/khanh19/LoScraper/actions/runs/45112850240) ·
 [First browser check](https://github.com/khanh19/LoScraper/actions/runs/45113197703)
 
+If the creator page opens with no original links, the browser audit can also
+render TikTok's public creator widget. The oEmbed author, cited profile, and
+creator handle must match. The widget runs in a fresh page that allows only
+its HTTPS frame and scripts. It blocks media requests and extracts only
+same-account video permalinks. Each permalink still needs its own publication
+timestamp. The report records the widget result as `creator_embed`.
+[TikTok creator widget](https://developers.tiktok.com/docs/en/embed-creator-profiles/)
+
 On 23 November, the local HTTPS diagnostic identified the certificate
 presented for TikTok as Virginia Tech's DNS-block certificate. The curl and
 browser checks both correctly rejected the hostname mismatch. This diagnosis

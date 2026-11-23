@@ -126,3 +126,36 @@ class TikTokPublicAuditTests(unittest.TestCase):
         self.assertEqual(result['posts'][0]['status'], 'fresh_needs_venue_review')
         self.assertEqual(client.get.call_args_list[2].kwargs, {'render': True})
         self.assertEqual(client.get.call_count, 4)
+        client.render_tiktok_creator.assert_not_called()
+
+    def test_official_creator_widget_can_discover_an_original_post(self):
+        client = Mock()
+        html = f'<blockquote data-embed-type="creator" data-unique-id="organizer" cite="{PROFILE}"></blockquote>'
+        client.get.side_effect = [
+            {'author_url': PROFILE, 'html': html},
+            BeautifulSoup('<main></main>', 'html.parser'),
+            BeautifulSoup('<main></main>', 'html.parser'),
+            post_page(POST, {'@type': 'VideoObject', 'url': POST, 'uploadDate': '2026-11-22T08:00:00Z'}),
+        ]
+        client.render_tiktok_creator.return_value = BeautifulSoup(
+            f'<a href="{POST}">Video</a><a href="{PROFILE}/video/not-a-video">Invalid</a>'
+            '<a href="https://www.tiktok.com/@another/video/999">Other artist</a>', 'html.parser',
+        )
+        result = review_profile({'url': PROFILE}, client, NOW, browser=True)
+        client.render_tiktok_creator.assert_called_once_with(PROFILE)
+        self.assertEqual(result['creator_embed'], 'original_links_found')
+        self.assertEqual([post['url'] for post in result['posts']], [POST])
+        self.assertEqual(result['posts'][0]['status'], 'fresh_needs_venue_review')
+
+    def test_mismatched_creator_widget_is_not_rendered(self):
+        client = Mock()
+        client.get.side_effect = [
+            {'author_url': PROFILE, 'html': f'<blockquote data-embed-type="creator" '
+             f'data-unique-id="unrelated" cite="{PROFILE}"></blockquote>'},
+            BeautifulSoup('<main></main>', 'html.parser'),
+            BeautifulSoup('<main></main>', 'html.parser'),
+        ]
+        result = review_profile({'url': PROFILE}, client, NOW, browser=True)
+        self.assertEqual(result['creator_embed'], 'identity_unverified')
+        self.assertEqual(result['posts'], [])
+        client.render_tiktok_creator.assert_not_called()

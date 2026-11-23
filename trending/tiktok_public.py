@@ -115,7 +115,8 @@ def owned_video_urls(pages, profile_url, now):
         candidates = [post['url'] for post in extract_posts(str(page), profile_url, now)]
         candidates.extend(original_post_url(urljoin(profile_url, link['href']))
                           for link in page.select('a[href^="/@"]'))
-        for url in candidates:
+        for candidate in candidates:
+            url = video_permalink(candidate)
             if url and urlsplit(url).hostname == HOST and urlsplit(url).path.startswith(prefix):
                 urls[url] = None
     return urls
@@ -141,7 +142,8 @@ def review_profile(profile, client, now, browser=False):
         return {**report, 'status': 'public_profile_unavailable', 'stage': stage,
                 'reason': fetch_failure_reason(error)}
 
-    post_urls = owned_video_urls([BeautifulSoup(html, 'html.parser'), profile_page], url, now)
+    markup = BeautifulSoup(html, 'html.parser')
+    post_urls = owned_video_urls([markup, profile_page], url, now)
     if not post_urls and browser:
         try:
             rendered = client.get(url, {HOST}, render=True)
@@ -149,6 +151,18 @@ def review_profile(profile, client, now, browser=False):
         except (FetchError, ValueError) as error:
             return {**report, 'status': 'public_profile_unavailable', 'stage': 'profile_browser',
                     'reason': fetch_failure_reason(error)}
+    if not post_urls and browser and markup.select_one('blockquote[data-embed-type="creator"]'):
+        creator = markup.select_one('blockquote[data-embed-type="creator"][cite][data-unique-id]')
+        if (creator is not None and canonical_tiktok_profile(creator['cite']) == url
+                and creator['data-unique-id'] == urlsplit(url).path[2:]):
+            try:
+                widget = client.render_tiktok_creator(url)
+                post_urls = owned_video_urls([widget], url, now)
+                report['creator_embed'] = 'original_links_found' if post_urls else 'no_owned_links'
+            except (FetchError, ValueError) as error:
+                report['creator_embed'] = fetch_failure_reason(error)
+        else:
+            report['creator_embed'] = 'identity_unverified'
     report['posts'] = [review_video(post_url, client, now) for post_url in islice(post_urls, MAX_POSTS_PER_PROFILE)]
     return {**report, 'status': 'reviewed' if report['posts'] else 'no_original_video_links'}
 

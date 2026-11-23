@@ -1,6 +1,7 @@
 """Bounded public-page fetching. No proxy or paid browser fallback."""
 from __future__ import annotations
 
+from html import escape
 import json
 import ipaddress
 import os
@@ -118,7 +119,7 @@ class PublicClient:
         self.cache[key] = soup
         return soup
 
-    def _render(self, url, allowed_hosts):
+    def _new_browser_page(self):
         if self._browser is None:
             from playwright.sync_api import sync_playwright
             self._playwright = sync_playwright().start()
@@ -126,7 +127,71 @@ class PublicClient:
             if os.environ.get("LO_BROWSER_CHANNEL"):
                 options["channel"] = os.environ["LO_BROWSER_CHANNEL"]
             self._browser = self._playwright.chromium.launch(**options)
-        page = self._browser.new_page(locale="vi-VN", timezone_id=ICT.key, service_workers="block")
+        return self._browser.new_page(locale="vi-VN", timezone_id=ICT.key, service_workers="block")
+
+    def render_tiktok_creator(self, profile_url):
+        """Render TikTok's public creator widget in a fresh, metadata-only page."""
+        from playwright.sync_api import Error as BrowserError
+
+        if not self.browser_enabled:
+            raise FetchError('browser_disabled')
+        host = 'www.tiktok.com'
+        parts = urlsplit(public_url(profile_url))
+        if parts.hostname != host or not re.fullmatch(r'/@[A-Za-z0-9_.]+', parts.path):
+            raise FetchError('invalid_creator_profile')
+
+        bootstrap = 'https://lo-discovery.invalid/'
+        profile = escape(profile_url, quote=True)
+        handle = escape(parts.path[2:], quote=True)
+        widget = (
+            '<!doctype html><meta charset="utf-8">'
+            f'<blockquote class="tiktok-embed" cite="{profile}" data-unique-id="{handle}" '
+            'data-embed-type="creator" data-embed-from="oembed">'
+            f'<section><a href="{profile}">@{handle}</a></section></blockquote>'
+            f'<script async src="https://{host}/embed.js"></script>'
+        )
+        page = self._new_browser_page()
+
+        def route(request_route):
+            request = request_route.request
+            if request.url == bootstrap and request.is_navigation_request():
+                return request_route.fulfill(status=200, content_type='text/html', body=widget)
+            target = urlsplit(request.url)
+            # Permit only TikTok's embed frame and executable assets. In
+            # particular the widget may not make media, tracking or API requests.
+            embed_frame = (request.resource_type == 'document' and target.hostname == host
+                           and target.path.startswith('/embed/'))
+            script = (request.resource_type == 'script' and target.path.endswith('.js')
+                      and (target.hostname == host or (target.hostname or '').endswith('.tiktokcdn.com')))
+            if request.method == 'GET' and target.scheme == 'https' and (embed_frame or script):
+                try:
+                    public_url(request.url)
+                except (ValueError, FetchError):
+                    return request_route.abort()
+                return request_route.continue_()
+            return request_route.abort()
+
+        page.route('**/*', route)
+        try:
+            page.goto(bootstrap, wait_until='domcontentloaded', timeout=10000)
+            deadline = time.monotonic() + 12
+            selector = f'a[href*="/@{handle}/video/"]'
+            while time.monotonic() < deadline:
+                for frame in page.frames:
+                    if urlsplit(frame.url).hostname == host and frame.locator(selector).count():
+                        content = frame.content()
+                        if len(content) > 4_000_000:
+                            raise FetchError('page_too_large')
+                        return BeautifulSoup(content, 'html.parser')
+                page.wait_for_timeout(250)
+            raise FetchError('creator_embed_no_original_links')
+        except BrowserError as error:
+            raise FetchError(type(error).__name__) from None
+        finally:
+            page.close()
+
+    def _render(self, url, allowed_hosts):
+        page = self._new_browser_page()
 
         def route(request_route):
             request = request_route.request

@@ -62,3 +62,34 @@ class WebsiteFetching(unittest.TestCase):
         page.goto.return_value.status=503
         with self.assertRaisesRegex(FetchError,'http_503'):client._render('https://vnexpress.net/',{'vnexpress.net'})
         self.assertEqual(page.close.call_count,2)
+
+    def test_creator_widget_loads_metadata_only(self):
+        client = PublicClient(browser=True)
+        client._browser = Mock()
+        page = client._browser.new_page.return_value
+        host = 'https://www.tiktok.com'
+        frame = Mock(url=host + '/embed/@venue')
+        frame.locator.return_value.count.return_value = 1
+        frame.content.return_value = f'<a href="{host}/@venue/video/123">Video</a>'
+        page.frames = [frame]
+        with patch('trending.http.public_url', side_effect=lambda url: url):
+            result = client.render_tiktok_creator(host + '/@venue')
+            route = page.route.call_args.args[1]
+            for path, kind, method, allowed in (
+                (host + '/embed.js', 'script', 'GET', True),
+                (frame.url, 'document', 'GET', True),
+                (host + '/@venue/video/123', 'document', 'GET', False),
+                (host + '/embed/video.mp4', 'media', 'GET', False),
+                (host + '/embed/photo.jpg', 'image', 'GET', False),
+                (host + '/embed/metrics.js', 'script', 'POST', False),
+                (host + '/embed/api', 'fetch', 'GET', False),
+                ('https://example.org/embed.js', 'script', 'GET', False),
+            ):
+                with self.subTest(path=path, kind=kind, method=method):
+                    request = Mock(url=path, resource_type=kind, method=method)
+                    routing = Mock(request=request)
+                    route(routing)
+                    self.assertEqual(routing.continue_.called, allowed)
+                    self.assertEqual(routing.abort.called, not allowed)
+        self.assertEqual(result.a['href'], host + '/@venue/video/123')
+        page.close.assert_called_once()
