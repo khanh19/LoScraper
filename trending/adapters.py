@@ -272,13 +272,36 @@ class Ticketbox(Adapter):
         if not sessions:
             c.reasons.append("unresolved_individual_sessions")
             return c
-        c.occurrences = sessions
+        c.occurrences = self._exclude_multi_show_windows(sessions)
         categories = {"music": "music", "sport": "sports", "theatersandart": "culture",
                       "attractionsexperiences": "experience", "seminarsworkshops": "workshop"}
         if not c.category:
             c.category = next((categories[value] for value in (data.get("categoriesV2") or [])
                                if value in categories), "")
         return c
+
+    @staticmethod
+    def _exclude_multi_show_windows(sessions):
+        # An outer booking window can appear in the same list as real shows.
+        # Require shorter shows to match both endpoints and leave a gap.
+        day = timedelta(days=1)
+        periods = [(parse_time(slot.starts_at), parse_time(slot.ends_at), slot) for slot in sessions]
+        short = sorted({(start, end) for start, end, slot in periods
+                        if slot.precision == 'time' and end - start <= day})
+        verified = []
+        for start, end, slot in periods:
+            if slot.precision == 'time' and end - start > day:
+                inner = [(a, b) for a, b in short if start <= a < b <= end]
+                if inner and inner[0][0] == start and max(b for _, b in inner) == end:
+                    covered_through = start
+                    for a, b in inner:
+                        if a > covered_through:
+                            break
+                        covered_through = max(covered_through, b)
+                    if covered_through < end:
+                        continue
+            verified.append(slot)
+        return verified
 
     def parse(self, soup, url, now):
         c = super().parse(soup, url, now)

@@ -26,6 +26,28 @@ class TicketboxPublicSchedule(unittest.TestCase):
         self.assertEqual(candidate.occurrences[0].ends_at, "2026-11-22T04:30:00+00:00")
         self.assertEqual(candidate.category, "workshop")
 
+    def test_multi_day_booking_window_is_not_a_fifth_fashion_show(self):
+        def row(start, end):
+            return {"startTime": start, "endTime": end}
+
+        opening = row("2026-11-26T11:00:00Z", "2026-11-26T16:00:00Z")
+        closing = row("2026-11-28T18:00:00+07:00", "2026-11-28T23:00:00+07:00")
+        span = row(opening["startTime"], "2026-11-28T16:00:00Z")
+        shows = [opening, span, row("2026-11-27T12:00:00Z", "2026-11-27T13:30:00Z"),
+                 row("2026-11-27T14:00:00Z", "2026-11-27T15:00:00Z"), closing]
+        candidate = self.enrich(shows)
+        self.assertEqual(len(candidate.occurrences), 4)
+        self.assertNotIn(("2026-11-26T11:00:00+00:00", "2026-11-28T16:00:00+00:00"),
+                         [(slot.starts_at, slot.ends_at) for slot in candidate.occurrences])
+
+    def test_overnight_and_unbracketed_showtimes_stay_available(self):
+        rows = [
+            {"startTime": "2026-11-26T15:30:00Z", "endTime": "2026-11-26T18:00:00Z"},
+            {"startTime": "2026-11-26T15:30:00Z", "endTime": "2026-11-28T22:00:00Z"},
+            {"startTime": "2026-11-28T16:00:00Z", "endTime": "2026-11-28T21:00:00Z"},
+        ]
+        self.assertEqual(len(self.enrich(rows).occurrences), 3)
+
     def test_unresolved_sessions_and_wrong_identity_are_held(self):
         for rows in ([], [{"startTime": "2026-11-22T02:30:00Z"}]):
             with self.subTest(rows=rows):

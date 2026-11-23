@@ -341,6 +341,13 @@ The live on-sale check fetched six detail pages, accepted five and rejected one
 with no fetch failures. The pre-sale section returned three event links that
 were still HTTP 404. The daily recheck continues to use stored event URLs.
 
+Ticketbox's November 26–28 Fashion Week listing contained a booking window
+covering all three days as well as four shorter shows. The collector drops the
+outer window when the individual timed shows match both endpoints and leave a
+gap. The live listing then yielded four timed shows eligible for reminders. The
+rule preserves overnight shows and longer windows when the shorter dates do
+not establish this pattern. [Ticketbox event](https://ticketbox.vn/aquafina-fashionweek-thudong2026-26826)
+
 The manual Furama run imported one eligible event without a failed fetch or
 provider usage. Controlled tests cover matching dates and times, competing
 sessions, missing address evidence, and venue ambiguity. Scheduling remains disabled.
