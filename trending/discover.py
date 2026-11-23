@@ -153,6 +153,8 @@ def main():
                 remember_lead(leads, lead)
             for profile in report['public_instagram_profile_reviews']:
                 for post in profile['posts']:
+                    if post['status'] != 'fresh_needs_venue_review':
+                        continue
                     remember_lead(leads, {
                         'url': post['url'], 'platform': 'instagram', 'city_hint': args.city,
                         'published_at': post['published_at'], 'text': post['caption'],

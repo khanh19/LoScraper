@@ -42,7 +42,7 @@ def media(code='Abc123', hour=2):
                                    'is_private': False, 'is_unpublished': False},
         'edge_media_to_caption': {'edges': [{'node': {'text': 'Sự kiện tại Hà Nội ngày 28/11'}}]},
         'edge_liked_by': {'count': 48}, 'edge_media_to_comment': {'count': 0},
-        'like_and_view_counts_disabled': False,
+        'like_and_view_counts_disabled': False, 'coauthor_producers': [],
     }
 
 
@@ -73,6 +73,19 @@ class InstagramPublicTests(unittest.TestCase):
         self.assertEqual(len(result['posts']), 1)
         self.assertEqual(result['posts'][0]['url'], 'https://www.instagram.com/p/Photo')
         self.assertNotIn('likes', result['posts'][0])
+
+    def test_profile_embed_does_not_attribute_collaboration_to_profile_owner(self):
+        client = Mock()
+        collaborative = {**media(), 'coauthor_producers': [{'username': 'sample.account'}]}
+        missing_attribution = media('Unknown')
+        missing_attribution.pop('coauthor_producers')
+        client.get.return_value = profile_page(collaborative, missing_attribution)
+        result = review_profile({'url': PROFILE}, client, NOW)
+        self.assertEqual(len(result['posts']), 2)
+        for row in result['posts']:
+            self.assertEqual(row['status'], 'coauthored_or_unknown_attribution')
+            self.assertEqual(row['profile_account'], 'sample.account')
+            self.assertNotIn('account', row)
 
     def test_profile_embed_requires_expected_module_and_profile_identity(self):
         client = Mock()

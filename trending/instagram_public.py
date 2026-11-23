@@ -99,8 +99,16 @@ def profile_post(media, handle, owner_id, now):
         if isinstance(node, dict) and isinstance(node.get('text'), str):
             caption = node['text'][:2000]
     kind = 'reel' if media.get('is_video') is True else 'p'
+    coauthors = media.get('coauthor_producers')
+    # A collaborator's public profile can list itself as the owner of a shared
+    # post. Keep the source link and time, but require original-post attribution.
+    attribution_pending = not isinstance(coauthors, list) or bool(coauthors)
     post = {'url': f'https://www.instagram.com/{kind}/{shortcode}', 'published_at': published.isoformat(),
-            'status': 'fresh_needs_venue_review', 'account': handle, 'caption': caption}
+            'caption': caption}
+    if attribution_pending:
+        post.update(status='coauthored_or_unknown_attribution', profile_account=handle)
+    else:
+        post.update(status='fresh_needs_venue_review', account=handle)
     for field, key in (('likes', 'edge_liked_by'), ('comments', 'edge_media_to_comment')):
         metric = media.get(key)
         count = metric.get('count') if isinstance(metric, dict) else None

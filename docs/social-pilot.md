@@ -458,6 +458,13 @@ while the exact embed timestamps were on November 23 in Vietnam. Neither
 publication timestamp is a session date. City hints route review and do not
 verify a place. No contact with a metered provider is needed.
 
+Coauthored posts and posts with missing attribution metadata stay in the
+profile review output. The embed can report the profile account as the owner
+of a shared post. In the Nghề Nghệ sample, the COMPLEX 01 embed named itself
+while the original Instagram page credited `nghenghe.vn`. Shared posts are
+withheld from automatic profile lead import until original attribution is
+established. [Original Instagram post](https://www.instagram.com/p/DgDCfuTnxt8/)
+
 The November 23 live run found **29** recent records from six publisher-linked
 profiles. Hanoi returned six posts from 1900, HCMC eight from Saigon Outcast
 and Saigoneer, and Da Nang 15 from three profiles. One Hanoi listing page failed
