@@ -287,3 +287,18 @@ The 30 cached TikTok results have no publication later than November 15, and
 the November 22 reservation contains no records. Apify has 132 of 132 reserved
 units, including two unresolved requests. The old Bright Data/SerpAPI ledger
 was absent from this cluster. No new provider request or feed import was made.
+
+## Public TikTok metadata check
+
+Run `python -m trending.tiktok_public` locally or manually dispatch **Scraper CI**
+with `public_tiktok_audit=true`. It verifies each creator link on a reviewed
+organizer site, calls the official profile oEmbed endpoint once per distinct
+profile, and examines at most two original video pages from that creator. The
+job uses public HTTPS metadata and does not receive credentials.
+
+The report requires a timestamp with a timezone from structured video metadata
+bound to the exact original post. City hints from the organizer still need
+venue corroboration. A fresh date produces a lead for review. The command keeps
+publication and scheduled collection separate. The GitHub job runs only on
+explicit manual dispatch. [TikTok creator embeds](https://developers.tiktok.com/docs/en/embed-creator-profiles/) ·
+[TikTok player URLs](https://developers.tiktok.com/docs/en/embed-player/)
