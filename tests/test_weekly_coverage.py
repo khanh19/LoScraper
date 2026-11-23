@@ -150,9 +150,13 @@ class WeeklyCoverage(unittest.TestCase):
             cards.append(f'<section><a href="{path}">{title}</a><img alt="calendar">{visible}</section>')
             detail_urls.append(origin + path)
         rows.append({**rows[-1], 'showSches': []})
-        data = {'props': {'pageProps': {'data': {'items': rows}}}}
-        listing = BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(data)}</script>'
-                                + ''.join(cards), 'html.parser')
+
+        def catalogue_page(programmes, html):
+            data = {'props': {'pageProps': {'data': {'items': programmes}}}}
+            return BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(data)}</script>'
+                                 + html, 'html.parser')
+
+        listing = catalogue_page(rows, ''.join(cards))
         adapter = HoGuomOpera(slug, config)
         self.assertEqual(adapter.calendar_links(listing, catalogue, NOW), detail_urls[1:])
         self.assertEqual(adapter.calendar_links(listing, catalogue, NOW - timedelta(minutes=1)), detail_urls)
@@ -166,6 +170,13 @@ class WeeklyCoverage(unittest.TestCase):
         client.reset_mock()
         collect_source(slug, config, client, NOW, extra_urls=detail_urls[:1], existing_only=True)
         self.assertEqual([call.args[0] for call in client.get.call_args_list], detail_urls[:1])
+
+        client.get.side_effect = None
+        client.get.return_value = catalogue_page(rows[:1], cards[0])
+        self.assertEqual(collect_source(slug, config, client, NOW), ([], []))
+        client.get.return_value = catalogue_page([], '<main></main>')
+        self.assertEqual(collect_source(slug, config, client, NOW),
+                         ([], [{'stage': 'listing', 'reason': 'no_detail_links'}]))
 
     def test_opera_rechecks_each_visible_slot_against_its_booking(self):
         adapter = HoGuomOpera('hoguomopera', load_sources()['hoguomopera'])

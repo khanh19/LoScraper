@@ -793,7 +793,10 @@ class HoGuomOpera(Adapter):
             if len(clocks) == len(slots) and clocks == visible.keys() and all(
                     parse_time(session.ends_at) <= now for session in visible.values()):
                 archived.add(path)
-        return [link for link in self.links(soup, url) if urlsplit(link).path not in archived]
+        links = list(self.links(soup, url))
+        if not links:
+            return None
+        return [link for link in links if urlsplit(link).path not in archived]
 
     def fetch(self, client, url):
         try:
@@ -1262,6 +1265,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     if slug == 'lifeofdanang' and not existing_only:
         seeds = [*adapter.calendar_seeds(now), *seeds]
     seed_groups = []
+    archive_only = slug == 'hoguomopera' and bool(seeds)
     for seed in seeds:
         heartbeat()
         try:
@@ -1269,6 +1273,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
             metrics['listing_pages']+=1
             ordered = (adapter.calendar_links(listing, seed, now)
                        if slug in {'lifeofdanang', 'hoguomopera'} else None)
+            archive_only = archive_only and ordered == []
             if ordered is None:
                 ordered = list(adapter.links(listing, seed))
                 if slug != 'danangfantasticity':
@@ -1297,7 +1302,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     if slug == 'danangfantasticity' and not existing_only:
         # Reserve detail capacity for the individual activities linked by campaigns.
         links = links[:max(1,limit-3)]
-    if not links and not existing_only:
+    if not links and not existing_only and not (archive_only and not failures):
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
     consecutive_fetch_failures = 0

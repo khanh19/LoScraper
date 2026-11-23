@@ -107,6 +107,8 @@ to skip archived programmes before spending its detail-page allowance. A row
 qualifies for skipping only when its session set agrees between both views,
 every slot has ended, and ticket sales are unavailable for each slot. Rechecks
 of stored observations and explicitly supplied leads still fetch their URLs.
+If every linked programme is a confirmed archive entry, the source completes
+with zero new candidates. Missing programme links still surface as a failure.
 On November 24, a read-only comparison against the live catalogue kept the
 same three eligible programmes and reduced missing detail pages from seven to
 one. The ballet gala remained the one failure. The catalogue describes two
