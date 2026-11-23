@@ -1,13 +1,30 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from trending.adapters import collect_source
+from trending.adapters import Grapevine, collect_source
 from trending.http import FetchError, fetch_failure_reason
 from trending.progress import Progress
 from test_trending import NOW, candidate
 
 
 class CollectionFailures(unittest.TestCase):
+    def test_grapevine_uses_verified_browser_after_http_client_tls_failure(self):
+        publisher = Grapevine('hanoigrapevine', {'hosts': ['hanoigrapevine.com']})
+        url = 'https://hanoigrapevine.com/vi/2026/11/exhibition/'
+        client = Mock(browser_enabled=True)
+        page = object()
+        client.get.side_effect = [FetchError('tls_handshake_failed'), page]
+        self.assertIs(publisher.fetch(client, url), page)
+        client.get.assert_called_with(url, publisher.hosts, render=True)
+
+        for reason, browser_enabled in [('tls_handshake_failed', False), ('http_403', True)]:
+            with self.subTest(reason=reason, browser_enabled=browser_enabled):
+                client = Mock(browser_enabled=browser_enabled)
+                client.get.side_effect = FetchError(reason)
+                with self.assertRaisesRegex(FetchError, reason):
+                    publisher.fetch(client, url)
+                client.get.assert_called_once()
+
     def test_page_heartbeats_are_debounced_without_delaying_candidate_progress(self):
         store = Mock()
         with patch('trending.progress.monotonic', return_value=0) as clock:

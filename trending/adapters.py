@@ -290,6 +290,14 @@ class Grapevine(Adapter):
     content_selector = ".td-post-text-content"
     link_pattern = r"/(?:vi/)?20\d{2}/\d{2}/[^/]+/?$"
 
+    def fetch(self, client, url):
+        try:
+            return super().fetch(client, url)
+        except FetchError as exc:
+            if str(exc) != 'tls_handshake_failed' or not client.browser_enabled:
+                raise
+            return client.get(url, self.hosts, render=True)
+
     def parse(self, soup, url, now):
         c = super().parse(soup, url, now)
         body = soup.select_one(self.content_selector)
