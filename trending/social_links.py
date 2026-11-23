@@ -100,7 +100,14 @@ def remember_lead(leads, row):
     if not previous:
         leads[identity] = row
         return
-    chosen = row if row['published_at'] and not previous['published_at'] else previous
+    published = parse_time(row['published_at'])
+    previous_published = parse_time(previous['published_at'])
+    corroborated_profile = (row.get('publication_evidence') == 'verified_profile_embed'
+                            and previous.get('publication_evidence') != 'verified_profile_embed'
+                            and published == previous_published)
+    # When the dates agree, retain the source whose post attribution was
+    # checked. The original website link remains in the page discovery report.
+    chosen = row if published and (not previous_published or corroborated_profile) else previous
     if row['platform'] == 'instagram':
         reel = next((r['url'] for r in (previous, row) if '/reel/' in urlsplit(r['url']).path), None)
         if reel:

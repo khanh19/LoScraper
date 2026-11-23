@@ -310,6 +310,12 @@ for individual review. [Original Instagram post](https://www.instagram.com/p/DgE
 [Workshop calendar](https://www.yogalabhanoi.com/events) ·
 [Studio location](https://www.yogalabhanoi.com/locations)
 
+When a website link and its verified public Instagram profile give the same
+publication instant for the same post, the saved lead keeps the checked
+profile as its evidence. The page discovery report retains the website link.
+Conflicting times retain separate review evidence and cannot use that merge
+rule. The saved lead still requires review before publishing.
+
 The Saigon Garden Flea listing announces a November 28–29 event, but its
 linked Instagram announcement reports a November 11 publication day.
 The later event dates do not make it a recent social mention.

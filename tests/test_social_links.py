@@ -121,6 +121,29 @@ class SocialDiscoveryTests(unittest.TestCase):
         self.assertEqual(merged['discovered_on'], dated['discovered_on'])
         self.assertEqual(merged['published_at'], dated['published_at'])
 
+    def test_repeated_instagram_post_retains_verified_profile_provenance(self):
+        website, = extract_posts(
+            '<script type="application/json">{"url":"https://www.instagram.com/reel/verified/",'
+            '"timestamp":"2026-11-07T08:00:00+07:00"}</script>',
+            'https://example.com/roundup', NOW)
+        profile = {
+            **website, 'url': 'https://www.instagram.com/p/verified',
+            'published_at': '2026-11-07T01:00:00+00:00',
+            'publisher_id': 'reviewed-account', 'publication_evidence': 'verified_profile_embed',
+            'discovered_on': 'https://www.instagram.com/reviewed_account/embed/',
+        }
+        for rows in ((website, profile), (profile, website)):
+            leads = {}
+            for row in rows:
+                remember_lead(leads, row)
+            result, = leads.values()
+            self.assertEqual(result, {**profile, 'url': website['url']})
+            self.assertTrue(result['requires_provider_validation'])
+        leads = {}
+        remember_lead(leads, website)
+        remember_lead(leads, {**profile, 'published_at': '2026-11-07T03:00:00+00:00'})
+        self.assertEqual(list(leads.values()), [website])
+
     def test_reels_and_posts_use_distinct_datasets(self):
         for path,dataset in [('p','gd_lk5ns7kz21pck8jpis'),('reel','gd_lyclm20il4r5helnj')]:
             store=Mock();store.pending.return_value=None

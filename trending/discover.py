@@ -159,6 +159,7 @@ def main():
                         'url': post['url'], 'platform': 'instagram', 'city_hint': args.city,
                         'published_at': post['published_at'], 'text': post['caption'],
                         'discovered_on': profile['embed_url'], 'publisher_id': profile['publisher_id'],
+                        'publication_evidence': 'verified_profile_embed',
                         'requires_provider_validation': True,
                     })
             report['posts'] = sorted(
