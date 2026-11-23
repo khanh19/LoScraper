@@ -29,6 +29,16 @@ def video_permalink(url):
     return None
 
 
+def player_matches(url, video_id):
+    if not isinstance(url, str):
+        return False
+    try:
+        player = urlsplit(canonical(url))
+    except ValueError:
+        return False
+    return player.hostname == HOST and player.path == '/player/v1/' + video_id
+
+
 def publication_time(page, url):
     canonical_link = page.select_one('link[rel="canonical"][href]')
     identities = [identity for identity in (
@@ -38,7 +48,7 @@ def publication_time(page, url):
         return None
 
     dates = set()
-    player_path = '/player/v1/' + urlsplit(url).path.rsplit('/', 1)[-1]
+    video_id = urlsplit(url).path.rsplit('/', 1)[-1]
     for entry in structured(page):
         if not is_type(entry, 'VideoObject'):
             continue
@@ -48,16 +58,8 @@ def publication_time(page, url):
         if declared:
             if original_post_url(declared) != url:
                 continue
-        else:
-            embed = entry.get('embedUrl')
-            if not isinstance(embed, str):
-                continue
-            try:
-                player = urlsplit(canonical(embed))
-            except ValueError:
-                continue
-            if player.hostname != HOST or player.path != player_path:
-                continue
+        elif not player_matches(entry.get('embedUrl'), video_id):
+            continue
         for field in ('uploadDate', 'datePublished'):
             date = entry.get(field)
             if not isinstance(date, str):
@@ -94,9 +96,14 @@ def direct_video_review(url, client, now):
         return {**report, 'oembed': fetch_failure_reason(error)}
     profile, _, video_id = url.rpartition('/video/')
     html = embed.get('html') if isinstance(embed, dict) else None
-    if isinstance(html, str) and canonical_tiktok_profile(embed.get('author_url')) == profile:
-        blocks = BeautifulSoup(html, 'html.parser').select('blockquote[cite][data-video-id]')
-        if any(video_permalink(block['cite']) == url and block['data-video-id'] == video_id for block in blocks):
+    if isinstance(html, str):
+        markup = BeautifulSoup(html, 'html.parser')
+        if (embed.get('embed_type') == 'video' and embed.get('embed_product_id') == video_id
+                and any(player_matches(frame['src'], video_id) for frame in markup.select('iframe[src]'))):
+            return {**report, 'oembed': 'video_id_verified'}
+        blocks = markup.select('blockquote[cite][data-video-id]')
+        if (canonical_tiktok_profile(embed.get('author_url')) == profile
+                and any(video_permalink(b['cite']) == url and b['data-video-id'] == video_id for b in blocks)):
             return {**report, 'oembed': 'identity_verified'}
     return {**report, 'oembed': 'identity_unverified'}
 

@@ -343,7 +343,9 @@ the hosted runner, dispatch **Scraper CI** with `public_tiktok_video_url`.
 The audit reads the original video's public HTML. An unambiguous
 `VideoObject` timestamp with a timezone must match the page and video.
 When the date is unavailable, the official oEmbed response can confirm
-the creator, permalink, and video ID. That result leaves the date unresolved.
+the video ID by matching its product ID and player URL. A legacy response
+with a matching creator and permalink also confirms those fields. Both
+response formats leave the publication time unresolved.
 The report includes transport and evidence status and performs no feed writes,
 metered requests, or video downloads. [TikTok embed metadata](https://developers.tiktok.com/docs/en/embed-videos)
 

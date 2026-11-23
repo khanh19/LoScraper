@@ -66,6 +66,24 @@ class TikTokPublicAuditTests(unittest.TestCase):
                 self.assertIsNone(result['published_at'])
                 self.assertEqual(result['oembed'], status)
 
+    def test_current_oembed_player_matches_only_an_exact_official_video_id(self):
+        client = Mock()
+        player = 'https://www.tiktok.com/player/v1/123?embed_from=oembed'
+        for product, src, status in (
+            ('123', player, 'video_id_verified'),
+            ('1234', player, 'identity_unverified'),
+            ('123', player.replace('/123?', '/1234?'), 'identity_unverified'),
+            ('123', player.replace('tiktok.com', 'tiktok.com.example'), 'identity_unverified'),
+        ):
+            with self.subTest(product=product, src=src):
+                client.get.side_effect = [
+                    post_page(POST),
+                    {'embed_product_id': product, 'embed_type': 'video', 'html': f'<iframe src="{src}"></iframe>'},
+                ]
+                result = direct_video_review(POST, client, NOW)
+                self.assertEqual(result['oembed'], status)
+                self.assertIsNone(result['published_at'])
+
     def test_profile_audit_checks_at_most_two_original_posts_from_same_account(self):
         urls = [PROFILE + '/video/' + str(i) for i in range(123, 126)]
         html = ''.join(f'<a href="{url}">Video</a>' for url in urls)
