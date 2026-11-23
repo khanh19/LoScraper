@@ -311,6 +311,13 @@ six staging coverage targets still passed after both holds. [Picklehead](https:/
 [Spin City](https://lifeofdanang.com/vi/danang/spin-city-pickleball-social) ·
 [Theatre listing](https://ticketbox.vn/kich-thieu-nhi-vi-nu-cuoi-tre-tho-26824)
 
+Life of Da Nang's structured data for the Cơ Tu exhibition listed only the
+morning opening hours. Its visible schedule and the city's tourism notice both
+list 07:30–11:00 and 13:30–16:30 Vietnam time. The adapter now keeps both
+windows on each dated, scheduled day supplied by the publisher. It holds the
+event if a structured window contradicts either range. [Publisher schedule](https://lifeofdanang.com/vi/danang/weekly-co-tu-plants-exhibition) ·
+[City tourism notice](https://danangfantasticity.com/en/trien-lam-va-toa-dam-chuyen-de-thuc-vat-trong-doi-song-van-hoa-co-tu)
+
 The next hosted full run accepted 33 candidates, rejected 104 during validation,
 and recorded zero collection or write failures. The public API still withheld
 both held listings and served the children's theatre detail. The same isolated

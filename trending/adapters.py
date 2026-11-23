@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from itertools import zip_longest
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
@@ -14,7 +14,7 @@ from .dates import MONTHS, iso_occurrence, plain, schedule_occurrences, ticketbo
 from .http import FetchError, PublicClient, fetch_failure_reason
 from .model import (
     CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION, ICT,
-    Candidate, canonical, city_from_address, folded, outside_supported_cities, parse_time,
+    Candidate, Occurrence, canonical, city_from_address, folded, outside_supported_cities, parse_time,
 )
 
 
@@ -564,8 +564,13 @@ class LifeOfDaNang(Adapter):
         events=[e for e in structured(soup) if is_type(e,'Event')]
         if events and all(e.get('name')==events[0].get('name') and e.get('location')==events[0].get('location') for e in events):
             c.occurrences=[o for e in events if (o:=iso_occurrence(str(e.get('startDate','')),e.get('endDate')))]
-            if self._visible_starts_conflict(soup, c.occurrences):
+            split_sessions = self._visible_daily_sessions(soup, c.occurrences)
+            if split_sessions == [] or self._visible_starts_conflict(soup, c.occurrences):
                 c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+            elif split_sessions and c.status == 'active' and len(c.occurrences) == len(events) and all(
+                event.get('eventStatus') == 'https://schema.org/EventScheduled' for event in events
+            ):
+                c.occurrences = split_sessions
             # Related-event cards in <main> must not supply the primary category
             # or text evidence. Use only this event's structured description.
             c.original_text = str(events[0].get('description') or '')
@@ -588,6 +593,44 @@ class LifeOfDaNang(Adapter):
                 # distinguish a single destination from a citywide listing.
                 c.reasons.append('unverified_street_address')
         return [c]
+
+    @staticmethod
+    def _visible_daily_sessions(soup, occurrences):
+        # Some recurring listings emit only the first opening window per date in JSON-LD.
+        # Use exact ranges from the dedicated agenda, keeping the publisher's dated coverage.
+        clock = r'((?:[01]?\d|2[0-3])(?:h(?:[0-5]\d)?|:[0-5]\d))'
+        window = rf'{clock}\s*(?:den|toi|to|-)\s*{clock}'
+        for label in soup.select('main dt'):
+            if plain(label.get_text(' ', strip=True)) not in {'thoi gian', 'time'}:
+                continue
+            agenda = label.find_next_sibling('dd')
+            heading = agenda.find('span', recursive=False) if agenda else None
+            if heading is None:
+                continue
+            match = re.fullmatch(rf'(?:hang ngay|daily),\s*{window}\s*(?:va|and)\s*{window}',
+                                 plain(heading.get_text(' ', strip=True)))
+            if match is None:
+                continue
+            slots = []
+            for value in match.groups():
+                hour, minute = value.replace('h', ':').split(':')
+                slots.append(time(int(hour), int(minute or 0)))
+            first_start, first_end, second_start, second_end = slots
+            if not occurrences or not first_start < first_end <= second_start < second_end:
+                return []
+            windows = [(first_start, first_end), (second_start, second_end)]
+            days = set()
+            for occurrence in occurrences:
+                start = parse_time(occurrence.starts_at).astimezone(ICT)
+                end = parse_time(occurrence.ends_at).astimezone(ICT)
+                if (occurrence.precision != 'time' or start.date() != end.date()
+                        or (start.time(), end.time()) not in windows):
+                    return []
+                days.add(start.date())
+            return [Occurrence(datetime.combine(day, start, ICT).isoformat(),
+                               datetime.combine(day, end, ICT).isoformat())
+                    for day in sorted(days) for start, end in windows]
+        return None
 
     @staticmethod
     def _visible_starts_conflict(soup, occurrences):

@@ -450,6 +450,39 @@ class WeeklyCoverage(unittest.TestCase):
         self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse('14h30, 17h30', [event, *next_sessions]).reasons)
         self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, parse('14h30 đến 17h30', [event]).reasons)
 
+    def test_da_nang_daily_opening_windows_keep_both_sessions_only_on_dated_days(self):
+        url = 'https://lifeofdanang.com/vi/danang/weekly-exhibition'
+        adapter = LifeOfDaNang('lifeofdanang', load_sources()['lifeofdanang'])
+        event = {
+            '@type': 'Event', 'name': 'Triển lãm', 'eventStatus': 'https://schema.org/EventScheduled',
+            'location': {'name': 'Bảo tàng', 'address': {
+                'streetAddress': '281 Phan Bội Châu', 'addressLocality': 'Da Nang',
+            }},
+            'startDate': '2026-11-09T07:30:00+07:00', 'endDate': '2026-11-09T11:00:00+07:00',
+        }
+
+        def parse(events, heading='Hằng ngày, 7h30 đến 11h và 13h30 đến 16h30'):
+            soup = BeautifulSoup(f'''<main><dl><dt>Thời gian</dt><dd><span>{heading}</span>
+                <span>Sắp tới</span></dd></dl></main>
+                <script type="application/ld+json">{json.dumps(events)}</script>''', 'html.parser')
+            return adapter.parse_many(soup, url, NOW)[0]
+
+        later = dict(event, startDate='2026-11-11T00:30:00+00:00', endDate='2026-11-11T04:00:00+00:00')
+        candidate = parse([event, later])
+        self.assertEqual(candidate.validate(NOW), [])
+        self.assertEqual([(o.starts_at, o.ends_at) for o in candidate.occurrences], [
+            (f'2026-11-{day}T{start}:00+07:00', f'2026-11-{day}T{end}:00+07:00')
+            for day in ('09', '11') for start, end in [('07:30', '11:00'), ('13:30', '16:30')]
+        ])
+
+        conflict = dict(later, endDate='2026-11-11T04:30:00+00:00')
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse([event, conflict]).validate(NOW))
+        overlapping = 'Hằng ngày, 7h30 đến 14h và 13h30 đến 16h30'
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse([event], overlapping).validate(NOW))
+        cancelled = dict(event, eventStatus='https://schema.org/EventCancelled')
+        self.assertEqual(parse([cancelled]).status, 'cancelled')
+        self.assertEqual(len(parse([cancelled]).occurrences), 1)
+
     def test_reviewed_da_nang_event_requires_matching_venue_and_complete_session(self):
         config = load_sources()['lifeofdanang']
         url, review = next(iter(config['reviewed_events'].items()))
