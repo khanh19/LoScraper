@@ -246,3 +246,54 @@ class WeeklyCoverage(unittest.TestCase):
                 self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, reasons)
         event['description'] = 'Lễ thắp sáng cây thông.\nTiệc tối riêng từ 17h30 đến 19h.'
         self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, enrich().reasons)
+
+    def test_reviewed_jazz_requires_both_sessions_and_an_exact_organizer_link(self):
+        config = load_sources()['lifeofdanang']
+        event_id = 'city-da-nang-jazz-festival-2026-at-the-furama-2026-11-27'
+        url = f'https://lifeofdanang.com/vi/danang/{event_id}'
+        review = config['reviewed_events'][url]
+        adapter = LifeOfDaNang('lifeofdanang', config)
+        event = {
+            '@type': 'Event',
+            'name': 'Lễ hội Jazz Đà Nẵng 2026 tại Furama',
+            'description': 'Nhạc jazz sống từ 17h đến 23h cả hai tối.',
+            'startDate': '2026-11-27',
+            'endDate': '2026-11-28',
+            'location': {'name': review['location'], 'address': {'addressLocality': 'Da Nang'}},
+        }
+        link = (f'<a data-ev="organiser" data-ev-id="{event_id}" '
+                f'href="{review["schedule_url"].rstrip("/")}">Nguồn chính thức</a>')
+        schedule = '''<header class="hero"><div class="when">
+        <p class="day">Friday 27 and Saturday 28 November 2026</p>
+        <p class="time">5 pm to 11 pm, both nights</p>
+        <p class="place">Lounge Bar, Furama Danang</p>
+        </div></header>'''
+
+        def enrich(publisher=event, source=schedule, official_link=link):
+            class Client:
+                def get(self, url, hosts):
+                    pages = {
+                        review['schedule_url']: source,
+                        review['address_url']: f'<p>{review["address"]}, Việt Nam</p>',
+                    }
+                    return BeautifulSoup(pages[url], 'html.parser')
+
+            html = f'<main>{official_link}</main><script type="application/ld+json">{json.dumps(publisher)}</script>'
+            soup = BeautifulSoup(html, 'html.parser')
+            now = NOW + timedelta(days=14)
+            candidate, = adapter.parse_many(soup, url, now)
+            return adapter.enrich(candidate, soup, Client(), now)
+
+        result = enrich()
+        self.assertEqual(result.validate(NOW + timedelta(days=14)), [])
+        self.assertEqual(result.address, review['address'])
+        self.assertEqual([(o.starts_at, o.ends_at, o.precision) for o in result.occurrences], [
+            (f'2026-11-{day}T17:00:00+07:00', f'2026-11-{day}T23:00:00+07:00', 'time')
+            for day in (27, 28)
+        ])
+        self.assertIn('unresolved_reviewed_venue', enrich(official_link=link.replace(event_id, 'another-event')).reasons)
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, enrich(source=schedule.replace('11 pm', '10 pm')).reasons)
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, enrich(publisher=dict(event, endDate='2026-11-27')).reasons)
+        for incomplete in (schedule.replace('both nights', 'Friday only'),
+                           schedule.replace('Lounge Bar', 'Main Lobby'), schedule + schedule):
+            self.assertIn('unresolved_cross_source_session_times', enrich(source=incomplete).reasons)

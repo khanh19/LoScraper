@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from itertools import zip_longest
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
-from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
+from .dates import MONTHS, iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
 from .http import FetchError, PublicClient, fetch_failure_reason
 from .model import (
     CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION, ICT,
@@ -623,13 +623,15 @@ class LifeOfDaNang(Adapter):
         if not review or c.status != 'active' or c.kind != 'event':
             return c
         event_id = urlsplit(c.source_url).path.rstrip('/').rsplit('/', 1)[-1]
-        venue_links = [
+        link_type = 'venue' if 'venue_url' in review else 'organiser'
+        expected_url = review.get('venue_url') or review['schedule_url']
+        evidence_links = [
             canonical(urljoin(c.source_url, link['href']))
-            for link in soup.select('main a[data-ev=venue][data-ev-id][href]')
-            if link['data-ev-id'] == event_id
+            for link in soup.select('main a[data-ev][data-ev-id][href]')
+            if link['data-ev-id'] == event_id and link['data-ev'] == link_type
         ]
         address = review['address']
-        if (venue_links != [review['venue_url']]
+        if (evidence_links != [canonical(expected_url)]
                 or folded(c.venue_name) != folded(review['location'])
                 or city_from_address(address) != c.city_slug):
             c.reasons.append('unresolved_reviewed_venue')
@@ -659,6 +661,8 @@ class LifeOfDaNang(Adapter):
     def _corroborated_schedule(self, c, review, client, now):
         evidence = review['schedule_url']
         page = client.get(evidence, {urlsplit(evidence).hostname})
+        if review.get('schedule_format') == 'danang_jazz_hero':
+            return self._jazz_sessions(c, review, page)
         # These reviewed listings have one dated row per venue. Administrative
         # or related-event text elsewhere on either page must not supply times.
         rows = [
@@ -691,6 +695,51 @@ class LifeOfDaNang(Adapter):
         if source_sessions != listed_sessions:
             return [], True
         return source_sessions, False
+
+    @staticmethod
+    def _jazz_sessions(c, review, page):
+        # The listing describes two evenings with a single date interval. Only
+        # split it when the organizer and listing cover both days and times.
+        blocks = page.select('header.hero .when')
+        if len(blocks) != 1 or len(c.occurrences) != 1 or c.occurrences[0].precision != 'date':
+            return [], False
+        dates, times, venues = (
+            [plain(node.get_text(' ', strip=True)) for node in blocks[0].select(f':scope > p.{field}')]
+            for field in ('day', 'time', 'place')
+        )
+        if (len(dates), len(times), len(venues)) != (1, 1, 1):
+            return [], False
+        if folded(venues[0]) != folded(review['venue_name']):
+            return [], False
+        days = re.fullmatch(r'(\w+) (\d{1,2}) and (\w+) (\d{1,2}) (\w+) (20\d{2})', dates[0])
+        hours = re.fullmatch(r'(1[0-2]|[1-9]) pm to (1[0-2]|[1-9]) pm, both nights', times[0])
+        listing_hours = re.findall(
+            r'\b(\d{1,2})h den (\d{1,2})h ca hai toi\b', plain(c.original_text))
+        if not days or not hours or len(listing_hours) != 1 or days[5] not in MONTHS:
+            return [], False
+        try:
+            start_day, end_day = (
+                datetime(int(days[6]), MONTHS[days[5]], int(day), tzinfo=ICT)
+                for day in (days[2], days[4])
+            )
+        except ValueError:
+            return [], False
+        if (end_day - start_day != timedelta(days=1)
+                or (start_day.strftime('%A').lower(), end_day.strftime('%A').lower()) != (days[1], days[3])):
+            return [], False
+        start_hour, end_hour = (int(hour) % 12 + 12 for hour in hours.groups())
+        if end_hour <= start_hour:
+            return [], False
+        occurrence = c.occurrences[0]
+        if ((parse_time(occurrence.starts_at), parse_time(occurrence.ends_at))
+                != (start_day, end_day + timedelta(days=1))
+                or tuple(map(int, listing_hours[0])) != (start_hour, end_hour)):
+            return [], True
+        sessions = [
+            iso_occurrence(day.replace(hour=start_hour).isoformat(), day.replace(hour=end_hour).isoformat())
+            for day in (start_day, end_day)
+        ]
+        return sessions, False
 
 
 class HoGuomOpera(Adapter):

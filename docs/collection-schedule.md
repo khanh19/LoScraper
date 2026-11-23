@@ -71,6 +71,14 @@ individual event pages still determine eligibility. Nhà hát Hồ Gươm's perf
 pages provide another planning source. The collector stores the exact announced
 show days when the venue omits the end time.
 
+On November 23, the Hồ Gươm Opera catalogue returned 200 while three linked
+performance pages returned 404. The catalogue showed two complete slots for
+St. Petersburg Night and Don Quixote, but only one timed slot for the gala's
+two announced dates. The failed detail fetches left those observations at their
+previous verification times. Recheck the complete event page and user-facing
+source link before renewing an observation. [Publisher catalogue](https://hoguomopera.vn/chuong-trinh-bieu-dien?page=1) ·
+[Staging recheck](https://github.com/khanh19/LoScraper/actions/runs/45219666848)
+
 Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
 Market publications disagree on the start day and opening hour. Pullman's official
 pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
@@ -80,6 +88,17 @@ street address, and the city's matching schedule. Its December 3 session is
 17:30–19:00 Vietnam time. The separately booked dinner is outside that session.
 The collector checks these pages again before renewing evidence.
 [Life of Da Nang](https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-furama-resort-2026-12-03) · [Resort address](https://team.furamavietnam.com/khach-san.html) · [City tourism calendar](https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027)
+
+The Da Nang Jazz Festival uses a reviewed organizer link and Furama's street
+address. The collector compares the organizer's two explicit 17:00–23:00
+sessions with the listing's date coverage and stated hours before storing
+them separately. The bounded November 24 staging import also accepted
+REALITY's December 9 book club, whose organizer lists 19:30–21:00 at
+86 Mai Thúc Lân. Both events resolved in the expected API section and detail
+response. The stored snapshot meets all six coverage targets at November 28
+06:00 Vietnam time, including Da Nang at 12 weekly and 5 planning. This
+forecast uses the stored evidence and excludes any later collection.
+[Jazz organizer](https://danangjazz.com/) · [Jazz listing](https://lifeofdanang.com/vi/danang/city-da-nang-jazz-festival-2026-at-the-furama-2026-11-27) · [REALITY session](https://app.realitydn.com/events/bb88d620-dd4c-4e9e-8466-1e39f3a1ae70)
 
 When both sources give complete and different schedules for an existing event,
 the collector records a hold on the reviewed observation. The shared evaluator
