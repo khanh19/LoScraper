@@ -1109,10 +1109,56 @@ class HoanKiemHeritage(Adapter):
         return event
 
 
+class HanoiYouthTheatre(Adapter):
+    def fetch(self, client, url):
+        return client.get(url, self.hosts, render=True)
+
+    def parse_many(self, soup, url, now):
+        rows = soup.select('tbody tr:has(td.rbc-agenda-time-cell)')
+        if not rows:
+            return [{'extraction_failure': 'missing_primary_schedule'}]
+        performances = {}
+        for row in rows:
+            cells = [td.get_text(' ', strip=True) for td in row.select(':scope > td')]
+            if len(cells) != 4 or cells[3] != 'Đặt vé':
+                continue
+            label, hours, title, _ = cells
+            review = self.config['reviewed_performances'].get(folded(title))
+            if not review:
+                continue
+            day = re.fullmatch(r'(?:T[2-7]|CN) (\d{2}/\d{2}/20\d{2})', label)
+            if not day or not re.fullmatch(r'\d{2}:\d{2}\s*-\s*\d{2}:\d{2}', plain(hours)):
+                continue
+            sessions = schedule_occurrences(f'{day[1]} {hours}', now)
+            if len(sessions) != 1 or sessions[0].starts_at != review['starts_at']:
+                continue
+            performances.setdefault(review['key'], []).extend(sessions)
+        results = []
+        for review in self.config['reviewed_performances'].values():
+            key = review['key']
+            sessions = performances.get(key, [])
+            if len(sessions) == 1:
+                results.append(Candidate(self.slug, self.config['name'], url, review['title'], 'event',
+                    city_slug='hanoi', category='culture', venue_name='Nhà hát Tuổi trẻ',
+                    address=review['address'], verified_at=now.isoformat(), occurrences=sessions,
+                    entry_key=key, evidence_locator=review['title'],
+                    original_text=f'{review["title"]} · {sessions[0].starts_at} – {sessions[0].ends_at}'))
+        return results
+
+    def enrich(self, candidate, soup, client, now):
+        contact = self.config['contact_url']
+        page = client.get(contact, self.hosts, render=True)
+        address = 'dia chi ' + folded(candidate.address)
+        if page.find(string=lambda t: t and folded(t) == address):
+            candidate.location_evidence = contact
+        return candidate
+
+
 CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang,
            "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer,
-           "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage}
+           "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage,
+           "hanoiyouththeatre": HanoiYouthTheatre}
 
 
 def load_sources():

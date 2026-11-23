@@ -1,10 +1,13 @@
 """Coverage discovery uses current Vietnam month and primary-event evidence."""
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from datetime import timedelta
 from bs4 import BeautifulSoup
-from trending.adapters import HoanKiemHeritage, HoGuomOpera, LifeOfDaNang, VaranVietnam, category, collect_source, load_sources
+from trending.adapters import (
+    HanoiYouthTheatre, HoanKiemHeritage, HoGuomOpera, LifeOfDaNang, VaranVietnam,
+    category, collect_source, load_sources,
+)
 from test_trending import NOW, candidate
 from trending.model import CONFIRMED_SCHEDULE_CONFLICT, city_from_address
 from trending.http import FetchError
@@ -197,6 +200,28 @@ class WeeklyCoverage(unittest.TestCase):
         incomplete = html.replace('<p>Thời gian: 04/11 – 30/11/2026.</p>', '')
         self.assertIn('unresolved_individual_sessions',
                       adapter.parse(BeautifulSoup(incomplete, 'html.parser'), url, NOW).validate(NOW))
+
+    def test_youth_theatre_requires_the_reviewed_local_start_and_venue(self):
+        config = load_sources()['hanoiyouththeatre']
+        adapter = HanoiYouthTheatre('hanoiyouththeatre', config)
+        html = '''<table><tbody>
+          <tr><td>CN 29/11/2026</td><td class="rbc-agenda-time-cell">15:00 – 17:00</td>
+              <td>Tuổi Thơ Dữ Dội</td><td>Đặt vé</td></tr>
+          <tr><td>CN 29/11/2026</td><td class="rbc-agenda-time-cell">13:00 – 15:00</td>
+              <td>Quân khu Nam Đồng</td><td>Đặt vé</td></tr>
+          <tr><td>CN 20/12/2026</td><td class="rbc-agenda-time-cell">20:00 – 22:00</td>
+              <td>Quân khu Nam Đồng</td><td>Đặt vé</td></tr>
+        </tbody></table>'''
+        page = BeautifulSoup(html, 'html.parser')
+        event, = adapter.parse_many(page, config['detail_pages'][0], NOW)
+        self.assertEqual(event.entry_key, 'tuoi-tho-du-doi-20261129')
+        self.assertIn('unverified_destination', event.validate(NOW))
+        client = Mock()
+        client.get.return_value = BeautifulSoup(
+            '<p>Địa chỉ: 11 Ngô Thì Nhậm, Phường Hai Bà Trưng, TP Hà Nội</p>', 'html.parser')
+        adapter.enrich(event, page, client, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.occurrences[0].ends_at, '2026-11-29T17:00:00+07:00')
 
     def test_seven_day_verification_boundary(self):
         c=candidate('place')

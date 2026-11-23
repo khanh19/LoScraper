@@ -151,6 +151,28 @@
     "hosts": ["phocohanoi.hoankiem.vn"],
     "enabled": true
   },
+  "hanoiyouththeatre": {
+    "name": "Nhà hát Tuổi trẻ",
+    "seeds": [],
+    "detail_pages": ["https://datve.nhahattuoitre.vn/"],
+    "hosts": ["datve.nhahattuoitre.vn"],
+    "contact_url": "https://datve.nhahattuoitre.vn/lien-he",
+    "enabled": true,
+    "reviewed_performances": {
+      "tuoi tho du doi": {
+        "key": "tuoi-tho-du-doi-20261129",
+        "title": "Nhạc kịch Tuổi thơ dữ dội",
+        "starts_at": "2026-11-29T15:00:00+07:00",
+        "address": "11 Ngô Thì Nhậm, Phường Hai Bà Trưng, TP Hà Nội"
+      },
+      "quan khu nam dong": {
+        "key": "quan-khu-nam-dong-20261129",
+        "title": "Vở kịch Quân khu Nam Đồng",
+        "starts_at": "2026-11-29T20:00:00+07:00",
+        "address": "11 Ngô Thì Nhậm, Phường Hai Bà Trưng, TP Hà Nội"
+      }
+    }
+  },
   "saigoneer": {
     "name": "Saigoneer",
     "seeds": [

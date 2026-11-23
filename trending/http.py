@@ -12,7 +12,7 @@ from urllib.parse import urlsplit, urlunsplit
 import requests
 from bs4 import BeautifulSoup
 
-from .model import canonical
+from .model import ICT, canonical
 
 
 class FetchError(Exception):
@@ -126,7 +126,7 @@ class PublicClient:
             if os.environ.get("LO_BROWSER_CHANNEL"):
                 options["channel"] = os.environ["LO_BROWSER_CHANNEL"]
             self._browser = self._playwright.chromium.launch(**options)
-        page = self._browser.new_page(locale="vi-VN", service_workers="block")
+        page = self._browser.new_page(locale="vi-VN", timezone_id=ICT.key, service_workers="block")
 
         def route(request_route):
             request = request_route.request

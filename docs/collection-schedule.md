@@ -97,6 +97,13 @@ that differ from the Creative Design Festival listings.
 [Varan Vietnam](https://varanvietnam.com/project/varan-vietnam-tai-trien-lam-mot-bat-thuong/) ·
 [Hoàn Kiếm announcement](https://phocohanoi.hoankiem.vn/tin-tuc/ngay-di-san)
 
+The Nhà hát Tuổi trẻ calendar renders times in the browser's timezone. The
+collector renders in Vietnam time and accepts the two reviewed November 29
+performances only when the booking table matches their published starts and
+the theatre's contact page confirms the Hanoi address. Run this source with
+`--browser`. [Theatre booking calendar](https://datve.nhahattuoitre.vn/) ·
+[Ministry announcement](https://bvhttdl.gov.vn/nha-hat-tuoi-tre-to-chuc-tuan-bieu-dien-nghe-thuat-huong-ung-ngay-van-hoa-viet-nam-2411-20260228171220914.htm)
+
 Two Da Nang events are held pending schedule confirmation. The Ariyana Christmas
 Market publications disagree on the start day and opening hour. Pullman's official
 pages give different hours for the same tree lighting. [City market notice](https://1022.vn/en/su-kien/da-nang-christmas-market-2026/) · [Market organizer](https://danangchristmasmarket.com/) · [Pullman program](https://www.pullman-danang.com/news/festive-season-2026/) · [Pullman event overview](https://www.pullman-danang.com/discovery/event/danang-christmas-market/)
