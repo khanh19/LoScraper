@@ -5,11 +5,17 @@ on:
   push:
     branches: [main, develop, 'stephen-*']
   workflow_dispatch:
+    inputs:
+      staging_collection:
+        description: Manually rehearse website collection against isolated staging
+        type: choice
+        options: [none, full, refresh]
+        default: none
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'checks' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   unit:
@@ -29,3 +35,16 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m pip check
       - run: python scripts/ci_tests.py
+
+  staging_collection:
+    name: Isolated staging collection
+    if: github.event_name == 'workflow_dispatch' && (inputs.staging_collection == 'full' || inputs.staging_collection == 'refresh')
+    needs: unit
+    uses: ./.github/workflows/trending.yml
+    with:
+      mode: ${{ inputs.staging_collection }}
+      city: all
+      pilot: false
+    secrets:
+      TRENDING_STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
+      TRENDING_STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}

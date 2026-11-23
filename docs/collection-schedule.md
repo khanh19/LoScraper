@@ -95,8 +95,10 @@ evidence cannot overwrite the current status. [Notification collector PR](https:
 
 ## Activation checklist — not yet active
 
-1. Review PR #6 with its parent stack. Confirm the reviewed workflow reaches the
-   default branch (`main`) before using manual Actions dispatch.
+1. Review PR #6 with its parent stack. Before it reaches `main`, dispatch
+   **Scraper CI** on the reviewed staging branch and select `full` or `refresh`
+   for `staging_collection`. That job calls the branch's collection workflow
+   with the two staging secrets. It does not use the schedule settings.
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. Never point this job at the local accounting ledger.
 3. Run manual `mode=full`, `pilot=true`; inspect source coverage.

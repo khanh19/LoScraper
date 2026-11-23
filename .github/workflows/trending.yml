@@ -20,6 +20,22 @@ on:
         description: Audit adapters without importing
         type: boolean
         default: true
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        required: true
+      city:
+        type: string
+        default: all
+      pilot:
+        type: boolean
+        default: true
+    secrets:
+      TRENDING_STAGING_DATABASE_URL:
+        required: false
+      TRENDING_STAGING_DATABASE_ROOT_CA:
+        required: false
 
 permissions:
   contents: read
@@ -29,7 +45,7 @@ concurrency:
 
 jobs:
   policy:
-    if: github.event_name == 'workflow_dispatch' || vars.TRENDING_SCHEDULE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.TRENDING_SCHEDULE_ENABLED == 'true')
     runs-on: ubuntu-latest
     outputs:
       mode: ${{ steps.policy.outputs.mode }}
@@ -41,7 +57,10 @@ jobs:
           MANUAL_MODE: ${{ inputs.mode }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "mode=${MANUAL_MODE:-full}" >> "$GITHUB_OUTPUT"
+            case "$MANUAL_MODE" in
+              full|refresh) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
+              *) echo "Invalid manual collection mode" >&2; exit 1 ;;
+            esac
           else
             python -m trending.schedule >> "$GITHUB_OUTPUT"
           fi
