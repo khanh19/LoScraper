@@ -136,6 +136,17 @@ recorded a failed run and the feed evaluator still returned the 73 cards above.
 These runs used website collection only. A clean manual full run and recheck in
 GitHub Actions are still required before enabling the schedule.
 
+The next all-source staging recheck with batched session writes accepted 51
+candidates before the 25-minute cutoff. It rejected three candidates and recorded
+three publisher failures, plus the interruption. The active TicketGo receipt
+ended as partial, with its five finished imports preserved. The feed still met
+all six targets in the table above. A separate publisher replay saved both
+corrected Da Nang categories with stable IDs. Two staging attempts hit a TLS
+protocol error on Hanoi Grapevine. The same pages loaded in Chrome with TLS
+verification enabled. The collector now uses the browser for this source only
+after an HTTP client TLS failure when `--browser` is set. The targeted staging
+recheck then accepted both Hanoi corrections with their original IDs.
+
 A venue review found two Hưng Yên shows that Ticketbox placed under Hanoi or
 Ho Chi Minh City and an online merchandise listing. At that point 68 eligible
 cards remained. Later website imports brought the feed to the counts above.
