@@ -124,6 +124,49 @@ class WeeklyCoverage(unittest.TestCase):
         candidate = adapter.parse(BeautifulSoup(conflict, 'html.parser'), url, NOW)
         self.assertIn('unresolved_individual_sessions', candidate.validate(NOW))
 
+    def test_opera_discovery_skips_only_archive_rows_with_agreeing_timetables(self):
+        slug = 'hoguomopera'
+        config = load_sources()[slug]
+        catalogue = config['seeds'][0]
+        origin = 'https://hoguomopera.vn'
+        old = '2026-11-07T18:00:00Z', '2026-11-07T19:00:00Z'
+        future = '2026-11-08T20:00:00Z', '2026-11-08T23:00:00Z'
+        rows, cards, detail_urls = [], [], []
+        for article, clocks, display in [
+            (1, [old], ['18:00 - 19:00, 07/11/2026']),
+            (2, [old, future], ['18:00 - 19:00, 07/11/2026', '20:00 - 23:00, 08/11/2026']),
+            (3, [old], ['18:00 - 20:00, 07/11/2026']),
+            (4, [], []),
+            (5, [old], ['18:00 - 19:00, 07/11/2026']),
+        ]:
+            program = f'program-{article}'
+            path = f'/chuong-trinh-bieu-dien/{program}'
+            title = f'Program {article}'
+            rows.append({'slug': program, 'articleId': article, 'name': title, 'showSches': [
+                {'articleId': article, 'isAvailFS': False, 'startTime': start, 'endTime': end}
+                for start, end in clocks
+            ]})
+            visible = ''.join(f'<p>{line}</p>' for line in display)
+            cards.append(f'<section><a href="{path}">{title}</a><img alt="calendar">{visible}</section>')
+            detail_urls.append(origin + path)
+        rows.append({**rows[-1], 'showSches': []})
+        data = {'props': {'pageProps': {'data': {'items': rows}}}}
+        listing = BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(data)}</script>'
+                                + ''.join(cards), 'html.parser')
+        adapter = HoGuomOpera(slug, config)
+        self.assertEqual(adapter.calendar_links(listing, catalogue, NOW), detail_urls[1:])
+        self.assertEqual(adapter.calendar_links(listing, catalogue, NOW - timedelta(minutes=1)), detail_urls)
+
+        client = Mock()
+        client.get.side_effect = lambda url, *_args, **_kwargs: listing if url == catalogue else (
+            BeautifulSoup('<h1>Event detail</h1>', 'html.parser'))
+        collect_source(slug, config, client, NOW, limit=2)
+        self.assertEqual([call.args[0] for call in client.get.call_args_list],
+                         [catalogue, *detail_urls[1:3]])
+        client.reset_mock()
+        collect_source(slug, config, client, NOW, extra_urls=detail_urls[:1], existing_only=True)
+        self.assertEqual([call.args[0] for call in client.get.call_args_list], detail_urls[:1])
+
     def test_opera_rechecks_each_visible_slot_against_its_booking(self):
         adapter = HoGuomOpera('hoguomopera', load_sources()['hoguomopera'])
         legacy = 'https://hoguomopera.vn/chuong-trinh-bieu-dien/st-petersburg-night-2088'

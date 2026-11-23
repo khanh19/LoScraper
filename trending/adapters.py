@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from datetime import date, datetime, timedelta
 from itertools import zip_longest
 from pathlib import Path
@@ -760,6 +761,40 @@ class HoGuomOpera(Adapter):
     content_selector = '.ck-content'
     link_pattern = r'^/chuong-trinh-bieu-dien/[^/]+-\d+$'
 
+    def calendar_links(self, soup, url, now):
+        # Only drop corroborated, ended timetable entries from discovery.
+        # Explicit leads and persisted recheck targets bypass this listing filter.
+        entries = self._page_data(soup).get('items')
+        if not isinstance(entries, list):
+            return None
+        counts = Counter(row['slug'] for row in entries
+                         if isinstance(row, dict) and isinstance(row.get('slug'), str))
+        archived = set()
+        for row in entries:
+            if not isinstance(row, dict):
+                continue
+            program, title = row.get('slug'), row.get('name')
+            if not isinstance(program, str) or counts[program] != 1 or not isinstance(title, str):
+                continue
+            path = f'/chuong-trinh-bieu-dien/{program}'
+            if not re.fullmatch(self.link_pattern, path):
+                continue
+            article_id = int(program.rsplit('-', 1)[1])
+            slots = row.get('showSches')
+            if row.get('articleId') != article_id or not isinstance(slots, list) or not slots:
+                continue
+            if not all(isinstance(slot, dict) and slot.get('articleId') == article_id
+                       and slot.get('isAvailFS') is False
+                       and isinstance(slot.get('startTime'), str) and isinstance(slot.get('endTime'), str)
+                       for slot in slots):
+                continue
+            visible = self._visible_slots(soup, path, title)
+            clocks = {(slot['startTime'], slot['endTime']) for slot in slots}
+            if len(clocks) == len(slots) and clocks == visible.keys() and all(
+                    parse_time(session.ends_at) <= now for session in visible.values()):
+                archived.add(path)
+        return [link for link in self.links(soup, url) if urlsplit(link).path not in archived]
+
     def fetch(self, client, url):
         try:
             return super().fetch(client, url)
@@ -816,7 +851,7 @@ class HoGuomOpera(Adapter):
         row = next(entry for entry in rows if isinstance(entry, dict)
                    and entry.get('slug') == candidate.evidence_locator)
         slots = row.get('showSches')
-        visible = self._visible_slots(soup, candidate)
+        visible = self._visible_slots(soup, urlsplit(candidate.replaces_source_url).path, candidate.title)
         count = review['sessions']
         if (not isinstance(slots, list) or len(slots) != count or len(visible) != count
                 or re.search(r'\b(?:da huy|hoan lich|hoan chuong trinh|cancelled|postponed)\b',
@@ -855,10 +890,9 @@ class HoGuomOpera(Adapter):
         return candidate
 
     @staticmethod
-    def _visible_slots(soup, candidate):
-        path = urlsplit(candidate.replaces_source_url).path
+    def _visible_slots(soup, path, title):
         titles = [link for link in soup.find_all('a', href=path)
-                  if folded(link.get_text(' ', strip=True)) == folded(candidate.title)]
+                  if folded(link.get_text(' ', strip=True)) == folded(title)]
         if len(titles) != 1:
             return {}
         for block in titles[0].parents:
@@ -1233,7 +1267,8 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
         try:
             listing=adapter.fetch(client,seed)
             metrics['listing_pages']+=1
-            ordered = adapter.calendar_links(listing, seed, now) if slug == 'lifeofdanang' else None
+            ordered = (adapter.calendar_links(listing, seed, now)
+                       if slug in {'lifeofdanang', 'hoguomopera'} else None)
             if ordered is None:
                 ordered = list(adapter.links(listing, seed))
                 if slug != 'danangfantasticity':

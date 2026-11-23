@@ -102,6 +102,18 @@ December 18 and 20, 20:00–23:00 Vietnam time. Each run still checks both recor
 [December 18 booking](https://hoguomopera.vn/dat-ve/137) ·
 [December 20 booking](https://hoguomopera.vn/dat-ve/138)
 
+New discovery uses the Opera catalogue's visible and structured timetables
+to skip archived programmes before spending its detail-page allowance. A row
+qualifies for skipping only when its session set agrees between both views,
+every slot has ended, and ticket sales are unavailable for each slot. Rechecks
+of stored observations and explicitly supplied leads still fetch their URLs.
+On November 24, a read-only comparison against the live catalogue kept the
+same three eligible programmes and reduced missing detail pages from seven to
+one. The ballet gala remained the one failure. The catalogue describes two
+nights but lists a timetable and booking for only December 8.
+[Publisher catalogue](https://hoguomopera.vn/chuong-trinh-bieu-dien?page=1) ·
+[December 8 booking](https://hoguomopera.vn/dat-ve/128)
+
 Two Hanoi sources seed reviewed public announcements directly. Varan Vietnam's
 exhibition block gives the admission dates and daily hours for Một bát thương.
 The collector creates one session for each published day. The Hoàn Kiếm
