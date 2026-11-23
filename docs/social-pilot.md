@@ -309,3 +309,9 @@ venue corroboration. A fresh date produces a lead for review. The command keeps
 publication and scheduled collection separate. The GitHub job runs only on
 explicit manual dispatch. [TikTok creator embeds](https://developers.tiktok.com/docs/en/embed-creator-profiles/) ·
 [TikTok player URLs](https://developers.tiktok.com/docs/en/embed-player/)
+
+The expanded hosted check on 23 November verified five profile links from
+organizer sites across all three cities. Four profiles loaded without any
+original video links after rendering. The official Da Nang tourism profile
+returned HTTP 400 from oEmbed. That check recorded zero fresh posts and zero
+metered provider requests. [Hosted audit](https://github.com/khanh19/LoScraper/actions/runs/45113777936)
