@@ -431,3 +431,31 @@ showed 137 likes and one comment on a 19 November reel. The promotion end date
 remains unknown. The older 8 November Burger Fest reel was rejected by date.
 The public checks made no metered requests or imports. Fresh TikTok validation
 remains open. [Tiệm Yến reel](https://www.instagram.com/reel/Df_0zs_oXt6/) · [Restaurant branch](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) · [Gangwon reel](https://www.instagram.com/reel/Df7X04roCHE/)
+
+#### Discover new posts from reviewed Instagram accounts
+
+Run `python -m trending.discover --city danang --review-instagram`. The same
+option works for `hanoi` and `hcmc`. The collector verifies profile ownership
+against the reviewed publisher's website first, then checks at most three
+public profile embeds per city and reports up to six recent posts per profile.
+It decodes the embed's literal JSON data without executing its JavaScript.
+Profile username and URL are checked against the requested account, and each
+post must have the matching owner ID, an original shortcode, a public status,
+and a timestamp within the past seven days. Hidden likes stay unknown.
+
+Exact profile timestamps go into unverified discovery leads. Native post
+previews still report a timezone-unspecified date and are kept as separate
+evidence. The direct previews of two REALITY posts displayed November 22
+while the exact embed timestamps were on November 23 in Vietnam. Neither
+publication timestamp is a session date. City hints route review and do not
+verify a place. No contact with a metered provider is needed.
+
+The November 23 live run found **29** recent records from six publisher-linked
+profiles. Hanoi returned six posts from 1900, HCMC eight from Saigon Outcast
+and Saigoneer, and Da Nang 15 from three profiles. One Hanoi listing page failed
+transport. The original links included recent recaps and posts with no specific
+local destination, both of which stay out of the feed. The REALITY Buildathon
+announcement was corroborated by the organizer's public November 26
+11:00–13:00 ICT listing. The Bếp Hên caption's address agrees with Michelin's
+listing. Both are review candidates. This run published zero cards and used
+zero metered requests. [Instagram Buildathon](https://www.instagram.com/p/DgEl9LqI6AH/) · [Organizer listing](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) · [Bếp Hên post](https://www.instagram.com/p/Df6vOXfmjhg/) · [Michelin listing](https://guide.michelin.com/vn/en/da-nang-region/da-nang_2984390/restaurant/bep-hen)

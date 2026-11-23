@@ -28,10 +28,10 @@ def canonical_tiktok_profile(url):
     return None
 
 
-def reviewed_tiktok_profiles(city, client):
+def reviewed_profiles(city, client, platform, normalize):
     seen = set()
     for source in json.loads(DIRECTORY.read_text()):
-        accounts = [a for a in source['accounts'] if a['platform'] == 'tiktok']
+        accounts = [a for a in source['accounts'] if a['platform'] == platform]
         if city not in source['cities'] or not accounts:
             continue
         page = source['review_evidence']
@@ -39,18 +39,21 @@ def reviewed_tiktok_profiles(city, client):
             soup = client.get(page, {urlsplit(page).hostname})
         except FetchError:
             continue
-        links = {canonical_tiktok_profile(a['href']) for a in soup.select('a[href]')}
+        links = {normalize(a['href']) for a in soup.select('a[href]')}
         for entry in structured(soup):
             owner, aliases = entry.get('url'), entry.get('sameAs')
             if (is_type(entry, 'Organization') and isinstance(owner, str)
                     and owner.rstrip('/') == page.rstrip('/') and isinstance(aliases, list)):
-                links.update(canonical_tiktok_profile(alias) for alias in aliases)
+                links.update(normalize(alias) for alias in aliases)
         for account in accounts:
-            url = canonical_tiktok_profile(account['url'])
+            url = normalize(account['url'])
             if url and url in links and url not in seen:
                 seen.add(url)
                 yield {'url': url, 'ownership_evidence': page,
                        'publisher_id': source['publisher_id'], 'city_hint': city}
+
+def reviewed_tiktok_profiles(city, client):
+    return reviewed_profiles(city, client, 'tiktok', canonical_tiktok_profile)
 
 
 def reviewed_tiktok_profile(city, client):
@@ -118,7 +121,8 @@ def main():
     p.add_argument('--city',choices=list(CITIES),required=True)
     p.add_argument('--max-sources',type=int,default=6)
     p.add_argument('--browser', action='store_true', help='Use website adapters with browser support for public publisher pages')
-    p.add_argument('--review-instagram', action='store_true', help='Check up to three discovered Instagram permalinks')
+    p.add_argument('--review-instagram', action='store_true',
+                   help='Check discovered Instagram permalinks and up to three verified organizer profiles')
     p.add_argument('--write-leads',action='store_true')
     p.add_argument('--env-file',action='append',default=[])
     args=p.parse_args()
@@ -137,9 +141,27 @@ def main():
             counts={r['category']:r['n'] for r in store.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,args.city)).fetchall()}
         report=discover(args.city,client,now,counts,args.max_sources)
         if args.review_instagram:
-            from .instagram_public import review
+            from .instagram_public import instagram_profile, review, review_profile
             urls = (post['url'] for post in report['posts'] if post['platform'] == 'instagram')
             report['public_instagram_reviews'] = [review(url, client, now) for url in islice(urls, 3)]
+            profiles = reviewed_profiles(args.city, client, 'instagram', instagram_profile)
+            report['public_instagram_profile_reviews'] = [
+                review_profile(profile, client, now) for profile in islice(profiles, 3)
+            ]
+            leads = {}
+            for lead in report['posts']:
+                remember_lead(leads, lead)
+            for profile in report['public_instagram_profile_reviews']:
+                for post in profile['posts']:
+                    remember_lead(leads, {
+                        'url': post['url'], 'platform': 'instagram', 'city_hint': args.city,
+                        'published_at': post['published_at'], 'text': post['caption'],
+                        'discovered_on': profile['embed_url'], 'publisher_id': profile['publisher_id'],
+                        'requires_provider_validation': True,
+                    })
+            report['posts'] = sorted(
+                leads.values(), key=lambda row: (row['published_at'] or '', row['url']), reverse=True,
+            )[:30]
         if store:
             for row in report['posts']:
                 store.db.execute("""INSERT INTO discovery_leads(url,platform,discovered_on,published_at,publisher_id,city_slug)
