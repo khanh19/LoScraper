@@ -288,6 +288,34 @@ the November 22 reservation contains no records. Apify has 132 of 132 reserved
 units, including two unresolved requests. The old Bright Data/SerpAPI ledger
 was absent from this cluster. No new provider request or feed import was made.
 
+### November 24 provider and organizer recheck
+
+The original Bright Data and SerpAPI ledger remains unavailable. The separate
+multimodal ledger was audited from a local PostgreSQL copy with read-only
+transactions. Apify's account API reported the Free plan, a $5 monthly credit
+limit, and approximately $0.39 of November usage. The Lô campaign had all
+132 output units reserved. A read of the available actor-run history found
+no matching runs for the two reservations without a run ID. Both reservations
+remain unresolved. [Apify actor-run history](https://docs.apify.com/api/v2/actor-runs-get)
+
+The Hanoi source directory now checks Yoga Lab Hanoi's public profile against
+the account linked on its own website. The profile embed tied its **Detox Your
+Posture** announcement to November 23 at 10:00 Vietnam time. The caption and
+organizer's workshop calendar agree on the November 29 session at 10:00–11:30.
+The caption and studio page agree on floor 5, 19–21 ngõ Yên Ninh, Ba Đình.
+The original Instagram preview confirmed the account and showed six likes
+and zero comments. Its unzoned day differs from the embed's timestamp, so
+the exact embed time is used for recency. The post remains an organizer lead
+for individual review. [Original Instagram post](https://www.instagram.com/p/DgEXUf7hYR5/) ·
+[Workshop calendar](https://www.yogalabhanoi.com/events) ·
+[Studio location](https://www.yogalabhanoi.com/locations)
+
+The Saigon Garden Flea listing announces a November 28–29 event, but its
+linked Instagram announcement reports a November 11 publication day.
+The later event dates do not make it a recent social mention.
+[Event listing](https://www.discoversaigon.vn/su-kien/saigon-garden-flea-5a-nguyen-dinh-chieu-november-2026) ·
+[Original Instagram post](https://www.instagram.com/p/DfoeZp4nWAq/)
+
 ## Public TikTok metadata check
 
 Run `python -m trending.tiktok_public` locally or manually dispatch **Scraper CI**
