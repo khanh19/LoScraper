@@ -339,6 +339,12 @@ remains held while the public schedules disagree.
 [Hanoi tourism portal](https://hanoigo.hanoi.gov.vn/event/hanoi-firebeat-world-festival-2026) ·
 [Sample booth announcement](https://www.instagram.com/p/DgEyy7qAgbL/)
 
+The Mắt Nghe project links its TikTok account from its official website.
+Youth+ reported its November 28 sign-language workshop and exhibition at
+Nest Cafe by LightHub in HCMC. This records an account to check for an original
+post. [Project website](https://www.matnghe.com/) ·
+[Youth+ announcement](https://youth.com.vn/posts/chinh-thuc-cong-bo-su-kien-da-mat-bat-tay)
+
 The Hanoi source directory now checks Yoga Lab Hanoi's public profile against
 the account linked on its own website. The profile embed tied its **Detox Your
 Posture** announcement to November 23 at 10:00 Vietnam time. The caption and
@@ -371,7 +377,10 @@ reviewed organizer sites, calls the official profile oEmbed endpoint per distinc
 profile, and examines at most two original video pages from that creator. The
 job uses public HTTPS metadata and does not receive credentials.
 Pass `--browser` to render a public profile whose initial HTML has no video
-links. The manual Actions check enables this option. The first hosted check
+links. Use `LO_BROWSER_CHANNEL=chrome` to select an installed Chrome locally.
+If Chromium cannot launch, the affected sources report
+`browser_start_unavailable` and HTTP-only sources can still finish.
+The manual Actions check enables browser rendering. The first hosted check
 verified Ticketbox's profile identity, but its initial HTML had no original
 video links. The rendered check also found no links, and Da Nang's official
 tourism profile returned HTTP 400 at oEmbed. The expanded check also tries the

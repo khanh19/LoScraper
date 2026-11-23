@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 from bs4 import BeautifulSoup
+from playwright.sync_api import Error as BrowserError
 from requests.exceptions import ChunkedEncodingError
 from trending.http import PublicClient, FetchError
 from trending.adapters import VnExpress, load_sources
@@ -86,6 +87,28 @@ class WebsiteFetching(unittest.TestCase):
             client._render('https://example.org/', {'example.org'})
         self.assertEqual(str(caught.exception), 'browser_err_ssl_protocol_error')
         page.close.assert_called_once()
+
+    def test_missing_browser_reports_a_source_error_and_keeps_http_available(self):
+        client = PublicClient(browser=True)
+        self.addCleanup(client.close)
+        url = 'https://example.org/'
+        with (patch('playwright.sync_api.sync_playwright') as playwright,
+              patch('trending.http.public_url', side_effect=lambda value: value),
+              patch('trending.http.time.sleep'), patch.object(client.session, 'get') as request):
+            runtime = playwright.return_value.start.return_value
+            runtime.chromium.launch.side_effect = BrowserError('Executable missing at a local path')
+            for _ in range(2):
+                with self.assertRaisesRegex(FetchError, '^browser_start_unavailable$'):
+                    client.get(url, {'example.org'}, render=True)
+            response = request.return_value.__enter__.return_value
+            response.is_redirect = False
+            response.status_code = 200
+            response.headers = {'Content-Type': 'text/html'}
+            response.iter_content.return_value = [b'<h1>Other source</h1>']
+            self.assertEqual(client.get(url, {'example.org'}).h1.string, 'Other source')
+            runtime.chromium.launch.assert_called_once()
+        self.doCleanups()
+        runtime.stop.assert_called_once()
 
     def test_listing_renderer_accepts_article_headings_and_checks_status(self):
         client=PublicClient(browser=True);page=Mock();client._browser=Mock();client._browser.new_page.return_value=page

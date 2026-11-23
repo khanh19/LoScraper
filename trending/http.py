@@ -58,6 +58,7 @@ class PublicClient:
         self.last_fetch = {}
         self.cache = {}
         self._playwright = self._browser = None
+        self._browser_start_failed = False
 
     def get(self, url: str, allowed_hosts: set[str], render=False, json_response=False, redirect_only=False):
         # Exactly one retry for transient failures. Only successful parses are cached.
@@ -126,14 +127,24 @@ class PublicClient:
         return soup
 
     def _new_browser_page(self):
+        from playwright.sync_api import Error as BrowserError, sync_playwright
+
+        if self._browser_start_failed:
+            raise FetchError('browser_start_unavailable')
         if self._browser is None:
-            from playwright.sync_api import sync_playwright
-            self._playwright = sync_playwright().start()
             options = {"headless": True}
             if os.environ.get("LO_BROWSER_CHANNEL"):
                 options["channel"] = os.environ["LO_BROWSER_CHANNEL"]
-            self._browser = self._playwright.chromium.launch(**options)
-        return self._browser.new_page(locale="vi-VN", timezone_id=ICT.key, service_workers="block")
+            try:
+                self._playwright = sync_playwright().start()
+                self._browser = self._playwright.chromium.launch(**options)
+            except BrowserError:
+                self._browser_start_failed = True
+                raise FetchError('browser_start_unavailable') from None
+        try:
+            return self._browser.new_page(locale="vi-VN", timezone_id=ICT.key, service_workers="block")
+        except BrowserError:
+            raise FetchError('browser_page_unavailable') from None
 
     def render_tiktok_creator(self, profile_url):
         """Render TikTok's public creator widget in a fresh, metadata-only page."""
@@ -236,6 +247,9 @@ class PublicClient:
 
     def close(self):
         self.session.close()
-        if self._browser:
-            self._browser.close()
-            self._playwright.stop()
+        try:
+            if self._browser:
+                self._browser.close()
+        finally:
+            if self._playwright:
+                self._playwright.stop()
