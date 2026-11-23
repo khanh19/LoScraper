@@ -14,7 +14,7 @@ from .model import CITIES, canonical
 from .social_links import extract_posts, original_post_url
 
 HOST = 'www.tiktok.com'
-MAX_PROFILES_PER_CITY = 3
+MAX_PROFILES_PER_CITY = 4
 MAX_POSTS_PER_PROFILE = 2
 MAX_DIRECT_VIDEOS = 6
 

@@ -14,6 +14,7 @@ from .social_links import TikTokShareResolver, extract_posts, lead_identity, rem
 from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
+MAX_INSTAGRAM_PROFILES_PER_CITY = 4
 MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS = 3
 
 def canonical_tiktok_profile(url):
@@ -61,7 +62,8 @@ def reviewed_tiktok_profile(city, client):
     return next(reviewed_tiktok_profiles(city, client), None)
 
 def discover(city,client,now,counts=None,limit=6):
-    seeds=[s for s in json.loads(DIRECTORY.read_text()) if city in s['cities']]
+    seeds = [source for source in json.loads(DIRECTORY.read_text())
+             if city in source['cities'] and not source.get('profiles_only')]
     seeds.sort(key=lambda s:(sum((counts or {}).get(c,0) for c in s['categories']),s['id']))
     configs = load_sources()
     resolver = TikTokShareResolver(client)
@@ -126,7 +128,7 @@ def review_instagram_leads(report, client, now):
     originals = {lead_identity(post['url']): post for post in original_reviews}
     profiles = reviewed_profiles(report['city'], client, 'instagram', instagram_profile)
     profile_reports = report['public_instagram_profile_reviews'] = [
-        review_profile(profile, client, now) for profile in islice(profiles, 3)
+        review_profile(profile, client, now) for profile in islice(profiles, MAX_INSTAGRAM_PROFILES_PER_CITY)
     ]
     attribution_reviews = report['public_instagram_attribution_reviews'] = []
     remaining = MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS
@@ -166,7 +168,7 @@ def main():
     p.add_argument('--max-sources',type=int,default=6)
     p.add_argument('--browser', action='store_true', help='Use website adapters with browser support for public publisher pages')
     p.add_argument('--review-instagram', action='store_true',
-                   help='Check discovered Instagram permalinks and up to three verified organizer profiles')
+                   help=f'Check discovered Instagram permalinks and up to {MAX_INSTAGRAM_PROFILES_PER_CITY} verified organizer profiles')
     p.add_argument('--write-leads',action='store_true')
     p.add_argument('--env-file',action='append',default=[])
     args=p.parse_args()

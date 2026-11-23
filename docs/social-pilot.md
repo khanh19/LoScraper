@@ -325,6 +325,20 @@ and the original activity or branch evidence.
 [KaT organizer page](https://katjewelry.vn/) ·
 [Original profile](https://www.tiktok.com/@katjewelry)
 
+The Vietnam Exposition Center calendar links to `@vec.expo` on Instagram and
+`@vec.global` on TikTok. The Firebeat festival site links to `@firebeat.global`
+on TikTok. Both accounts and the festival use VEC's publisher identity for
+independent-source counting. Their sites supplied account ownership evidence
+and no original post links in the sample, so they stay outside the six-site
+website scan. The Instagram profile returned fresh, review-only booth announcements
+for the same November 27–29 event. The venue listing opens at 09:00, while
+the festival's visitor guide and Hanoi's tourism portal say 10:00. The event
+remains held while the public schedules disagree.
+[VEC event listing](https://vec.global/events/hanoi-firebeat-world-festival-2026) ·
+[Festival visitor guide](https://firebeat.global/khach-tham-du) ·
+[Hanoi tourism portal](https://hanoigo.hanoi.gov.vn/event/hanoi-firebeat-world-festival-2026) ·
+[Sample booth announcement](https://www.instagram.com/p/DgEyy7qAgbL/)
+
 The Hanoi source directory now checks Yoga Lab Hanoi's public profile against
 the account linked on its own website. The profile embed tied its **Detox Your
 Posture** announcement to November 23 at 10:00 Vietnam time. The caption and
@@ -352,7 +366,7 @@ The later event dates do not make it a recent social mention.
 ## Public TikTok metadata check
 
 Run `python -m trending.tiktok_public` locally or manually dispatch **Scraper CI**
-with `public_tiktok_audit=true`. It verifies up to three creator links per city on
+with `public_tiktok_audit=true`. It verifies up to four creator links per city on
 reviewed organizer sites, calls the official profile oEmbed endpoint per distinct
 profile, and examines at most two original video pages from that creator. The
 job uses public HTTPS metadata and does not receive credentials.

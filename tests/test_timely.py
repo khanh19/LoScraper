@@ -6,7 +6,7 @@ from trending.announcements import social_sessions
 from trending.intent import queries
 from trending.model import city_from_address
 from trending.adapters import category
-from trending.discover import discover
+from trending.discover import discover, reviewed_tiktok_profiles
 from trending.http import FetchError
 from bs4 import BeautifulSoup
 
@@ -43,6 +43,33 @@ class Timely(unittest.TestCase):
         self.assertEqual(len(result['posts']),1)
         self.assertEqual(result['posts'][0]['city_hint'],'hanoi')
         self.assertTrue(result['posts'][0]['requires_provider_validation'])
+
+    def test_profile_only_source_does_not_take_a_website_scan_slot(self):
+        venue = 'https://venue.example/'
+        site = 'https://publisher.example/'
+        profile = 'https://www.tiktok.com/@venue'
+        sources = [
+            {'id': 'a-venue', 'publisher_id': 'venue', 'url': venue, 'review_evidence': venue,
+             'cities': ['hanoi'], 'categories': [], 'profiles_only': True,
+             'accounts': [{'platform': 'tiktok', 'url': profile}]},
+            {'id': 'b-publisher', 'publisher_id': 'publisher', 'url': site,
+             'cities': ['hanoi'], 'categories': [], 'accounts': []},
+        ]
+        requested = []
+
+        class Client:
+            def get(self, url, hosts):
+                requested.append(url)
+                return BeautifulSoup(f'<a href="{profile}">TikTok</a>', 'html.parser')
+
+        client = Client()
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps(sources)
+            report = discover('hanoi', client, NOW, limit=1)
+            identities = list(reviewed_tiktok_profiles('hanoi', client))
+        self.assertEqual(requested, [site, venue])
+        self.assertEqual([page['source'] for page in report['pages']], ['b-publisher'])
+        self.assertEqual([identity['url'] for identity in identities], [profile])
 
     def test_website_detail_budget_skips_calendar_files_and_locale_switches(self):
         life = 'https://lifeofdanang.com'
