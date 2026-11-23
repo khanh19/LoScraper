@@ -88,6 +88,20 @@ The gala remains outside this fallback while its second slot is unresolved.
 [St. Petersburg booking](https://hoguomopera.vn/dat-ve/127) ·
 [Don Quixote booking](https://hoguomopera.vn/dat-ve/131)
 
+November 24's rehearsal found that several individual Opera programme pages
+returned 404. Discovery now records 404 and 410 per page and continues within
+the existing limit. Three consecutive other fetch failures still stop that
+source. A response body interrupted in transit gets one retry, and only a
+complete successful response is cached. The rehearsal observed an interrupted
+TicketGo body. [Hosted rehearsal](https://github.com/khanh19/LoScraper/actions/runs/45250748714)
+
+The Opera's reviewed catalogue fallback now includes **Lang Lang Piano Recital
+in Hanoi**. Its individual programme link returns 404. Both visible slots agree
+with their corresponding booking records at 40 Hàng Bài. The sessions are
+December 18 and 20, 20:00–23:00 Vietnam time. Each run still checks both records.
+[December 18 booking](https://hoguomopera.vn/dat-ve/137) ·
+[December 20 booking](https://hoguomopera.vn/dat-ve/138)
+
 Two Hanoi sources seed reviewed public announcements directly. Varan Vietnam's
 exhibition block gives the admission dates and daily hours for Một bát thương.
 The collector creates one session for each published day. The Hoàn Kiếm

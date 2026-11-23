@@ -1296,8 +1296,13 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                 except Exception as exc:
                     failures.append({'stage':'entry','reason':fetch_failure_reason(exc)})
         except Exception as exc:
-            failures.append({"stage": "detail", "reason": fetch_failure_reason(exc)})
-            if isinstance(exc,FetchError):
+            reason = fetch_failure_reason(exc)
+            failures.append({"stage": "detail", "reason": reason})
+            if reason in {'http_404', 'http_410'}:
+                # The publisher answered. A missing detail page can be followed
+                # by a healthy listing and is still an individual failure.
+                consecutive_fetch_failures = 0
+            elif isinstance(exc, FetchError):
                 consecutive_fetch_failures += 1
                 if consecutive_fetch_failures >= 3:
                     failures.append({'stage':'detail','reason':'source_fetch_circuit_open'})

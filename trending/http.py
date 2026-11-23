@@ -15,6 +15,12 @@ from bs4 import BeautifulSoup
 
 from .model import ICT, canonical
 
+TRANSIENT_FETCH_FAILURES = {
+    'http_408', 'http_429', 'http_500', 'http_502', 'http_503', 'http_504',
+    'Timeout', 'ReadTimeout', 'ConnectTimeout', 'ConnectionError', 'TimeoutError',
+    'ChunkedEncodingError',
+}
+
 
 class FetchError(Exception):
     pass
@@ -59,7 +65,7 @@ class PublicClient:
             try:
                 return self._get_once(url, allowed_hosts, render, json_response, redirect_only)
             except FetchError as exc:
-                if attempt or str(exc) not in {'http_408','http_429','http_500','http_502','http_503','http_504','Timeout','ReadTimeout','ConnectTimeout','ConnectionError','TimeoutError'}:
+                if attempt or str(exc) not in TRANSIENT_FETCH_FAILURES:
                     raise
                 time.sleep(2)
         raise FetchError('retry_exhausted')

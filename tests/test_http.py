@@ -1,6 +1,7 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from bs4 import BeautifulSoup
+from requests.exceptions import ChunkedEncodingError
 from trending.http import PublicClient, FetchError
 from trending.adapters import VnExpress, load_sources
 
@@ -36,10 +37,44 @@ class WebsiteFetching(unittest.TestCase):
 
     def test_permanent_failure_not_retried(self):
         client=PublicClient()
-        for code in ['http_403','http_404','host_not_allowed','page_too_large','tls_handshake_failed']:
+        for code in ['http_403','http_404','http_410','host_not_allowed','page_too_large','tls_handshake_failed']:
             with patch.object(client,'_get_once',side_effect=FetchError(code)) as fetch:
                 with self.assertRaises(FetchError):client.get('https://vnexpress.net/',{'vnexpress.net'})
                 self.assertEqual(fetch.call_count,1)
+
+    def test_interrupted_body_retries_from_the_start_and_never_caches_partial_data(self):
+        url = 'https://example.org/event'
+
+        def interrupted_body(_chunk_size):
+            yield b'<h1>Incomplete page</h1>'
+            raise ChunkedEncodingError('private transport details')
+
+        def response(stream):
+            context = MagicMock()
+            context.__enter__.return_value = Mock(
+                is_redirect=False, status_code=200, headers={'Content-Type': 'text/html'},
+                iter_content=stream,
+            )
+            return context
+
+        for recovered in (True, False):
+            with self.subTest(recovered=recovered):
+                client = PublicClient()
+                self.addCleanup(client.close)
+                first = response(interrupted_body)
+                second = response((lambda _size: [b'<h1>Complete page</h1>']) if recovered else interrupted_body)
+                with (patch('trending.http.public_url', side_effect=lambda value: value),
+                      patch('trending.http.time.sleep'),
+                      patch.object(client.session, 'get', side_effect=[first, second]) as fetch):
+                    if recovered:
+                        soup = client.get(url, {'example.org'})
+                        self.assertEqual(soup.h1.string, 'Complete page')
+                        self.assertIs(client.get(url, {'example.org'}), soup)
+                    else:
+                        with self.assertRaisesRegex(FetchError, '^ChunkedEncodingError$'):
+                            client.get(url, {'example.org'})
+                        self.assertFalse(client.cache)
+                    self.assertEqual(fetch.call_count, 2)
 
     def test_browser_navigation_preserves_only_the_transport_code(self):
         client = PublicClient(browser=True)

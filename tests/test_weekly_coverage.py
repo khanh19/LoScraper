@@ -30,6 +30,22 @@ class WeeklyCoverage(unittest.TestCase):
         self.assertEqual(candidates,[])
         self.assertEqual(failures[-1]['reason'],'source_fetch_circuit_open')
 
+    def test_missing_event_pages_do_not_open_the_publisher_circuit(self):
+        urls = [f'https://example.com/event/{i}' for i in range(5)]
+        adapter = Mock(spec=['fetch', 'parse_many'])
+        adapter.fetch.side_effect = [
+            FetchError('http_404'), FetchError('http_404'), FetchError('http_410'),
+            FetchError('http_404'), BeautifulSoup('<main>Upcoming event</main>', 'html.parser'),
+        ]
+        final_candidate = candidate()
+        adapter.parse_many.return_value = [final_candidate]
+        with patch.dict('trending.adapters.CLASSES', {'test': lambda *_: adapter}):
+            candidates, failures = collect_source('test', {'seeds': []}, None, NOW,
+                                                  extra_urls=urls, existing_only=True)
+        self.assertEqual([args.args[1] for args in adapter.fetch.call_args_list], urls)
+        self.assertEqual(candidates, [final_candidate])
+        self.assertEqual([failure['reason'] for failure in failures], ['http_404', 'http_404', 'http_410', 'http_404'])
+
     def test_multiple_listings_share_detail_budget(self):
         fetched=[]
         class Adapter:
