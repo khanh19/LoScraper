@@ -9,11 +9,12 @@ User-confirmed cadence, starting **1 December 2026**, timezone **Asia/Ho_Chi_Min
 
 First full runs: December 1 and 4. First maintenance run: December 2.
 GitHub uses `0 23 * * 1,4` UTC for full runs and `0 23 * * 0,2,3,5,6` UTC for
-rechecks. Both map to 06:00 the next day in Vietnam. Each run records its most
-recent matching due slot and uses the triggering cron to choose its mode even if
-it starts after midnight. Slots before December 1 skip collection. Manual
-dispatch remains available before then. Scheduled starts can be delayed by
-GitHub. [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+rechecks. Both map to 06:00 the next day in Vietnam. Scheduled jobs derive
+the due slot from GitHub's original workflow run creation time and the
+triggering cron. Job delays and reruns of that run keep the recorded slot.
+Slots before December 1 skip collection. Missing run metadata stops a scheduled
+job before collection. Manual dispatch remains available before then. Scheduled
+starts can be delayed by GitHub. [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) · [Workflow run metadata](https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run)
 
 ## What a recheck does
 

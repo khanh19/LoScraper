@@ -52,6 +52,9 @@ jobs:
   policy:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.TRENDING_SCHEDULE_ENABLED == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
       mode: ${{ steps.policy.outputs.mode }}
     steps:
@@ -61,6 +64,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_CRON: ${{ github.event.schedule }}
           MANUAL_MODE: ${{ inputs.mode }}
+          GH_TOKEN: ${{ github.event_name == 'schedule' && github.token || '' }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             case "$MANUAL_MODE" in
@@ -68,7 +72,8 @@ jobs:
               *) echo "Invalid manual collection mode" >&2; exit 1 ;;
             esac
           else
-            python -m trending.schedule --cron "$EVENT_CRON" >> "$GITHUB_OUTPUT"
+            triggered_at=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq '.created_at')
+            python -m trending.schedule --cron "$EVENT_CRON" --triggered-at "$triggered_at" >> "$GITHUB_OUTPUT"
           fi
       - name: Record scheduled slot
         if: github.event_name == 'schedule'

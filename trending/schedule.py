@@ -1,6 +1,6 @@
 """Resolve the collection mode and local due time of a GitHub cron trigger."""
 import argparse
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from .model import ICT
 
@@ -14,13 +14,13 @@ SLOTS = {
 }
 
 
-def scheduled_collection(now: datetime, cron: str) -> tuple[str, datetime]:
-    if now.utcoffset() is None:
+def scheduled_collection(triggered_at: datetime, cron: str) -> tuple[str, datetime]:
+    if triggered_at.utcoffset() is None:
         raise ValueError('timezone_required')
     if cron not in SLOTS:
         raise ValueError('unknown_collection_cron')
     mode, weekdays = SLOTS[cron]
-    local = now.astimezone(ICT)
+    local = triggered_at.astimezone(ICT)
     due = local.replace(hour=6, minute=0, second=0, microsecond=0)
     if due > local:
         due -= timedelta(days=1)
@@ -31,6 +31,11 @@ def scheduled_collection(now: datetime, cron: str) -> tuple[str, datetime]:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cron', required=True, choices=SLOTS)
+    parser.add_argument('--triggered-at', required=True, help='Original GitHub workflow creation timestamp')
     args = parser.parse_args()
-    mode, due = scheduled_collection(datetime.now(timezone.utc), args.cron)
+    try:
+        triggered_at = datetime.fromisoformat(args.triggered_at)
+        mode, due = scheduled_collection(triggered_at, args.cron)
+    except ValueError:
+        parser.error('--triggered-at must be a valid ISO timestamp with a timezone')
     print(f'mode={mode}\ndue={due.isoformat()}')

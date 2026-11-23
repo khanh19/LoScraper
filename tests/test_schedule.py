@@ -2,6 +2,8 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import subprocess
+import sys
 from unittest.mock import patch, Mock
 from bs4 import BeautifulSoup
 from trending.schedule import FULL_CRON, REFRESH_CRON, scheduled_collection
@@ -42,6 +44,23 @@ class ScheduleTests(unittest.TestCase):
         mode, due = scheduled_collection(now, REFRESH_CRON)
         self.assertEqual(mode, 'disabled')
         self.assertEqual(due.isoformat(), '2026-11-30T06:00:00+07:00')
+
+    def test_schedule_cli_uses_original_run_time_and_rejects_missing_or_naive_time(self):
+        command = [sys.executable, '-m', 'trending.schedule', '--cron', FULL_CRON]
+        root = Path(__file__).resolve().parents[1]
+        for created_at, expected in (
+            ('2026-11-26T23:02:01Z', 'mode=disabled\ndue=2026-11-27T06:00:00+07:00\n'),
+            ('2026-11-30T23:02:01Z', 'mode=full\ndue=2026-12-01T06:00:00+07:00\n'),
+        ):
+            with self.subTest(created_at=created_at):
+                result = subprocess.run(command + ['--triggered-at', created_at], cwd=root,
+                                        capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout, expected)
+        for options in ([], ['--triggered-at', '2026-11-30T23:02:01'], ['--triggered-at', 'null']):
+            with self.subTest(options=options):
+                result = subprocess.run(command + options, cwd=root, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, '')
 
     def test_workflow_declares_each_recognized_trigger(self):
         workflow = Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml'
