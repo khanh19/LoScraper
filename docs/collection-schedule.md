@@ -116,15 +116,19 @@ database secret and enable switch are still absent.
 4. Set `TRENDING_STAGING_DATABASE_URL` for manual writes to the isolated staging
    feed with `sslmode=verify-full`. For Supabase, set
    `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published root certificate.
-   Select `check-staging` under `staging_collection` to verify TLS and read the feed
-   counts without starting a collection. Select `full`, then `refresh` for the
+   Select `check-staging` under `staging_collection` to verify TLS, check the
+   collector connection and selected write grants, and read the feed counts.
+   This runs without starting a collection. Select `full`, then `refresh` for the
    staging writes. Check stable IDs, timestamps and health without erasing data.
 5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
    secrets with `sslmode=verify-full`. Use **TRENDING_DATABASE_ROOT_CA** when the
    target uses its own CA. Once the workflow is on `main`, dispatch it with
    `mode=check-scheduled` while the enable variable is still off. Compare the
    read-only coverage summary against the intended deployment. Every scheduled
-   run repeats this TLS and feed snapshot check before starting collection.
+   run repeats this check before starting collection. The check rejects replicas
+   and read-only connections. It uses PostgreSQL EXPLAIN without ANALYZE for
+   receipt inserts, receipt updates, and session replacement. The manual full
+   and refresh runs still verify actual writes and row access.
 6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
    Keep both database secrets separate from the legacy workflow target.
 

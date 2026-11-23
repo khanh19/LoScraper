@@ -4,6 +4,8 @@ import argparse
 import os
 from urllib.parse import urlsplit
 
+from psycopg.errors import InsufficientPrivilege
+
 SECTION_TARGETS = {'hanoi': {'weekly':14,'planning':7},
                    'hcmc': {'weekly':18,'planning':7},
                    'danang': {'weekly':12,'planning':5}}
@@ -84,6 +86,32 @@ def markdown_coverage(results, now):
     return '\n'.join(lines)
 
 
+def collector_write_blocker(db):
+    state = db.execute("""SELECT pg_is_in_recovery() AS replica,
+        current_setting('transaction_read_only') = 'on' AS read_only""").fetchone()
+    if state['replica']:
+        return 'replica'
+    if state['read_only']:
+        return 'read_only_connection'
+
+    # EXPLAIN without ANALYZE checks permissions without executing the writes.
+    # Probe both receipt recording and the collector's session replacement.
+    probes = (
+        ('receipt_insert', 'INSERT INTO public.discovery_ingestion_runs (id) SELECT NULL::uuid WHERE false'),
+        ('receipt_update', "UPDATE public.discovery_ingestion_runs SET status='running' WHERE id IS NULL"),
+        ('session_replace', 'DELETE FROM public.discovery_occurrences WHERE observation_id IS NULL'),
+    )
+    stage = 'collector'
+    try:
+        with db.transaction():
+            db.execute('SET TRANSACTION READ ONLY')
+            for stage, statement in probes:
+                db.execute('EXPLAIN (COSTS OFF) ' + statement)
+    except InsufficientPrivilege:
+        return stage + '_forbidden'
+    return None
+
+
 def main():
     import psycopg
     from psycopg.conninfo import conninfo_to_dict
@@ -91,6 +119,7 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--require-verified-tls', action='store_true')
+    parser.add_argument('--check-collector-writes', action='store_true')
     args = parser.parse_args()
     try:
         url = os.environ.get('DATABASE_URL', '')
@@ -102,7 +131,14 @@ def main():
             raise SystemExit(1)
         with psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row) as db:
             db.execute("SET statement_timeout = '30s'")
+            if args.check_collector_writes:
+                blocker = collector_write_blocker(db)
+                if blocker:
+                    print(f'Discovery target check failed ({blocker}).')
+                    raise SystemExit(1)
             result, now = read_coverage(db)
+        if args.check_collector_writes:
+            print('Collector connection and receipt/session grants passed read-only checks.\n')
         print(markdown_coverage(result, now))
     except (KeyError, ValueError, psycopg.Error) as exc:
         print(f'Verified discovery coverage unavailable ({type(exc).__name__}).')

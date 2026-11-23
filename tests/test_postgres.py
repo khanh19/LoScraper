@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 import psycopg
 
 from trending.model import CONFIRMED_SCHEDULE_CONFLICT, Occurrence
-from trending.coverage import read_coverage
+from trending.coverage import collector_write_blocker, read_coverage
 from trending.__main__ import run
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
@@ -105,6 +105,18 @@ class Persistence(unittest.TestCase):
         self.assertEqual(counts['hanoi']['sections'], {'weekly': 1, 'planning': 1})
         self.assertEqual(counts['hanoi']['items_by_supporting_platform'], {'instagram': 1, 'tiktok': 0})
         self.assertEqual(counts['danang']['sections'], {'weekly': 0, 'planning': 0})
+
+    def test_coverage_only_connection_cannot_pass_collector_preflight(self):
+        db = self.store.db
+        self.assertIsNone(collector_write_blocker(db))
+        self.assertEqual(db.execute('SELECT count(*) AS count FROM discovery_ingestion_runs').fetchone()['count'], 0)
+        db.execute('SET default_transaction_read_only = on')
+        try:
+            coverage, _ = read_coverage(db)
+            self.assertEqual(set(coverage), {'hanoi', 'hcmc', 'danang'})
+            self.assertEqual(collector_write_blocker(db), 'read_only_connection')
+        finally:
+            db.execute('RESET default_transaction_read_only')
 
     def test_ticketbox_location_correction_preserves_observation_and_other_cards(self):
         legacy = candidate()

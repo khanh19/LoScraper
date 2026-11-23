@@ -121,12 +121,12 @@ jobs:
           fi
           case "$MODE" in
             check-staging|check-scheduled)
-              python -m trending.coverage --require-verified-tls | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 0
+              python -m trending.coverage --require-verified-tls --check-collector-writes | tee -a "$GITHUB_STEP_SUMMARY"
+              exit $?
               ;;
           esac
           if [ "$EVENT_NAME" = "schedule" ]; then
-            if ! preflight=$(python -m trending.coverage --require-verified-tls); then
+            if ! preflight=$(python -m trending.coverage --require-verified-tls --check-collector-writes); then
               printf '%s\n' "$preflight" | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
