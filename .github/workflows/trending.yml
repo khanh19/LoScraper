@@ -102,6 +102,7 @@ jobs:
           STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}
           SCHEDULE_DATABASE_URL: ${{ secrets.TRENDING_DATABASE_URL }}
           SCHEDULE_DATABASE_ROOT_CA: ${{ secrets.TRENDING_DATABASE_ROOT_CA }}
+          SCHEDULE_DATABASE_TARGET: ${{ vars.TRENDING_SCHEDULE_TARGET_SHA256 }}
           EVENT_NAME: ${{ github.event_name }}
           MODE: ${{ needs.policy.outputs.mode }}
           INPUT_CITY: ${{ inputs.city }}
@@ -111,6 +112,7 @@ jobs:
           database_root_ca=
           if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "check-scheduled" ]; then
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
+            export LO_DISCOVERY_DATABASE_TARGET="$SCHEDULE_DATABASE_TARGET"
             database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
           elif [ "$INPUT_PILOT" = "true" ] && [ "$MODE" != "check-staging" ]; then
             unset DATABASE_URL
@@ -131,10 +133,8 @@ jobs:
               ;;
           esac
           if [ "$EVENT_NAME" = "schedule" ]; then
-            if ! preflight=$(python -m trending.coverage --require-verified-tls --check-collector-writes); then
-              printf '%s\n' "$preflight" | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
+            python -m trending.coverage --require-verified-tls --check-collector-writes --require-target-match \
+              | tee -a "$GITHUB_STEP_SUMMARY" || exit 1
           elif [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
             echo "Missing collection database configuration" >&2
             exit 1

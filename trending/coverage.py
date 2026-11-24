@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 from psycopg.errors import InsufficientPrivilege
 
-from .store import WEBSITE_COLLECTION_PLANS
+from .store import DatabaseTargetError, WEBSITE_COLLECTION_PLANS, database_target, validate_expected_target
 
 SECTION_TARGETS = {'hanoi': {'weekly':14,'planning':7},
                    'hcmc': {'weekly':18,'planning':7},
@@ -116,6 +116,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--require-verified-tls', action='store_true')
     parser.add_argument('--check-collector-writes', action='store_true')
+    parser.add_argument('--require-target-match', action='store_true',
+                        help='Require the verified LO_DISCOVERY_DATABASE_TARGET before connecting')
     args = parser.parse_args()
     try:
         url = os.environ.get('DATABASE_URL', '')
@@ -125,7 +127,11 @@ def main():
         if args.require_verified_tls and conninfo_to_dict(url).get('sslmode') != 'verify-full':
             print('Discovery target check failed (verify_full_required).')
             raise SystemExit(1)
+        expected = os.environ.get('LO_DISCOVERY_DATABASE_TARGET') or None
+        if expected or args.require_target_match:
+            validate_expected_target(expected)
         with psycopg.connect(url, connect_timeout=10, autocommit=True, row_factory=dict_row) as db:
+            fingerprint = database_target(db, expected) if expected or args.check_collector_writes else None
             db.execute("SET statement_timeout = '30s'")
             if args.check_collector_writes:
                 blocker = collector_write_blocker(db)
@@ -135,7 +141,11 @@ def main():
             result, now = read_coverage(db)
         if args.check_collector_writes:
             print('Collector connection and website collection grants passed read-only planning checks.\n')
+            print(f'Discovery database target SHA-256 `{fingerprint}`.\n')
         print(markdown_coverage(result, now))
+    except DatabaseTargetError as exc:
+        print(f'Discovery target check failed ({exc}).')
+        raise SystemExit(1) from None
     except (KeyError, ValueError, psycopg.Error) as exc:
         print(f'Verified discovery coverage unavailable ({type(exc).__name__}).')
         raise SystemExit(1) from None

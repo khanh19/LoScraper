@@ -188,7 +188,7 @@ evidence cannot overwrite the current status. [Notification collector PR](https:
 The November 23 check found that `main` still contains only the legacy scraper
 workflow. The reviewed schedule and its staging rehearsals are in the
 open PR stack. The repository has the staging database secrets. The scheduled
-database secret and enable switch are still absent.
+database secret, target fingerprint and enable switch are still absent.
 
 1. Review PR #6 and its follow-ups. Before the workflow reaches `main`, dispatch
    **Scraper CI** on the reviewed staging branch. The `staging_collection` input
@@ -211,11 +211,18 @@ database secret and enable switch are still absent.
 5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
    secrets with `sslmode=verify-full`. Use **TRENDING_DATABASE_ROOT_CA** when the
    target uses its own CA. Once the workflow is on `main`, dispatch it with
-   `mode=check-scheduled` while the enable variable is still off. Compare the
-   read-only coverage summary against the intended deployment. Every scheduled
-   run repeats this check before starting collection. The check rejects replicas
-   and read-only connections. It plans the collector's website statements with
-   PostgreSQL EXPLAIN in a read-only transaction. It covers source registration,
+   `mode=check-scheduled` while the enable variable is still off. Verify that the
+   endpoint, database and collector login match the feed deployment's approved
+   configuration. Copy the summary's SHA-256 into repository variable
+   **TRENDING_SCHEDULE_TARGET_SHA256**, then rerun `check-scheduled` to confirm it.
+   The fingerprint reflects the connected host, port, database and login. It
+   excludes credentials, so password rotation keeps the same fingerprint.
+   Recheck against the deployment before approving a changed endpoint or login.
+   Scheduled runs require the fingerprint and compare it before querying the feed.
+   The collector checks it again on its write connection and on reconnect.
+   Preflight also rejects replicas and read-only connections. It plans the
+   collector's website statements with PostgreSQL EXPLAIN in a read-only
+   transaction. It covers source registration,
    image permissions, recheck selection, place matching, item and observation
    writes, session replacement, and receipt and item cleanup. The manual full
    and refresh runs still verify actual writes and row access, including policies

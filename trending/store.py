@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha256
+import json
+import re
 from uuid import uuid4
 
 import psycopg
@@ -92,9 +95,33 @@ WEBSITE_COLLECTION_PLANS = (
 )
 
 
+class DatabaseTargetError(ValueError):
+    pass
+
+
+def validate_expected_target(expected):
+    if not expected:
+        raise DatabaseTargetError('missing_database_target')
+    if not re.fullmatch(r'[a-f0-9]{64}', expected):
+        raise DatabaseTargetError('invalid_database_target')
+
+
+def database_target(db, expected=None):
+    """Identify the connected endpoint and login without exposing connection values."""
+    info = db.info
+    identity = ['lo-discovery-target-v1', info.host.lower().rstrip('.'), info.port, info.dbname, info.user]
+    fingerprint = sha256(json.dumps(identity, separators=(',', ':')).encode()).hexdigest()
+    if expected is not None and fingerprint != expected:
+        raise DatabaseTargetError('database_target_mismatch')
+    return fingerprint
+
+
 class Store:
-    def __init__(self, url):
+    def __init__(self, url, *, expected_target=None):
         self.url = url
+        self.expected_target = expected_target
+        if expected_target is not None:
+            validate_expected_target(expected_target)
         self.initial_reconnect = False
         try:
             self.db = self._connect()
@@ -105,9 +132,11 @@ class Store:
     def _connect(self):
         db = psycopg.connect(self.url, connect_timeout=10, autocommit=True, row_factory=dict_row)
         try:
+            if self.expected_target is not None:
+                database_target(db, self.expected_target)
             # A pooled session may retain older role defaults. Set the guard for each connection.
             db.execute("SET idle_in_transaction_session_timeout = '60s'")
-        except psycopg.Error:
+        except (DatabaseTargetError, psycopg.Error):
             db.close()
             raise
         return db

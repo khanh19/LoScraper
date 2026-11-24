@@ -13,7 +13,7 @@ from .adapters import CLASSES, collect_source, load_sources, supplemental_links
 from .http import PublicClient
 from .model import CITIES, CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION
 from .providers import BrightSocial, ProviderDisabled, SerpDiscovery, post_platform, social_evidence
-from .store import Store
+from .store import DatabaseTargetError, Store
 from .progress import Progress
 
 
@@ -63,7 +63,9 @@ def run(args):
         if len(matched) != 1:
             raise ValueError('Lead must match exactly one selected source')
         lead_map[matched[0]].append(lead)
-    store = Store(url) if url and (args.write_db or args.providers) else None
+    store = None
+    if url and (args.write_db or args.providers):
+        store = Store(url, expected_target=os.environ.get('LO_DISCOVERY_DATABASE_TARGET'))
     client = PublicClient(browser=args.browser)
     progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES),
                         mode="refresh_existing" if refresh else "discovery")
@@ -270,6 +272,9 @@ def main():
         load_env_files(args.env_file)
         report = run(args)
         raise SystemExit({'complete':0,'partial':2,'failed':1}[report.get('status','complete')])
+    except DatabaseTargetError as exc:
+        print(json.dumps({'status': 'failed', 'reason': str(exc)}))
+        raise SystemExit(1) from None
     except (Exception, KeyboardInterrupt) as exc:
         # Connection/provider exceptions may contain credentials: only print their class.
         print(json.dumps({'status':'failed','reason':type(exc).__name__}))
