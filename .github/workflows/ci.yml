@@ -23,14 +23,14 @@ on:
         type: string
         default: ''
       staging_collection:
-        description: Rehearse website collection or check the isolated staging target
+        description: Rehearse staging collection or run a read-only database check
         type: choice
-        options: [none, full, refresh, check-staging]
+        options: [none, full, refresh, check-staging, inspect-scheduled, check-scheduled]
         default: none
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.staging_collection == 'check-staging' && 'preflight' || github.event_name == 'workflow_dispatch' && 'manual' || 'checks' }}-${{ inputs.review_commit || 'current' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.staging_collection || 'checks' }}-${{ inputs.review_commit || 'current' }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
@@ -39,7 +39,8 @@ jobs:
     # A standalone target check verifies TLS, permissions and counts. It
     # never starts the media pipeline or writes to the staging feed.
     if: >-
-      github.event_name != 'workflow_dispatch' || inputs.staging_collection != 'check-staging' ||
+      github.event_name != 'workflow_dispatch' ||
+      !contains(fromJSON('["check-staging","inspect-scheduled","check-scheduled"]'), inputs.staging_collection) ||
       inputs.review_commit != '' || inputs.public_tiktok_audit || inputs.public_tiktok_video_url != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -106,7 +107,8 @@ jobs:
     name: Isolated staging collection
     if: >-
       ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.review_commit == '' &&
-      inputs.staging_collection != 'none' && (needs.unit.result == 'success' ||
+      contains(fromJSON('["full","refresh","check-staging"]'), inputs.staging_collection) &&
+      (needs.unit.result == 'success' ||
       (inputs.staging_collection == 'check-staging' && needs.unit.result == 'skipped')) }}
     needs: unit
     # Reusable workflows may restrict the caller's token but cannot add permissions.
@@ -121,6 +123,21 @@ jobs:
     secrets:
       TRENDING_STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
       TRENDING_STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}
+
+  scheduled_target:
+    name: Read-only scheduled target
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.review_commit == '' &&
+      contains(fromJSON('["inspect-scheduled","check-scheduled"]'), inputs.staging_collection)
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/trending.yml
+    with:
+      mode: ${{ inputs.staging_collection }}
+    secrets:
+      TRENDING_DATABASE_URL: ${{ secrets.TRENDING_DATABASE_URL }}
+      TRENDING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_DATABASE_ROOT_CA }}
 
   public_tiktok:
     name: Review public TikTok metadata

@@ -1,9 +1,12 @@
 import unittest
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
+from textwrap import dedent
 from unittest.mock import patch, Mock
 from bs4 import BeautifulSoup
 from trending.schedule import FULL_CRON, REFRESH_CRON, scheduled_collection
@@ -66,6 +69,45 @@ class ScheduleTests(unittest.TestCase):
         workflow = Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml'
         self.assertEqual(set(re.findall(r"^\s+- cron: '([^']+)'$", workflow.read_text(), re.M)),
                          {FULL_CRON, REFRESH_CRON})
+
+    def test_workflow_preflights_use_the_intended_target_and_never_collect(self):
+        workflow = Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml'
+        step = workflow.read_text().split('- name: Collect and validate\n', 1)[1]
+        script = dedent(step.split('        run: |\n', 1)[1].split('\n      #', 1)[0])
+        # Fail the preflight in every case. Even a scheduled run must stop before a write.
+        recorder = """python() {
+          printf '%s\\n' "$DATABASE_URL" "${LO_DISCOVERY_DATABASE_TARGET:-}" "$*"
+          return 1
+        }
+        """
+        base_args = '-m trending.coverage --require-verified-tls --check-collector-writes'
+        cases = (
+            ('workflow_dispatch', 'check-staging', 'stage', '', base_args),
+            ('workflow_dispatch', 'inspect-scheduled', 'scheduled', 'pin', base_args),
+            ('workflow_dispatch', 'check-scheduled', 'scheduled', 'pin', base_args + ' --require-target-match'),
+            ('schedule', 'full', 'scheduled', 'pin', base_args + ' --require-target-match'),
+            ('schedule', 'refresh', 'scheduled', 'pin', base_args + ' --require-target-match'),
+        )
+        with TemporaryDirectory() as folder:
+            for event, mode, target, pin, args in cases:
+                with self.subTest(event=event, mode=mode):
+                    summary = Path(folder) / 'summary'
+                    if summary.exists():
+                        summary.unlink()
+                    env = {
+                        'PATH': os.environ['PATH'],
+                        'EVENT_NAME': event,
+                        'MODE': mode,
+                        'INPUT_PILOT': 'false',
+                        'STAGING_DATABASE_URL': 'stage',
+                        'SCHEDULE_DATABASE_URL': 'scheduled',
+                        'SCHEDULE_DATABASE_TARGET': 'pin',
+                        'GITHUB_STEP_SUMMARY': str(summary),
+                    }
+                    result = subprocess.run(['bash', '-s'], input=recorder + script, env=env,
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertEqual(summary.read_text().splitlines(), [target, pin, args])
 
     def test_existing_checks_skip_listings_and_followup_discovery(self):
         config={'seeds':['https://example.com/list'],'hosts':['example.com']}

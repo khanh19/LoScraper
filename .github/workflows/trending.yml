@@ -10,7 +10,7 @@ on:
       mode:
         description: Collect website evidence or inspect a database target read-only
         type: choice
-        options: [full, refresh, check-staging, check-scheduled]
+        options: [full, refresh, check-staging, inspect-scheduled, check-scheduled]
         default: full
       city:
         description: City (all collects all three)
@@ -68,7 +68,7 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             case "$MANUAL_MODE" in
-              full|refresh|check-staging|check-scheduled) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
+              full|refresh|check-staging|inspect-scheduled|check-scheduled) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
               *) echo "Invalid manual collection mode" >&2; exit 1 ;;
             esac
           else
@@ -94,6 +94,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+        if: needs.policy.outputs.mode == 'full' || needs.policy.outputs.mode == 'refresh'
       - run: python -m playwright install --with-deps chromium
         if: needs.policy.outputs.mode == 'full' || needs.policy.outputs.mode == 'refresh'
       - name: Collect and validate
@@ -110,7 +111,7 @@ jobs:
         run: |
           set -o pipefail
           database_root_ca=
-          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "check-scheduled" ]; then
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "inspect-scheduled" ] || [ "$MODE" = "check-scheduled" ]; then
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
             export LO_DISCOVERY_DATABASE_TARGET="$SCHEDULE_DATABASE_TARGET"
             database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
@@ -126,14 +127,18 @@ jobs:
             printf '%s\n' "$database_root_ca" > "$database_ca_path"
             export PGSSLROOTCERT="$database_ca_path"
           fi
+          coverage_args=(--require-verified-tls --check-collector-writes)
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "check-scheduled" ]; then
+            coverage_args+=(--require-target-match)
+          fi
           case "$MODE" in
-            check-staging|check-scheduled)
-              python -m trending.coverage --require-verified-tls --check-collector-writes | tee -a "$GITHUB_STEP_SUMMARY"
+            check-staging|inspect-scheduled|check-scheduled)
+              python -m trending.coverage "${coverage_args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
               exit $?
               ;;
           esac
           if [ "$EVENT_NAME" = "schedule" ]; then
-            python -m trending.coverage --require-verified-tls --check-collector-writes --require-target-match \
+            python -m trending.coverage "${coverage_args[@]}" \
               | tee -a "$GITHUB_STEP_SUMMARY" || exit 1
           elif [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
             echo "Missing collection database configuration" >&2
