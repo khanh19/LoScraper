@@ -668,3 +668,29 @@ The public scan covered all three cities and published zero social cards. One
 Hanoi Grapevine page failed its TLS handshake during the local lead scan.
 Public TikTok search remained inaccessible. These checks used zero metered
 provider requests.
+
+### November 24 · Latest Instagram leads and TikTok public rankings
+
+The public profile scan covered Hà Nội, TP.HCM, and Đà Nẵng. Original post
+previews confirmed the accounts and the counts below at 10:31 Vietnam time.
+Publication times use the profile timestamp converted to Vietnam time. This
+single engagement snapshot cannot establish growth or popularity.
+
+| City | Original post and publication | Likes / comments | Evidence and disposition |
+| --- | --- | ---: | --- |
+| Hà Nội | [COMPLEX 01](https://www.instagram.com/p/DgG8Sk9zQEB/) · 24 Nov 10:02 | 8 / 1 | The venue announces *Đêm độc thoại* for 27 Nov, 19:30–21:00. Its [venue site](https://complex01.vn/) links to the account and confirms the Tây Sơn address. The event-specific booking link remains unverified. Held for review. |
+| TP.HCM | [Saigon Outcast](https://www.instagram.com/p/DgG5NUnAVuG/) · 24 Nov 09:34 | 8 / 0 | The venue announces a demo opening from 25 Nov, 08:00–22:00 daily. The [venue site](https://www.saigonoutcast.com/) carries prior material for the location. Treat the opening hours as a place lead pending corroboration. |
+| Đà Nẵng | [Life of Da Nang](https://www.instagram.com/p/Df9uyeKmpqd/) · 20 Nov 20:10 | 16 / 0 | The post identifies the Cầu Rồng show at 21:00 Friday through Sunday. The [event listing](https://lifeofdanang.com/danang/weekly-dragon-bridge-fire) gives 27–29 Nov at Cầu Rồng over the Hàn River and links to the [city tourism source](https://danangfantasticity.com/en/cau-rong-phun-lua-va-nuoc). Corroborated for review. |
+
+The [Da Nang Tourism recap](https://www.instagram.com/p/DgF1l-qhMWN/) mentions
+a holiday date beside coverage of a past arts program. The schedule parser now
+recognizes the Vietnamese recap wording before reading dates. The regression
+also covers a fully written holiday date, which the previous parser returned
+as an event session.
+
+TikTok Creative Center's public preview for Vietnam, Last 7 days, Lifestyle &
+Leisure, sorted by highest engagement, showed four videos without a relevant
+local outing. Its View more action required sign-in. That route produced zero
+fresh TikTok candidates for verification. Across the three city scans there
+were zero metered requests and zero social cards published.
+[TikTok Creative Center](https://ads.tiktok.com/creative/creativeCenter/trends/video?region=VN&period=7)

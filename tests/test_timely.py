@@ -28,6 +28,20 @@ class Timely(unittest.TestCase):
             sessions,reason=social_sessions(f'Triển lãm 07/11/2026 {separator} 27/12/2026 09:00 - 17:00',NOW.isoformat())
             self.assertEqual(sessions,[])
             self.assertEqual(reason,'unresolved_individual_sessions')
+
+    def test_vietnamese_recap_with_a_holiday_date_is_not_a_session(self):
+        published = '2026-11-23T16:43:49+00:00'
+        recap = 'Cùng xem lại những khoảnh khắc của chương trình nghệ thuật.'
+        for date in ('24/11', '24/11/2026'):
+            with self.subTest(date=date):
+                caption = f'Chào mừng Ngày Văn hóa Việt Nam ({date}).\n\n{recap}'
+                self.assertEqual(social_sessions(caption, published), ([], 'past_recap'))
+        sessions, reason = social_sessions(
+            'Xem lại thông tin đăng ký workshop 27/11/2026 19:30 - 21:00', published,
+        )
+        self.assertIsNone(reason)
+        self.assertEqual([session.starts_at for session in sessions], ['2026-11-27T19:30:00+07:00'])
+
     def test_intents_are_not_location_evidence(self):
         q=queries('hcmc',{'music':5})
         self.assertNotEqual(q[0]['category'],'music');self.assertTrue(q[0]['variants'])

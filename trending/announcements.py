@@ -19,7 +19,8 @@ def social_sessions(text, published_at):
         lambda date: f'{date[1]}/{date[2]}' + (f'/{date[3]}' if date[3] and len(date[3]) == 4 else ''),
         value,
     )
-    if re.search(r'\b(recap|da dien ra|nhin lai|throwback)\b',value):return [],'past_recap'
+    if re.search(r'\b(recap|da dien ra|nhin lai|throwback|xem lai\s+(?:nhung\s+)?khoanh khac)\b', value):
+        return [], 'past_recap'
     # Anniversary posts can carry a fully written founding date alongside the
     # event date. Only remove dates that are explicitly labeled this way.
     value=re.sub(r'\bthanh lap\s+(?:vao\s+)?ngay\s+\d{1,2}/\d{1,2}/20\d{2}\b', '', value)
