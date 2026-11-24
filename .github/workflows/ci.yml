@@ -62,7 +62,23 @@ jobs:
           printf 'Scraper commit under test\n\n' >> "$GITHUB_STEP_SUMMARY"
           git rev-parse HEAD | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install media test dependency
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+            exit 0
+          fi
+          ubuntu_sources=/etc/apt/sources.list.d/ubuntu.sources
+          if [[ -f "$ubuntu_sources" ]]; then
+            # Some EC2 mirrors stalled for the entire job on Resolute packages.
+            # Keep the runner's suites, architectures and Ubuntu signing key.
+            sudo sed -Ei '/^URIs:/s@https?://[a-z0-9.-]+\.ec2\.archive\.ubuntu\.com/ubuntu/?([[:space:]]|$)@https://archive.ubuntu.com/ubuntu/\1@g' "$ubuntu_sources"
+          fi
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg
+          command -v ffmpeg
+          command -v ffprobe
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
