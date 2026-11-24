@@ -30,12 +30,17 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'checks' }}-${{ inputs.review_commit || 'current' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.staging_collection == 'check-staging' && 'preflight' || github.event_name == 'workflow_dispatch' && 'manual' || 'checks' }}-${{ inputs.review_commit || 'current' }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   unit:
     name: Offline scraper tests
+    # A standalone target check verifies TLS, permissions and counts. It
+    # never starts the media pipeline or writes to the staging feed.
+    if: >-
+      github.event_name != 'workflow_dispatch' || inputs.staging_collection != 'check-staging' ||
+      inputs.review_commit != '' || inputs.public_tiktok_audit || inputs.public_tiktok_video_url != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -72,7 +77,10 @@ jobs:
 
   staging_collection:
     name: Isolated staging collection
-    if: github.event_name == 'workflow_dispatch' && inputs.review_commit == '' && inputs.staging_collection != 'none'
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.review_commit == '' &&
+      inputs.staging_collection != 'none' && (needs.unit.result == 'success' ||
+      (inputs.staging_collection == 'check-staging' && needs.unit.result == 'skipped')) }}
     needs: unit
     # Reusable workflows may restrict the caller's token but cannot add permissions.
     permissions:

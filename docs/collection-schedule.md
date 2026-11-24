@@ -206,8 +206,10 @@ database secret, target fingerprint and enable switch are still absent.
    `TRENDING_STAGING_DATABASE_ROOT_CA` to the project's published root certificate.
    Select `check-staging` under `staging_collection` to verify TLS, check the
    collector connection and website collection grants, and read the feed counts.
-   This runs without starting a collection. Select `full`, then `refresh` for the
-   staging writes. Check stable IDs, timestamps and health without erasing data.
+   A standalone preflight runs without installing the media test dependency
+   or starting a collection. Select `full`, then `refresh` for the staging
+   writes. Those modes require the full CI suite first. Check stable IDs,
+   timestamps and health without erasing data.
 5. Store the verified scheduled feed target as **TRENDING_DATABASE_URL** in Actions
    secrets with `sslmode=verify-full`. Use **TRENDING_DATABASE_ROOT_CA** when the
    target uses its own CA. Once the workflow is on `main`, dispatch it with
