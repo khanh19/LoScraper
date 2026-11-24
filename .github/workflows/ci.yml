@@ -68,14 +68,25 @@ jobs:
           if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
             exit 0
           fi
-          ubuntu_sources=/etc/apt/sources.list.d/ubuntu.sources
-          if [[ -f "$ubuntu_sources" ]]; then
-            # Some EC2 mirrors stalled for the entire job on Resolute packages.
-            # Keep the runner's suites, architectures and Ubuntu signing key.
-            sudo sed -Ei '/^URIs:/s@https?://[a-z0-9.-]+\.ec2\.archive\.ubuntu\.com/ubuntu/?([[:space:]]|$)@https://archive.ubuntu.com/ubuntu/\1@g' "$ubuntu_sources"
-          fi
-          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
-          sudo apt-get "${apt_options[@]}" update
+          # Use the signed Ubuntu archive for this install. Runner images may
+          # load a regional mirror from several differently named source files.
+          source /etc/os-release
+          ubuntu_sources="$RUNNER_TEMP/lo-media.sources"
+          printf '%s\n' \
+            'Types: deb' \
+            'URIs: https://archive.ubuntu.com/ubuntu/' \
+            "Suites: ${VERSION_CODENAME:?} $VERSION_CODENAME-updates" \
+            'Components: main universe' \
+            'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+            '' \
+            'Types: deb' \
+            'URIs: https://security.ubuntu.com/ubuntu/' \
+            "Suites: $VERSION_CODENAME-security" \
+            'Components: main universe' \
+            'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > "$ubuntu_sources"
+          apt_options=(-o "Dir::Etc::sourcelist=$ubuntu_sources" -o Dir::Etc::sourceparts=-
+                       -o Acquire::Languages=none -o Acquire::Retries=2 -o Acquire::https::Timeout=15)
+          sudo apt-get "${apt_options[@]}" --no-list-cleanup update
           sudo apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg
           command -v ffmpeg
           command -v ffprobe
