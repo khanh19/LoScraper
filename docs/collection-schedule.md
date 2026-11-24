@@ -190,9 +190,13 @@ workflow. The reviewed schedule and its staging rehearsals are in the
 open PR stack. The repository has the staging database secrets. The scheduled
 database secret, target fingerprint and enable switch are still absent.
 
-1. Review PR #6 and its follow-ups. Before the workflow reaches `main`, dispatch
-   **Scraper CI** on the reviewed staging branch. The `staging_collection` input
-   calls that branch's workflow with the two staging secrets.
+1. Review the stack through [PR #13](https://github.com/khanh19/LoScraper/pull/13).
+   The earlier branches contain a daily full-collection trigger. Keep the enable
+   switch off until `main` contains the Tuesday and Friday full slots, the
+   other daily recheck slots, and the December 1 start guard. Before the workflow
+   reaches `main`, dispatch **Scraper CI** on the reviewed staging branch. The
+   `staging_collection` input calls that branch's workflow with the two
+   staging secrets.
 2. Apply all discovery migrations to the intended feed database and verify the app
    backend reads that same database. The coverage summary needs backend migration
    `20261123100000_discovery_coverage_snapshot.sql` and `EXECUTE` on

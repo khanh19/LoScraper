@@ -107,6 +107,22 @@ class SocialDiscoveryTests(unittest.TestCase):
         self.assertIsNone(rows[1]['published_at'])
         self.assertTrue(all(row['requires_provider_validation'] for row in rows))
 
+    def test_streamed_text_uses_byte_length_before_the_next_json_row(self):
+        post_url = 'https://www.tiktok.com/@venue/video/731'
+        text_only_url = 'https://www.tiktok.com/@venue/video/732'
+        prose = 'Xóm Hạ Hồi ☕\n' + 'a:' + json.dumps({'url': text_only_url}) + '\nXem thêm'
+        following = 'e:' + json.dumps({'url': post_url}) + '\n'
+        wire = f'd:T{len(prose.encode("utf-8")):x},' + prose + following
+        boundary = wire.index('Xem thêm') + 3
+        markup = ''.join(
+            '<script>self.__next_f.push(' + json.dumps([1, part]) + ')</script>'
+            for part in (wire[:boundary], wire[boundary:])
+        )
+        row, = extract_posts(markup, 'https://example.com/event', NOW)
+        self.assertEqual(row['url'], post_url)
+        self.assertIsNone(row['published_at'])
+        self.assertTrue(row['requires_provider_validation'])
+
     def test_repeated_post_prefers_dated_page_and_reel_link(self):
         links = {}
         embed, = extract_posts('<a href="https://www.instagram.com/venue/reel/valid/">Reel</a>',

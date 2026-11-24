@@ -440,6 +440,18 @@ freshness filter, deduplication, and per-page result bound. A link found in
 page data still needs a publication date from the platform and verified venue
 evidence before promotion.
 
+On November 24, three public guide pages placed JSON records immediately
+after length-prefixed text. Reading the stream as newline-delimited JSON
+missed those records. The extractor now advances by the text frame's UTF-8
+byte length. It recovered 7 original TikTok links for Hà Nội, 5 for TP.HCM,
+and 4 for Đà Nẵng, from zero on each page before the fix. A read of all 16
+original posts confirmed 15 were outside seven days (2022–2025). The
+remaining post had no verifiable publication time and stayed in review.
+The audit used zero metered requests and published zero cards.
+[Hà Nội guide](https://airial.travel/attractions/vietnam/xom-ha-hoi-V2vzPEOE) ·
+[TP.HCM guide](https://airial.travel/attractions/vietnam/nguyen-hue-walking-street-XMOzHhP7) ·
+[Đà Nẵng guide](https://airial.travel/attractions/vietnam/helio-night-market-da-nang-o72b-VMm)
+
 On 23 November, the public ANs Vegetarian Cuisine page yielded seven original
 TikTok permalinks from its inline data. The same page and clock yielded zero
 links with the previous parser. The page supplied no publication dates, so

@@ -15,6 +15,9 @@ from .providers import post_platform
 TIKTOK_MAIN_HOSTS = {'tiktok.com', 'www.tiktok.com'}
 TIKTOK_SHORT_HOSTS = {'vm.tiktok.com', 'vt.tiktok.com'}
 MAX_SHARE_LINKS = 3
+FLIGHT_ROW_ID = re.compile(rb'[0-9a-f]+:')
+FLIGHT_ROW_LENGTH = re.compile(rb'[0-9a-f]{1,16},')
+FLIGHT_LENGTH_TAGS = b'TAOoUSsLlGgMmV'
 
 
 def tiktok_share_url(url):
@@ -131,16 +134,29 @@ def inline_records(soup):
               and record[0] == 1 and isinstance(record[1], str)):
             chunks.append(record[1])
 
-    # A JSON record may span several inline React Flight chunks. Decode only
-    # literal frames and complete JSON rows, without executing page scripts.
-    for line in ''.join(chunks).split('\n'):
-        row_id, separator, payload = line.partition(':')
-        if not separator or not re.fullmatch(r'[0-9a-f]+', row_id) or not payload.startswith(('{', '[')):
+    # These literal chunks can split a row. Text frames use a UTF-8 byte
+    # length instead of a newline and can contain text that resembles a row.
+    stream = ''.join(chunks).encode('utf-8', errors='surrogatepass')
+    offset = 0
+    while offset < len(stream):
+        header = FLIGHT_ROW_ID.match(stream, offset)
+        if header and header.end() < len(stream) and stream[header.end()] in FLIGHT_LENGTH_TAGS:
+            length = FLIGHT_ROW_LENGTH.match(stream, header.end() + 1)
+            if not length:
+                return
+            offset = length.end() + int(length.group()[:-1], 16)
+            if offset > len(stream):
+                return
             continue
-        try:
-            yield json.loads(payload)
-        except (ValueError, RecursionError):
-            continue
+        newline = stream.find(b'\n', offset)
+        end = len(stream) if newline == -1 else newline
+        payload = stream[header.end():end] if header else b''
+        offset = end + 1
+        if payload.startswith((b'{', b'[')):
+            try:
+                yield json.loads(payload)
+            except (ValueError, RecursionError):
+                continue
 
 
 def extract_posts(html, source_url, now, limit=30, resolve_share=None):
