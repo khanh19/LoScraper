@@ -56,7 +56,7 @@ class InstagramPublicTests(unittest.TestCase):
         } for i in range(4)]
         originals = [{
             'url': post['url'], 'status': 'recent_day_needs_venue_review',
-            'publication_day': day, 'account': account,
+            'publication_day': day, 'account': account, 'likes': 11, 'comments': 0,
         } for post, day, account in zip(
             shared, ('2026-11-22', '2026-11-23', '2026-11-20'),
             ('sample.account', 'another.account', 'sample.account'),
@@ -76,7 +76,27 @@ class InstagramPublicTests(unittest.TestCase):
         self.assertEqual([post['url'] for post in report['posts']], [shared[0]['url']])
         self.assertEqual(report['posts'][0]['attribution_evidence'], 'verified_original_post_preview')
         self.assertEqual(report['posts'][0]['published_at'], shared[0]['published_at'])
+        self.assertEqual(report['posts'][0]['engagement_snapshot'], {
+            'source': 'verified_original_post_preview', 'account': 'sample.account',
+            'evaluated_at': NOW.isoformat(), 'likes': 11, 'comments': 0,
+        })
         self.assertTrue(report['posts'][0]['requires_provider_validation'])
+        self.assertEqual(report['published'], 0)
+
+    def test_profile_counts_stay_with_the_lead_and_omit_hidden_metrics(self):
+        photo = {**media('Photo'), 'is_video': False, 'like_and_view_counts_disabled': True}
+        client = Mock()
+        client.get.return_value = profile_page(photo)
+        profile = {'url': PROFILE, 'publisher_id': 'sample'}
+        report = {'city': 'hanoi', 'posts': [], 'published': 0}
+
+        with patch('trending.discover.reviewed_profiles', return_value=iter([profile])):
+            review_instagram_leads(report, client, NOW)
+
+        self.assertEqual(report['posts'][0]['engagement_snapshot'], {
+            'source': 'verified_profile_embed', 'account': 'sample.account',
+            'evaluated_at': NOW.isoformat(), 'comments': 0,
+        })
         self.assertEqual(report['published'], 0)
 
     def test_profile_embed_returns_only_fresh_original_owned_posts(self):

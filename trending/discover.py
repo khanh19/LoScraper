@@ -138,6 +138,8 @@ def review_instagram_leads(report, client, now):
     for profile in profile_reports:
         for post in profile['posts']:
             extra_evidence = {}
+            metrics_source = 'verified_profile_embed'
+            metrics = post
             if post['status'] == 'coauthored_or_unknown_attribution':
                 identity = lead_identity(post['url'])
                 if identity not in originals and remaining:
@@ -150,8 +152,16 @@ def review_instagram_leads(report, client, now):
                 if attribution != 'confirmed_profile_account':
                     continue
                 extra_evidence['attribution_evidence'] = 'verified_original_post_preview'
+                metrics_source = 'verified_original_post_preview'
+                metrics = original
             elif post['status'] != 'fresh_needs_venue_review':
                 continue
+            counts = {key: metrics[key] for key in ('likes', 'comments') if key in metrics}
+            if counts:
+                extra_evidence['engagement_snapshot'] = {
+                    **counts, 'source': metrics_source, 'account': metrics['account'],
+                    'evaluated_at': now.isoformat(),
+                }
             remember_lead(leads, {
                 'url': post['url'], 'platform': 'instagram', 'city_hint': report['city'],
                 'published_at': post['published_at'], 'text': post['caption'],

@@ -608,3 +608,34 @@ Discover. The Instagram posts remain review evidence and do not add a second
 publisher count for the same organizer. Public TikTok searches included these
 and other current events but did not return a verifiable original video. No
 metered provider requests or social publication were made in this check.
+
+### November 24 · Review follow-up
+
+The consolidated Instagram lead includes an `engagement_snapshot` when likes
+or comments are available. The snapshot records the account, evaluation time,
+and whether the counts come from the verified profile embed or the original
+post preview. A collaborative post uses only the confirmed original account's
+preview counts. Hidden metrics are omitted. These diagnostics do not change
+public feed eligibility or rank.
+
+- **Hà Nội.** COMPLEX 01's post gives November 28, 15:00–17:00 for Behind the
+  Book. The venue's site links to the account and confirms the Tây Sơn address.
+  The preview showed 11 likes and zero comments. The event stayed in review.
+  The VEC Firebeat post corroborates the date range, with the opening-time
+  conflict still unresolved. [COMPLEX 01 post](https://www.instagram.com/p/DgE149XhIMN/) ·
+  [Venue and account link](https://complex01.vn/) ·
+  [VEC calendar](https://vec.global/events) · [Firebeat organizer](https://firebeat.global/)
+- **TP.HCM.** The new Discover:Saigon post had 3 likes and zero comments. It
+  directs readers to a general events guide without identifying a specific
+  outing in the caption. It remains a discovery lead.
+  [Discover:Saigon post](https://www.instagram.com/p/DgIDIoUoEgf/)
+- **Đà Nẵng.** The REALITY charity karaoke post had 12 likes and zero
+  comments. The organizer confirms November 26 at 21:00 at 86 Mai Thúc Lân
+  and lists the end as open-ended. This stays in review for timed sessions.
+  [REALITY post](https://www.instagram.com/p/DgEr2OLI9dP/) ·
+  [Organizer session](https://app.realitydn.com/events/6d529474-91e8-475a-86ae-7c4e707cd6f9)
+
+The public scan covered all three cities and published zero social cards. One
+Hanoi Grapevine page failed its TLS handshake during the local lead scan.
+Public TikTok search remained inaccessible. These checks used zero metered
+provider requests.
