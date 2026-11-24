@@ -16,6 +16,7 @@ from .intent import queries
 DIRECTORY=Path(__file__).with_name('source_directory.json')
 MAX_INSTAGRAM_PROFILES_PER_CITY = 4
 MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS = 3
+MAX_PUBLIC_TIKTOK_LEAD_READS = 3
 
 def canonical_tiktok_profile(url):
     if not isinstance(url, str):
@@ -60,6 +61,35 @@ def reviewed_tiktok_profiles(city, client):
 
 def reviewed_tiktok_profile(city, client):
     return next(reviewed_tiktok_profiles(city, client), None)
+
+
+def review_tiktok_leads(posts, client, now):
+    from .tiktok_public import post_permalink, review_post
+
+    leads = []
+    reviews = []
+    for post in posts:
+        if post['platform'] != 'tiktok':
+            leads.append(post)
+            continue
+
+        # A publisher's link and timestamp are hints. Only the original post
+        # may establish when it was published for TikTok lead freshness.
+        lead = {**post, 'published_at': None}
+        if post.get('published_at'):
+            lead['publisher_reported_publication'] = post['published_at']
+        url = post_permalink(post['url'])
+        if url and len(reviews) < MAX_PUBLIC_TIKTOK_LEAD_READS:
+            review = review_post(url, client, now)
+            reviews.append(review)
+            if review['status'] == 'outside_fresh_window':
+                continue
+            if review['status'] == 'fresh_needs_venue_review':
+                lead['published_at'] = review['published_at']
+                lead['publication_evidence'] = 'verified_original_tiktok_post'
+        leads.append(lead)
+    return leads, reviews
+
 
 def discover(city,client,now,counts=None,limit=6):
     seeds = [source for source in json.loads(DIRECTORY.read_text())
@@ -115,8 +145,10 @@ def discover(city,client,now,counts=None,limit=6):
                     remember_lead(posts, post)
         except (FetchError, ValueError) as error:
             pages.append({'source': slug, 'url': seed['url'], 'status': 'failed', 'reason': fetch_failure_reason(error)})
-    return {'city':city,'pages':pages,'posts':list(posts.values())[:30],
+    leads, tiktok_reviews = review_tiktok_leads(posts.values(), client, now)
+    return {'city':city,'pages':pages,'posts':leads[:30],
             'tiktok_share_links':resolver.results,
+            'public_tiktok_reviews':tiktok_reviews,
             'queries':queries(city,counts),'provider_requests':0,'published':0}
 
 

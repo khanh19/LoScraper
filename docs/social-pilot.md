@@ -468,6 +468,21 @@ response formats leave the publication time unresolved.
 The report includes transport and evidence status and performs no feed writes,
 metered requests, or video downloads. [TikTok embed metadata](https://developers.tiktok.com/docs/en/embed-videos)
 
+The city discovery command now checks up to three original TikTok links per
+city after finding them on public websites. `public_tiktok_reviews` records
+each check. Dated posts outside seven days leave the candidate list, undated
+posts stay in review, and a publisher-supplied date remains a hint until
+confirmed on the original page. A verified date still needs independent
+event and venue evidence before the post can support a feed card.
+
+On November 24 Vietnam time, the standard city discovery scan completed 10
+pages in Hà Nội, 14 in TP.HCM and 15 in Đà Nẵng. One additional Hà Nội page
+failed. The standard sources returned no original TikTok links. A targeted
+run of the same discovery code against the public ANs venue page found seven
+links and checked three. The verified April 2025 post left the candidate
+list. Two checked posts remained undated and four were outside the read
+budget. Both runs used zero provider credits and published zero cards.
+
 On November 24 Vietnam time, the original Đà Nẵng video returned no canonical
 tag or JSON-LD. Its public post details matched the requested ID and author
 and dated it to November 13, outside the seven-day window. The ANs venue-page

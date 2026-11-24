@@ -44,6 +44,55 @@ class Timely(unittest.TestCase):
         self.assertEqual(result['posts'][0]['city_hint'],'hanoi')
         self.assertTrue(result['posts'][0]['requires_provider_validation'])
 
+    def test_discovery_uses_original_tiktok_dates_with_bounded_reads(self):
+        publisher = 'https://publisher.example/'
+        base = 'https://www.tiktok.com/@venue/video/'
+        fresh, expired, unavailable, deferred = [base + str(n) for n in range(101, 105)]
+        instagram = 'https://www.instagram.com/p/example'
+        source = {'id': 'publisher', 'publisher_id': 'publisher', 'cities': ['hanoi'],
+                  'categories': [], 'url': publisher}
+        entries = [
+            {'url': url, 'datePublished': f'2026-11-08T{hour:02d}:00:00Z'}
+            for hour, url in zip(range(11, 7, -1), (fresh, expired, unavailable, deferred))
+        ]
+        markup = ('<script type="application/json">' + json.dumps(entries) + '</script>'
+                  f'<a href="{fresh}">Duplicate original</a><a href="{instagram}">Instagram</a>')
+
+        def original(url, date):
+            entry = {'@type': 'VideoObject', 'url': url, 'uploadDate': date}
+            return (f'<link rel="canonical" href="{url}">'
+                    '<script type="application/ld+json">' + json.dumps(entry) + '</script>')
+
+        pages = {publisher: markup, fresh: original(fresh, '2026-11-07T10:00:00+07:00'),
+                 expired: original(expired, '2026-10-28T12:00:00Z')}
+        requested = []
+
+        class Client:
+            def get(self, url, hosts):
+                requested.append((url, hosts))
+                if url == unavailable:
+                    raise FetchError('http_429')
+                return BeautifulSoup(pages[url], 'html.parser')
+
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps([source])
+            report = discover('hanoi', Client(), NOW)
+
+        self.assertEqual(requested, [(publisher, {'publisher.example'})] + [
+            (url, {'www.tiktok.com'}) for url in (fresh, expired, unavailable)
+        ])
+        by_url = {row['url']: row for row in report['posts']}
+        self.assertEqual(set(by_url), {fresh, unavailable, deferred, instagram})
+        self.assertEqual(by_url[fresh]['published_at'], '2026-11-07T03:00:00+00:00')
+        self.assertEqual(by_url[fresh]['publication_evidence'], 'verified_original_tiktok_post')
+        self.assertTrue(by_url[fresh]['requires_provider_validation'])
+        self.assertIsNone(by_url[unavailable]['published_at'])
+        self.assertIsNone(by_url[deferred]['published_at'])
+        self.assertEqual(by_url[deferred]['publisher_reported_publication'], '2026-11-08T08:00:00+00:00')
+        self.assertEqual([row['status'] for row in report['public_tiktok_reviews']],
+                         ['fresh_needs_venue_review', 'outside_fresh_window', 'public_post_unavailable'])
+        self.assertEqual((report['provider_requests'], report['published']), (0, 0))
+
     def test_profile_only_source_does_not_take_a_website_scan_slot(self):
         venue = 'https://venue.example/'
         site = 'https://publisher.example/'
