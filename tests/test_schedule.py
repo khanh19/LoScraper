@@ -70,6 +70,29 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(set(re.findall(r"^\s+- cron: '([^']+)'$", workflow.read_text(), re.M)),
                          {FULL_CRON, REFRESH_CRON})
 
+    def test_manual_scheduled_rehearsal_requires_default_branch_and_explicit_write(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml').read_text()
+        step = workflow.split('      - id: policy\n', 1)[1].split('      - name: Record scheduled slot', 1)[0]
+        script = dedent(step.split('        run: |\n', 1)[1])
+        with TemporaryDirectory() as folder:
+            for mode in ('full-scheduled', 'refresh-scheduled'):
+                for ref, pilot, allowed in (
+                    ('refs/heads/main', 'false', True),
+                    ('refs/heads/feature', 'false', False),
+                    ('refs/tags/main', 'false', False),
+                    ('refs/heads/main', 'true', False),
+                ):
+                    with self.subTest(mode=mode, ref=ref, pilot=pilot):
+                        output = Path(folder) / 'outputs'
+                        output.write_text('')
+                        env = dict(os.environ, EVENT_NAME='workflow_dispatch', MANUAL_MODE=mode,
+                                   MANUAL_PILOT=pilot, DEFAULT_BRANCH='main', GITHUB_REF=ref,
+                                   GITHUB_OUTPUT=str(output))
+                        result = subprocess.run(['bash', '-s'], input=script, env=env,
+                                                capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 0 if allowed else 1, result.stderr)
+                        self.assertEqual(output.read_text(), f'mode={mode}\n' if allowed else '')
+
     def test_workflow_preflights_use_the_intended_target_and_never_collect(self):
         workflow = Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml'
         step = workflow.read_text().split('- name: Collect and validate\n', 1)[1]
@@ -87,6 +110,8 @@ class ScheduleTests(unittest.TestCase):
             ('workflow_dispatch', 'check-scheduled', 'scheduled', 'pin', base_args + ' --require-target-match'),
             ('schedule', 'full', 'scheduled', 'pin', base_args + ' --require-target-match'),
             ('schedule', 'refresh', 'scheduled', 'pin', base_args + ' --require-target-match'),
+            ('workflow_dispatch', 'full-scheduled', 'scheduled', 'pin', base_args + ' --require-target-match'),
+            ('workflow_dispatch', 'refresh-scheduled', 'scheduled', 'pin', base_args + ' --require-target-match'),
         )
         with TemporaryDirectory() as folder:
             for event, mode, target, pin, args in cases:
@@ -108,6 +133,27 @@ class ScheduleTests(unittest.TestCase):
                                             capture_output=True, text=True)
                     self.assertEqual(result.returncode, 1, result.stderr)
                     self.assertEqual(summary.read_text().splitlines(), [target, pin, args])
+
+    def test_manual_rehearsal_runs_the_same_collection_as_cron_after_preflight(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/trending.yml').read_text()
+        step = workflow.split('- name: Collect and validate\n', 1)[1]
+        script = dedent(step.split('        run: |\n', 1)[1].split('\n      #', 1)[0])
+        recorder = 'python() { printf "%s %s %s\\n" "$DATABASE_URL" "$LO_DISCOVERY_DATABASE_TARGET" "$*"; }\n'
+        with TemporaryDirectory() as folder:
+            for mode, expected in (
+                ('refresh-scheduled', ['-m trending --browser --write-db --refresh-existing']),
+                ('full-scheduled', ['-m trending --browser --write-db --refresh-existing',
+                                    '-m trending --browser --supplemental --limit 20 --write-db']),
+            ):
+                with self.subTest(mode=mode):
+                    env = dict(os.environ, EVENT_NAME='workflow_dispatch', MODE=mode,
+                               INPUT_PILOT='false', INPUT_CITY='all', STAGING_DATABASE_URL='stage',
+                               SCHEDULE_DATABASE_URL='scheduled', SCHEDULE_DATABASE_TARGET='pin',
+                               SCHEDULE_DATABASE_ROOT_CA='', GITHUB_STEP_SUMMARY=str(Path(folder) / mode))
+                    result = subprocess.run(['bash', '-s'], input=recorder + script, env=env,
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines()[1:], ['scheduled pin ' + cmd for cmd in expected])
 
     def test_existing_checks_skip_listings_and_followup_discovery(self):
         config={'seeds':['https://example.com/list'],'hosts':['example.com']}

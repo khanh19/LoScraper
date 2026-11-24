@@ -10,7 +10,7 @@ on:
       mode:
         description: Collect website evidence or inspect a database target read-only
         type: choice
-        options: [full, refresh, check-staging, inspect-scheduled, check-scheduled]
+        options: [full, refresh, check-staging, inspect-scheduled, check-scheduled, full-scheduled, refresh-scheduled]
         default: full
       city:
         description: City (all collects all three)
@@ -64,11 +64,20 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_CRON: ${{ github.event.schedule }}
           MANUAL_MODE: ${{ inputs.mode }}
+          MANUAL_PILOT: ${{ inputs.pilot }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.event_name == 'schedule' && github.token || '' }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             case "$MANUAL_MODE" in
               full|refresh|check-staging|inspect-scheduled|check-scheduled) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
+              full-scheduled|refresh-scheduled)
+                if [ -z "$DEFAULT_BRANCH" ] || [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ] || [ "$MANUAL_PILOT" != "false" ]; then
+                  echo "Scheduled-target rehearsal requires the default branch and pilot=false" >&2
+                  exit 1
+                fi
+                echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT"
+                ;;
               *) echo "Invalid manual collection mode" >&2; exit 1 ;;
             esac
           else
@@ -86,7 +95,7 @@ jobs:
     if: needs.policy.outputs.mode != 'disabled'
     runs-on: ubuntu-latest
     # Full runs include a recheck before discovering new events.
-    timeout-minutes: ${{ needs.policy.outputs.mode == 'full' && 90 || 45 }}
+    timeout-minutes: ${{ startsWith(needs.policy.outputs.mode, 'full') && 90 || 45 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -94,9 +103,9 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
-        if: needs.policy.outputs.mode == 'full' || needs.policy.outputs.mode == 'refresh'
+        if: startsWith(needs.policy.outputs.mode, 'full') || startsWith(needs.policy.outputs.mode, 'refresh')
       - run: python -m playwright install --with-deps chromium
-        if: needs.policy.outputs.mode == 'full' || needs.policy.outputs.mode == 'refresh'
+        if: startsWith(needs.policy.outputs.mode, 'full') || startsWith(needs.policy.outputs.mode, 'refresh')
       - name: Collect and validate
         env:
           STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
@@ -111,7 +120,12 @@ jobs:
         run: |
           set -o pipefail
           database_root_ca=
-          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "inspect-scheduled" ] || [ "$MODE" = "check-scheduled" ]; then
+          scheduled_write=false
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "full-scheduled" ] || [ "$MODE" = "refresh-scheduled" ]; then
+            scheduled_write=true
+            MODE=${MODE%-scheduled}
+          fi
+          if [ "$scheduled_write" = "true" ] || [ "$MODE" = "inspect-scheduled" ] || [ "$MODE" = "check-scheduled" ]; then
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
             export LO_DISCOVERY_DATABASE_TARGET="$SCHEDULE_DATABASE_TARGET"
             database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
@@ -128,7 +142,7 @@ jobs:
             export PGSSLROOTCERT="$database_ca_path"
           fi
           coverage_args=(--require-verified-tls --check-collector-writes)
-          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "check-scheduled" ]; then
+          if [ "$scheduled_write" = "true" ] || [ "$MODE" = "check-scheduled" ]; then
             coverage_args+=(--require-target-match)
           fi
           case "$MODE" in
@@ -137,7 +151,7 @@ jobs:
               exit $?
               ;;
           esac
-          if [ "$EVENT_NAME" = "schedule" ]; then
+          if [ "$scheduled_write" = "true" ]; then
             python -m trending.coverage "${coverage_args[@]}" \
               | tee -a "$GITHUB_STEP_SUMMARY" || exit 1
           elif [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then

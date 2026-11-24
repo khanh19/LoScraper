@@ -235,10 +235,15 @@ database secret, target fingerprint and enable switch are still absent.
    collector's website statements with PostgreSQL EXPLAIN in a read-only
    transaction. It covers source registration,
    image permissions, recheck selection, place matching, item and observation
-   writes, session replacement, and receipt and item cleanup. The manual full
-   and refresh runs still verify actual writes and row access, including policies
-   that can only be evaluated for real rows.
-6. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
+   writes, session replacement, and receipt and item cleanup.
+6. On the default branch, dispatch **Collect verified local discovery** in
+   `mode=full-scheduled` with `pilot=false`, then `mode=refresh-scheduled` with
+   `pilot=false`. These write to the approved scheduled target through the same
+   TLS and fingerprint checks as cron. Leave the schedule switch off during
+   both runs. Review collection receipts and check all three cities through
+   the API connected to that database. Use the ordinary `full` and `refresh`
+   modes for isolated staging rehearsals.
+7. Set repository variable **TRENDING_SCHEDULE_ENABLED=true** after those checks.
    Keep both database secrets separate from the legacy workflow target.
 
 To pause, set the variable false or disable the workflow. No raw payload uploads.
