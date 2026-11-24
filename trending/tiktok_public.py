@@ -1,4 +1,4 @@
-"""Review public TikTok metadata on original videos and reviewed organizer profiles."""
+"""Review public TikTok metadata on original posts and reviewed organizer profiles."""
 import argparse
 from datetime import datetime, timedelta, timezone
 from itertools import islice
@@ -16,15 +16,16 @@ from .social_links import extract_posts, original_post_url
 HOST = 'www.tiktok.com'
 MAX_PROFILES_PER_CITY = 4
 MAX_POSTS_PER_PROFILE = 2
-MAX_DIRECT_VIDEOS = 6
+MAX_DIRECT_POSTS = 6
 
 
-def video_permalink(url):
+def post_permalink(url):
     post = original_post_url(url)
     if not post:
         return None
-    profile, separator, video_id = post.rpartition('/video/')
-    if separator and video_id.isascii() and video_id.isdecimal() and canonical_tiktok_profile(profile):
+    profile, kind, post_id = post.rsplit('/', 2)
+    if (kind in {'video', 'photo'} and post_id.isascii() and post_id.isdecimal()
+            and canonical_tiktok_profile(profile)):
         return post
     return None
 
@@ -39,18 +40,48 @@ def player_matches(url, video_id):
     return player.hostname == HOST and player.path == '/player/v1/' + video_id
 
 
+def page_post_time(page, profile, kind, post_id):
+    # TikTok's public HTML can omit its canonical tag and JSON-LD while still
+    # declaring the original post, author and creation time in page data.
+    script = page.select_one('script#__UNIVERSAL_DATA_FOR_REHYDRATION__[type="application/json"]')
+    if script is None:
+        return None
+    try:
+        detail = json.loads(script.string or '')['__DEFAULT_SCOPE__']['webapp.video-detail']
+        if str(detail['statusCode']) != '0':
+            return None
+        item = detail['itemInfo']['itemStruct']
+        if str(item['id']) != post_id or item['author']['uniqueId'] != profile.rsplit('/@', 1)[1]:
+            return None
+        media = item.get('imagePost') if kind == 'photo' else item.get('video')
+        if not isinstance(media, dict) or not media or (kind == 'video' and item.get('imagePost')):
+            return None
+        stamp = str(item['createTime'])
+        if stamp.isascii() and stamp.isdecimal() and len(stamp) <= 11:
+            return datetime.fromtimestamp(int(stamp), timezone.utc)
+    except (KeyError, TypeError, ValueError, OverflowError, OSError, RecursionError):
+        return None
+    return None
+
+
 def publication_time(page, url):
     canonical_link = page.select_one('link[rel="canonical"][href]')
     identities = [identity for identity in (
         meta(page, 'og:url'), canonical_link['href'] if canonical_link else '',
     ) if identity]
-    if not identities or any(original_post_url(identity) != url for identity in identities):
+    if any(original_post_url(identity) != url for identity in identities):
         return None
 
-    dates = set()
-    video_id = urlsplit(url).path.rsplit('/', 1)[-1]
+    profile, kind, post_id = url.rsplit('/', 2)
+    page_date = page_post_time(page, profile, kind, post_id)
+    if not identities:
+        return page_date
+    dates = {page_date} if page_date is not None else set()
+    entry_type, fields = ('VideoObject', ('uploadDate', 'datePublished')) if kind == 'video' else (
+        'SocialMediaPosting', ('datePublished',),
+    )
     for entry in structured(page):
-        if not is_type(entry, 'VideoObject'):
+        if not is_type(entry, entry_type):
             continue
         declared = entry.get('url') or entry.get('mainEntityOfPage')
         if isinstance(declared, dict):
@@ -58,9 +89,9 @@ def publication_time(page, url):
         if declared:
             if original_post_url(declared) != url:
                 continue
-        elif not player_matches(entry.get('embedUrl'), video_id):
+        elif kind != 'video' or not player_matches(entry.get('embedUrl'), post_id):
             continue
-        for field in ('uploadDate', 'datePublished'):
+        for field in fields:
             date = entry.get(field)
             if not isinstance(date, str):
                 continue
@@ -73,7 +104,7 @@ def publication_time(page, url):
     return next(iter(dates)) if len(dates) == 1 else None
 
 
-def review_video(url, client, now):
+def review_post(url, client, now):
     try:
         published = publication_time(client.get(url, {HOST}), url)
     except (FetchError, ValueError) as error:
@@ -84,9 +115,10 @@ def review_video(url, client, now):
     return {'url': url, 'status': status, 'published_at': published.isoformat() if published else None}
 
 
-def direct_video_review(url, client, now):
-    report = review_video(url, client, now)
-    if report.get('published_at'):
+def direct_post_review(url, client, now):
+    report = review_post(url, client, now)
+    profile, kind, video_id = url.rsplit('/', 2)
+    if report.get('published_at') or kind != 'video':
         return report
 
     endpoint = f'https://{HOST}/oembed?' + urlencode({'url': url})
@@ -94,7 +126,6 @@ def direct_video_review(url, client, now):
         embed = client.get(endpoint, {HOST}, json_response=True)
     except (FetchError, ValueError) as error:
         return {**report, 'oembed': fetch_failure_reason(error)}
-    profile, _, video_id = url.rpartition('/video/')
     html = embed.get('html') if isinstance(embed, dict) else None
     if isinstance(html, str):
         markup = BeautifulSoup(html, 'html.parser')
@@ -103,21 +134,20 @@ def direct_video_review(url, client, now):
             return {**report, 'oembed': 'video_id_verified'}
         blocks = markup.select('blockquote[cite][data-video-id]')
         if (canonical_tiktok_profile(embed.get('author_url')) == profile
-                and any(video_permalink(b['cite']) == url and b['data-video-id'] == video_id for b in blocks)):
+                and any(post_permalink(b['cite']) == url and b['data-video-id'] == video_id for b in blocks)):
             return {**report, 'oembed': 'identity_verified'}
     return {**report, 'oembed': 'identity_unverified'}
 
 
-def owned_video_urls(pages, profile_url, now):
-    prefix = urlsplit(profile_url).path.rstrip('/') + '/video/'
+def owned_post_urls(pages, profile_url, now):
     urls = {}
     for page in pages:
         candidates = [post['url'] for post in extract_posts(str(page), profile_url, now)]
         candidates.extend(original_post_url(urljoin(profile_url, link['href']))
                           for link in page.select('a[href^="/@"]'))
         for candidate in candidates:
-            url = video_permalink(candidate)
-            if url and urlsplit(url).hostname == HOST and urlsplit(url).path.startswith(prefix):
+            url = post_permalink(candidate)
+            if url and url.rsplit('/', 2)[0] == profile_url:
                 urls[url] = None
     return urls
 
@@ -143,11 +173,11 @@ def review_profile(profile, client, now, browser=False):
                 'reason': fetch_failure_reason(error)}
 
     markup = BeautifulSoup(html, 'html.parser')
-    post_urls = owned_video_urls([markup, profile_page], url, now)
+    post_urls = owned_post_urls([markup, profile_page], url, now)
     if not post_urls and browser:
         try:
             rendered = client.get(url, {HOST}, render=True)
-            post_urls = owned_video_urls([rendered], url, now)
+            post_urls = owned_post_urls([rendered], url, now)
         except (FetchError, ValueError) as error:
             return {**report, 'status': 'public_profile_unavailable', 'stage': 'profile_browser',
                     'reason': fetch_failure_reason(error)}
@@ -157,14 +187,14 @@ def review_profile(profile, client, now, browser=False):
                 and creator['data-unique-id'] == urlsplit(url).path[2:]):
             try:
                 widget = client.render_tiktok_creator(url)
-                post_urls = owned_video_urls([widget], url, now)
+                post_urls = owned_post_urls([widget], url, now)
                 report['creator_embed'] = 'original_links_found' if post_urls else 'no_owned_links'
             except (FetchError, ValueError) as error:
                 report['creator_embed'] = fetch_failure_reason(error)
         else:
             report['creator_embed'] = 'identity_unverified'
-    report['posts'] = [review_video(post_url, client, now) for post_url in islice(post_urls, MAX_POSTS_PER_PROFILE)]
-    return {**report, 'status': 'reviewed' if report['posts'] else 'no_original_video_links'}
+    report['posts'] = [review_post(post_url, client, now) for post_url in islice(post_urls, MAX_POSTS_PER_PROFILE)]
+    return {**report, 'status': 'reviewed' if report['posts'] else 'no_original_post_links'}
 
 
 def audit(client, now, browser=False):
@@ -186,19 +216,21 @@ def audit(client, now, browser=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument('--browser', action='store_true', help='Render the public profile when its initial HTML has no original video links')
-    modes.add_argument('--url', action='append', help='Original TikTok video permalink; at most six')
+    modes.add_argument('--browser', action='store_true', help='Render the public profile when its initial HTML has no original post links')
+    modes.add_argument('--url', action='append', help='Original TikTok video or photo permalink; at most six')
     args = parser.parse_args()
     now = datetime.now(timezone.utc)
-    videos = [video_permalink(url) for url in args.url or []]
-    if len(videos) > MAX_DIRECT_VIDEOS or None in videos:
-        parser.error(f'provide at most {MAX_DIRECT_VIDEOS} valid original TikTok video URLs')
+    posts = [post_permalink(url) for url in args.url or []]
+    if len(posts) > MAX_DIRECT_POSTS or None in posts:
+        parser.error(f'provide at most {MAX_DIRECT_POSTS} valid original TikTok post URLs')
     client = PublicClient(browser=args.browser)
     try:
-        if videos:
-            result = {'evaluated_at': now.isoformat(), 'videos': [
-                direct_video_review(url, client, now) for url in dict.fromkeys(videos)
-            ], 'metered_provider_requests': 0, 'published': 0}
+        if posts:
+            result = {'evaluated_at': now.isoformat(), 'videos': [], 'photos': [],
+                      'metered_provider_requests': 0, 'published': 0}
+            for url in dict.fromkeys(posts):
+                section = 'photos' if url.rsplit('/', 2)[1] == 'photo' else 'videos'
+                result[section].append(direct_post_review(url, client, now))
         else:
             result = audit(client, now, args.browser)
     finally:

@@ -19,7 +19,7 @@ on:
         type: string
         default: ''
       public_tiktok_video_url:
-        description: Check the metadata of one original public TikTok video
+        description: Check the metadata of one original public TikTok video or photo post
         type: string
         default: ''
       staging_collection:
@@ -113,11 +113,11 @@ jobs:
         if: inputs.public_share_publisher_url == '' && inputs.public_tiktok_video_url == ''
       - run: python -m trending.tiktok_public --browser
         if: inputs.public_share_publisher_url == '' && inputs.public_tiktok_video_url == ''
-      - name: Check an original public TikTok video
+      - name: Check an original public TikTok post
         if: inputs.public_tiktok_video_url != ''
         env:
-          VIDEO_URL: ${{ inputs.public_tiktok_video_url }}
-        run: python -m trending.tiktok_public --url "$VIDEO_URL"
+          POST_URL: ${{ inputs.public_tiktok_video_url }}
+        run: python -m trending.tiktok_public --url "$POST_URL"
       - name: Check original post links without fetching post media
         if: inputs.public_share_publisher_url != '' && inputs.public_tiktok_video_url == ''
         env:

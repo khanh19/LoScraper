@@ -6,17 +6,25 @@ from unittest.mock import Mock, patch
 from bs4 import BeautifulSoup
 
 from trending.http import FetchError
-from trending.tiktok_public import audit, direct_video_review, publication_time, review_profile, video_permalink
+from trending.tiktok_public import audit, direct_post_review, post_permalink, publication_time, review_profile
 
 NOW = datetime(2026, 11, 23, tzinfo=timezone.utc)
 PROFILE = 'https://www.tiktok.com/@organizer'
 POST = PROFILE + '/video/123'
+PHOTO = PROFILE + '/photo/456'
 
 
 def post_page(url, *entries):
     markup = f'<link rel="canonical" href="{url}">'
     markup += '<script type="application/ld+json">' + json.dumps(entries) + '</script>'
     return BeautifulSoup(markup, 'html.parser')
+
+
+def detail_page(item, *, page=None, status=0):
+    detail = {'statusCode': status, 'itemInfo': {'itemStruct': item}}
+    state = {'__DEFAULT_SCOPE__': {'webapp.video-detail': detail}}
+    markup = '<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'
+    return BeautifulSoup(str(page or '') + markup + json.dumps(state) + '</script>', 'html.parser')
 
 
 class TikTokPublicAuditTests(unittest.TestCase):
@@ -30,22 +38,65 @@ class TikTokPublicAuditTests(unittest.TestCase):
         self.assertIsNone(publication_time(post_page(POST, entry, {**entry, 'uploadDate': '2026-11-21T20:00:00Z'}), POST))
         self.assertIsNone(publication_time(post_page(POST, {**entry, 'datePublished': '2026-11-22T00:00:00Z'}), POST))
 
-    def test_direct_video_normalizes_only_original_tiktok_video_urls(self):
-        self.assertEqual(video_permalink(POST.replace('www.', '') + '/?utm_medium=example'), POST)
-        for url in (PROFILE, POST.replace('/video/', '/photo/'), 'https://vm.tiktok.com/sample/',
+    def test_permalink_normalizes_only_original_tiktok_video_and_photo_urls(self):
+        for post in (POST, PHOTO):
+            self.assertEqual(post_permalink(post.replace('www.', '') + '/?utm_medium=example'), post)
+        for url in (PROFILE, POST.replace('/video/', '/story/'), 'https://vm.tiktok.com/sample/',
                     POST.replace('tiktok.com', 'tiktok.com.example'), POST[:-3] + '１２３'):
             with self.subTest(url=url):
-                self.assertIsNone(video_permalink(url))
+                self.assertIsNone(post_permalink(url))
 
     def test_direct_video_returns_verified_original_date_without_oembed(self):
         client = Mock()
         client.get.return_value = post_page(POST, {
             '@type': 'VideoObject', 'url': POST, 'datePublished': '2026-11-22T12:00:00Z',
         })
-        result = direct_video_review(POST, client, NOW)
+        result = direct_post_review(POST, client, NOW)
         self.assertEqual(result, {'url': POST, 'status': 'fresh_needs_venue_review',
                                   'published_at': '2026-11-22T12:00:00+00:00'})
         client.get.assert_called_once_with(POST, {'www.tiktok.com'})
+
+    def test_photo_date_requires_explicit_original_post_evidence(self):
+        entry = {'@type': 'SocialMediaPosting', 'url': PHOTO, 'datePublished': '2026-11-22T12:00:00Z'}
+        client = Mock()
+        client.get.return_value = post_page(PHOTO, entry)
+        result = direct_post_review(PHOTO, client, NOW)
+        self.assertEqual(result, {'url': PHOTO, 'status': 'fresh_needs_venue_review',
+                                  'published_at': '2026-11-22T12:00:00+00:00'})
+        variants = (
+            {**entry, '@type': 'ImageObject'},
+            {**entry, 'url': PHOTO.replace('@organizer', '@another')},
+            {**entry, 'url': None, 'embedUrl': 'https://www.tiktok.com/player/v1/456'},
+            {**entry, 'datePublished': '2026-11-22'},
+        )
+        for variant in variants:
+            with self.subTest(variant=variant):
+                client.reset_mock()
+                client.get.return_value = post_page(PHOTO, variant)
+                result = direct_post_review(PHOTO, client, NOW)
+                self.assertEqual(result['status'], 'publication_time_unverified')
+                self.assertIsNone(result['published_at'])
+                client.get.assert_called_once_with(PHOTO, {'www.tiktok.com'})
+
+    def test_public_page_data_can_date_the_exact_post_without_canonical_markup(self):
+        item = {'id': '123', 'author': {'uniqueId': 'organizer'},
+                'createTime': '1794562976', 'video': {'id': '123'}}
+        expected = datetime(2026, 11, 13, 9, 42, 56, tzinfo=timezone.utc)
+        self.assertEqual(publication_time(detail_page(item), POST), expected)
+        photo = {**item, 'id': '456', 'imagePost': {'images': [{}]}}
+        self.assertEqual(publication_time(detail_page(photo), PHOTO), expected)
+        self.assertIsNone(publication_time(detail_page({**item, 'id': '124'}), POST))
+        self.assertIsNone(publication_time(detail_page({**item, 'author': {'uniqueId': 'another'}}), POST))
+        self.assertIsNone(publication_time(detail_page({**item, 'createTime': '2026-11-23'}), POST))
+        self.assertIsNone(publication_time(detail_page(item, status=10204), POST))
+        self.assertIsNone(publication_time(detail_page({**item, 'id': '456'}), PHOTO))
+
+    def test_conflicting_public_page_bindings_and_dates_block_the_post(self):
+        item = {'id': '123', 'author': {'uniqueId': 'organizer'},
+                'createTime': '1794562976', 'video': {'id': '123'}}
+        entry = {'@type': 'VideoObject', 'url': POST, 'uploadDate': '2026-11-23T08:00:00Z'}
+        self.assertIsNone(publication_time(detail_page(item, page=post_page(POST, entry)), POST))
+        self.assertIsNone(publication_time(detail_page(item, page=post_page(POST + '4')), POST))
 
     def test_video_oembed_confirms_identity_but_cannot_supply_freshness(self):
         client = Mock()
@@ -61,7 +112,7 @@ class TikTokPublicAuditTests(unittest.TestCase):
                     {'author_url': author, 'html': f'<blockquote cite="{video}" data-video-id="{number}"></blockquote>',
                      'uploadDate': '2026-11-22T12:00:00Z'},
                 ]
-                result = direct_video_review(POST, client, NOW)
+                result = direct_post_review(POST, client, NOW)
                 self.assertEqual(result['status'], 'publication_time_unverified')
                 self.assertIsNone(result['published_at'])
                 self.assertEqual(result['oembed'], status)
@@ -80,20 +131,20 @@ class TikTokPublicAuditTests(unittest.TestCase):
                     post_page(POST),
                     {'embed_product_id': product, 'embed_type': 'video', 'html': f'<iframe src="{src}"></iframe>'},
                 ]
-                result = direct_video_review(POST, client, NOW)
+                result = direct_post_review(POST, client, NOW)
                 self.assertEqual(result['oembed'], status)
                 self.assertIsNone(result['published_at'])
 
     def test_profile_audit_checks_at_most_two_original_posts_from_same_account(self):
-        urls = [PROFILE + '/video/' + str(i) for i in range(123, 126)]
-        html = ''.join(f'<a href="{url}">Video</a>' for url in urls)
-        html += '<a href="https://www.tiktok.com/@another/video/999">Related</a>'
+        urls = [PROFILE + '/photo/123', PHOTO, PROFILE + '/video/124']
+        html = ''.join(f'<a href="{url}">Post</a>' for url in urls)
+        html += '<a href="https://www.tiktok.com/@organizer2/photo/999">Related</a>'
         client = Mock()
         client.get.side_effect = [
             {'author_url': PROFILE, 'html': '<blockquote></blockquote>'},
             BeautifulSoup(html, 'html.parser'),
             post_page(urls[2], {'@type': 'VideoObject', 'url': urls[2], 'uploadDate': '2026-11-22T08:00:00Z'}),
-            post_page(urls[1], {'@type': 'VideoObject', 'url': urls[1], 'uploadDate': '2026-11-12T08:00:00Z'}),
+            post_page(PHOTO, {'@type': 'SocialMediaPosting', 'url': PHOTO, 'datePublished': '2026-11-12T08:00:00Z'}),
         ]
         result = review_profile({'url': PROFILE}, client, NOW)
         self.assertEqual([row['url'] for row in result['posts']], [urls[2], urls[1]])

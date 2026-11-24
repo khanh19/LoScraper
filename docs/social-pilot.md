@@ -446,22 +446,36 @@ links with the previous parser. The page supplied no publication dates, so
 all seven links stayed in review. The check started no provider jobs and
 wrote no feed records. [Public venue page used for link discovery](https://airial.travel/restaurants/vietnam/da-nang/ans-vegetarian-cuisine-S9TuRweh)
 
-### Check an original TikTok video
+### Check an original TikTok post
 
 ```sh
 python -m trending.tiktok_public --url https://www.tiktok.com/@danangzip.site/video/7707589251193474312
 ```
 
-Pass up to six original video permalinks locally. To check a single link from
+Pass up to six original video or photo permalinks locally. To check a single link from
 the hosted runner, dispatch **Scraper CI** with `public_tiktok_video_url`.
-The audit reads the original video's public HTML. An unambiguous
-`VideoObject` timestamp with a timezone must match the page and video.
-When the date is unavailable, the official oEmbed response can confirm
+The audit reads the original post's public HTML. Structured timestamps need
+an exact page and post match. If a photo post has JSON-LD, its date must come
+from `SocialMediaPosting` and name the original permalink. The audit also
+reads the creator and publication timestamp from the original page's public
+post details. The post ID, author, and media type must match. Conflicting dates
+stay in review. Dates attached to individual images or inferred from post IDs
+do not count.
+For videos with no date, the official oEmbed response can confirm
 the video ID by matching its product ID and player URL. A legacy response
 with a matching creator and permalink also confirms those fields. Both
 response formats leave the publication time unresolved.
 The report includes transport and evidence status and performs no feed writes,
 metered requests, or video downloads. [TikTok embed metadata](https://developers.tiktok.com/docs/en/embed-videos)
+
+On November 24 Vietnam time, the original Đà Nẵng video returned no canonical
+tag or JSON-LD. Its public post details matched the requested ID and author
+and dated it to November 13, outside the seven-day window. The ANs venue-page
+check rediscovered seven original posts and read six. Three had verified 2025
+dates and three confirmed only the video ID. All six retained worksheet photo
+posts returned no matching date. The reviewed profiles yielded no original post
+links in the static audit. No result was freshly eligible, and the checks made
+zero metered requests. [Original Đà Nẵng video](https://www.tiktok.com/@danangzip.site/video/7707589251193474312)
 
 ### Publisher transport and city-targeted links
 
