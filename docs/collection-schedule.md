@@ -366,6 +366,14 @@ gap. The live listing then yielded four timed shows eligible for reminders. The
 rule preserves overnight shows and longer windows when the shorter dates do
 not establish this pattern. [Ticketbox event](https://ticketbox.vn/aquafina-fashionweek-thudong2026-26826)
 
+During the November 24 reminder rehearsal, the [Phật Bảo Nghiêm Trấn Ticketbox
+listing](https://ticketbox.vn/phat-bao-nghiem-tran-trien-lam-di-san-van-hoa-phat-giao-doc-ban-giua-long-sg-26192)
+gave 00:00–20:00 ticket windows and 09:00–21:00 daily visiting hours in its own
+description. The collector holds a midnight admission window when it conflicts
+with explicit daily visiting hours. Matching midnight hours still qualify.
+The live replay held the exhibition and kept the timed DẾ GARDEN and LOALOA
+sessions eligible.
+
 The manual Furama run imported one eligible event without a failed fetch or
 provider usage. Controlled tests cover matching dates and times, competing
 sessions, missing address evidence, and venue ambiguity. Scheduling remains disabled.

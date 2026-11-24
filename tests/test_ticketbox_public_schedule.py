@@ -67,6 +67,21 @@ class TicketboxPublicSchedule(unittest.TestCase):
         self.assertEqual(len(candidate.occurrences), 1)
         self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, candidate.reasons)
 
+    def test_midnight_ticket_window_conflicting_with_daily_visiting_hours_is_held(self):
+        rows = [{'startTime': '2026-11-24T17:00:00Z', 'endTime': '2026-11-25T13:00:00Z'}]
+        candidate = self.enrich(rows, categoriesV2=['attractionsexperiences'], description=(
+            '<li>Giờ tham quan: 0<strong>9:00 - 21:00 mỗi ngày</strong></li>'))
+        self.assertEqual(candidate.occurrences, [])
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, candidate.reasons)
+        self.assertEqual(candidate.status, 'active')
+
+    def test_explicit_matching_midnight_visiting_hours_are_retained(self):
+        rows = [{'startTime': '2026-11-24T17:00:00Z', 'endTime': '2026-11-25T13:00:00Z'}]
+        candidate = self.enrich(rows, categoriesV2=['attractionsexperiences'], description=(
+            '<li>Giờ tham quan: <strong>00:00 - 20:00</strong> mỗi ngày</li>'))
+        self.assertEqual(len(candidate.occurrences), 1)
+        self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, candidate.reasons)
+
     def test_flexible_check_in_is_held_even_when_shown_as_a_timed_window(self):
         rows = [{'startTime': '2026-11-27T10:00:00Z', 'endTime': '2026-11-27T14:00:00Z'}]
         candidate = self.enrich(rows, categoriesV2=['attractionsexperiences'], description=(

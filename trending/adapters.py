@@ -288,19 +288,37 @@ class Ticketbox(Adapter):
         description = data.get('description')
         if 'attractionsexperiences' not in (data.get('categoriesV2') or []) or not isinstance(description, str):
             return False
-        details = folded(BeautifulSoup(description, 'html.parser').get_text(' ', strip=True))
+        markup = BeautifulSoup(description, 'html.parser')
+        details = folded(markup.get_text(' ', strip=True))
         # A flexible visit begins at the guest's check-in, even if the API labels the gate hours a showing.
         if 'tinh tu thoi diem check in tai quay ve' in details:
             return True
         # For daily passes, require the publisher's park-hours and on-site session instructions
         # before interpreting a midnight-to-23:59 showing as an admission date.
-        if 'gio hoat dong cua cong vien' not in details or 'kiem tra thoi diem bat dau trai nghiem' not in details:
+        park_pass = ('gio hoat dong cua cong vien' in details
+                     and 'kiem tra thoi diem bat dau trai nghiem' in details)
+        # Some exhibition listings put a ticket's calendar-day window in
+        # showings and publish different daily visiting hours in the description.
+        # Keep adjacent inline text together so 0<strong>9:00</strong> reads 09:00.
+        daily_hours = re.search(r'\bgio tham quan (\d{1,2}) (\d{2}) (\d{1,2}) (\d{2}) moi ngay\b',
+                                folded(markup.get_text()))
+        visiting = None
+        if daily_hours:
+            first_hour, first_minute, last_hour, last_minute = map(int, daily_hours.groups())
+            try:
+                visiting = time(first_hour, first_minute), time(last_hour, last_minute)
+            except ValueError:
+                pass
+        if not park_pass and visiting is None:
             return False
         for slot in sessions:
             start = parse_time(slot.starts_at).astimezone(ICT)
             end = parse_time(slot.ends_at).astimezone(ICT)
-            if (slot.precision == 'time' and start.date() == end.date()
-                    and start.time() == time(0) and end.time() == time(23, 59)):
+            if slot.precision != 'time' or start.date() != end.date() or start.time() != time(0):
+                continue
+            if (park_pass and end.time() == time(23, 59)) or (
+                visiting is not None and (start.time(), end.time()) != visiting
+            ):
                 return True
         return False
 
