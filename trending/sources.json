@@ -97,11 +97,20 @@
         "address": "103 - 105 đường Võ Nguyên Giáp, Phường Ngũ Hành Sơn, TP Đà Nẵng",
         "address_url": "https://team.furamavietnam.com/khach-san.html",
         "schedule_url": "https://danangfantasticity.com/en/discovery/christmas-2026-new-year-2027"
+      },
+      "https://lifeofdanang.com/vi/danang/city-da-nang-jazz-festival-2026-at-the-furama-2026-11-27": {
+        "venue_name": "Lounge Bar, Furama Danang",
+        "location": "Furama Resort Đà Nẵng",
+        "address": "103 - 105 đường Võ Nguyên Giáp, Phường Ngũ Hành Sơn, TP Đà Nẵng",
+        "address_url": "https://team.furamavietnam.com/khach-san.html",
+        "schedule_url": "https://danangjazz.com/",
+        "schedule_format": "danang_jazz_hero"
       }
     },
     "review_holds": {
       "https://lifeofdanang.com/vi/danang/city-da-nang-christmas-market-2026-2026-12-03": "unresolved_cross_source_session_times",
-      "https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-pullman-2026-12-04": "unresolved_cross_source_session_times"
+      "https://lifeofdanang.com/vi/danang/city-christmas-tree-lighting-at-pullman-2026-12-04": "unresolved_cross_source_session_times",
+      "https://lifeofdanang.com/vi/danang/spin-city-pickleball-social": "confirmed_schedule_conflict"
     }
   },
   "hoguomopera": {
@@ -112,7 +121,138 @@
     "hosts": [
       "hoguomopera.vn"
     ],
+    "enabled": true,
+    "reviewed_programs": {
+      "st-petersburg-night-2088": {
+        "address": "40 Hàng Bài, Cửa Nam, Hà Nội",
+        "sessions": 2,
+        "category": "music"
+      },
+      "ballet-cuba-don-quixote-2099": {
+        "address": "40 Hàng Bài, phường Cửa Nam, Hà Nội",
+        "sessions": 2,
+        "category": "culture"
+      },
+      "ballet-cuba-a-gala-of-ballet-masterpiecies-2098": {
+        "address": "40 Hàng Bài, phường Cửa Nam, Hà Nội",
+        "sessions": 2,
+        "category": "culture",
+        "reconcile_announcement": true
+      },
+      "lang-lang-piano-recital-in-hanoi-2102": {
+        "address": "40 Hàng Bài, phường Cửa Nam, Hà Nội",
+        "sessions": 2,
+        "category": "music"
+      }
+    }
+  },
+  "varanvietnam": {
+    "name": "Varan Vietnam",
+    "seeds": [],
+    "detail_pages": [
+      "https://varanvietnam.com/project/varan-vietnam-tai-trien-lam-mot-bat-thuong"
+    ],
+    "hosts": ["varanvietnam.com"],
     "enabled": true
+  },
+  "hoankiemheritage": {
+    "name": "Ban Quản lý Hồ Hoàn Kiếm và Phố cổ Hà Nội",
+    "seeds": [],
+    "detail_pages": ["https://phocohanoi.hoankiem.vn/tin-tuc/ngay-di-san"],
+    "hosts": ["phocohanoi.hoankiem.vn"],
+    "enabled": true
+  },
+  "hanoiyouththeatre": {
+    "name": "Nhà hát Tuổi trẻ",
+    "seeds": [],
+    "detail_pages": ["https://datve.nhahattuoitre.vn/"],
+    "hosts": ["datve.nhahattuoitre.vn"],
+    "contact_url": "https://datve.nhahattuoitre.vn/lien-he",
+    "enabled": true,
+    "reviewed_performances": {
+      "tuoi tho du doi": {
+        "key": "tuoi-tho-du-doi-20261129",
+        "title": "Nhạc kịch Tuổi thơ dữ dội",
+        "starts_at": "2026-11-29T15:00:00+07:00",
+        "address": "11 Ngô Thì Nhậm, Phường Hai Bà Trưng, TP Hà Nội"
+      },
+      "quan khu nam dong": {
+        "key": "quan-khu-nam-dong-20261129",
+        "title": "Vở kịch Quân khu Nam Đồng",
+        "starts_at": "2026-11-29T20:00:00+07:00",
+        "address": "11 Ngô Thì Nhậm, Phường Hai Bà Trưng, TP Hà Nội"
+      }
+    }
+  },
+  "yogalabhanoi": {
+    "name": "Yoga Lab Hanoi",
+    "seeds": [],
+    "detail_pages": ["https://www.yogalabhanoi.com/events"],
+    "hosts": ["www.yogalabhanoi.com"],
+    "booking_url": "https://www.yogalabhanoi.com/book-a-class",
+    "enabled": true,
+    "reviewed_class": {
+      "key": "detox-your-posture-20261129",
+      "title": "Lớp yoga 90 phút: Detox Your Posture",
+      "publisher_title": "Detox Your Posture: 90-min Special Class",
+      "schedule_line": "sunday, 29th november | 10:00 - 11:30",
+      "date": "29/11/2026",
+      "address": "Tầng 5, 19–21 ngõ Yên Ninh, Ba Đình, Hà Nội",
+      "booking_address": "address level 5 no 19 21 yen ninh alley turn right from no 23 yen ninh ba dinh"
+    }
+  },
+  "realitydanang": {
+    "name": "REALITY Đà Nẵng",
+    "seeds": [],
+    "hosts": ["app.realitydn.com", "realitydn.com"],
+    "enabled": true,
+    "reviewed_detail_pages": {
+      "https://app.realitydn.com/series/da-nang-vibe-coding-x-ai-buildathon": {
+        "publisher_title": "DA NANG VIBE CODING X AI BUILDATHON",
+        "title_vi": "Workshop Vibe Coding × AI Buildathon",
+        "venue_url": "https://realitydn.com/vn/"
+      }
+    }
+  },
+  "vio": {
+    "name": "Vio",
+    "seeds": [],
+    "hosts": ["vioapp.io"],
+    "enabled": true,
+    "reviewed_detail_pages": {
+      "https://vioapp.io/vi-vn/event/saigon-wine-fair-2026": {
+        "title": "Saigon Wine Fair 2026",
+        "organizer": "Saigon Outcast",
+        "publisher_id": "saigon-outcast",
+        "venue": "Saigon Outcast",
+        "booking_street": "182 Nguyễn Văn Hưởng",
+        "category": "market"
+      },
+      "https://vioapp.io/vi-vn/event/kloud-art-thao-dien-workshop-lam-gom-giang-sinh": {
+        "title": "Kloud Art - Thảo Điền: Workshop Làm Gốm Giáng Sinh Pottery & Sip",
+        "organizer": "Kloud Art",
+        "publisher_id": "kloud-art",
+        "venue": "Kloud Art Thảo Điền",
+        "booking_street": "Kloud Art Thảo Điền - 58 đường số 47",
+        "category": "workshop"
+      },
+      "https://vioapp.io/vi-vn/event/kloud-art-the-estella-workshop-lam-gom-giang-sinh": {
+        "title": "Kloud Art - The Estella: Workshop Làm Gốm Giáng Sinh Pottery & Sip",
+        "organizer": "Kloud Art",
+        "publisher_id": "kloud-art",
+        "venue": "Kloud Art The Estella",
+        "booking_street": "Kloud Art - The Estella - CG-01, Block 3B, Chung cư The Estella 1",
+        "category": "workshop"
+      },
+      "https://vioapp.io/vi-vn/event/kloud-art-vinhomes-central-park-workshop-gom-giang-sinh": {
+        "title": "Kloud Art - Vinhomes Central Park: Workshop Làm Gốm Giáng Sinh Pottery & Sip",
+        "organizer": "Kloud Art",
+        "publisher_id": "kloud-art",
+        "venue": "Kloud Art Vinhomes Central Park",
+        "booking_street": "Vinhomes Central Park - SH.09, Park 4",
+        "category": "workshop"
+      }
+    }
   },
   "saigoneer": {
     "name": "Saigoneer",

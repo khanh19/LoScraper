@@ -1,10 +1,13 @@
 """Coverage discovery uses current Vietnam month and primary-event evidence."""
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from datetime import timedelta
 from bs4 import BeautifulSoup
-from trending.adapters import HoGuomOpera, LifeOfDaNang, category, collect_source, load_sources
+from trending.adapters import (
+    HanoiYouthTheatre, HoanKiemHeritage, HoGuomOpera, LifeOfDaNang, VaranVietnam, YogaLabHanoi,
+    category, collect_source, load_sources,
+)
 from test_trending import NOW, candidate
 from trending.model import CONFIRMED_SCHEDULE_CONFLICT, city_from_address
 from trending.http import FetchError
@@ -26,6 +29,22 @@ class WeeklyCoverage(unittest.TestCase):
         self.assertEqual(len(fetched),4)
         self.assertEqual(candidates,[])
         self.assertEqual(failures[-1]['reason'],'source_fetch_circuit_open')
+
+    def test_missing_event_pages_do_not_open_the_publisher_circuit(self):
+        urls = [f'https://example.com/event/{i}' for i in range(5)]
+        adapter = Mock(spec=['fetch', 'parse_many'])
+        adapter.fetch.side_effect = [
+            FetchError('http_404'), FetchError('http_404'), FetchError('http_410'),
+            FetchError('http_404'), BeautifulSoup('<main>Upcoming event</main>', 'html.parser'),
+        ]
+        final_candidate = candidate()
+        adapter.parse_many.return_value = [final_candidate]
+        with patch.dict('trending.adapters.CLASSES', {'test': lambda *_: adapter}):
+            candidates, failures = collect_source('test', {'seeds': []}, None, NOW,
+                                                  extra_urls=urls, existing_only=True)
+        self.assertEqual([args.args[1] for args in adapter.fetch.call_args_list], urls)
+        self.assertEqual(candidates, [final_candidate])
+        self.assertEqual([failure['reason'] for failure in failures], ['http_404', 'http_404', 'http_410', 'http_404'])
 
     def test_multiple_listings_share_detail_budget(self):
         fetched=[]
@@ -49,6 +68,42 @@ class WeeklyCoverage(unittest.TestCase):
     def test_vietnamese_stage_play_has_a_category(self):
         self.assertEqual(category('Sân khấu kịch huyền ảo: Nguyễn Du – Hồ Xuân Hương Ngoại Truyện'), 'culture')
 
+    def test_named_fitness_activities_use_sports_category(self):
+        for title in (
+            'HYROX 90: buổi tập theo cặp sáng thứ Bảy',
+            'CrossFit cho người mới',
+            'Hướng dẫn padel ở Padel Xtra',
+            'Lớp Muay Thái cho người mới',
+        ):
+            with self.subTest(title=title):
+                self.assertEqual(category(title), 'sports')
+        self.assertEqual(category('Hướng dẫn tìm phòng tập'), '')
+
+    def test_hyrox_listing_keeps_venue_and_dated_sessions(self):
+        adapter = LifeOfDaNang('lifeofdanang', load_sources()['lifeofdanang'])
+        location = {
+            'name': 'Engine Room, 05-07 Dương Khuê',
+            'address': {'addressLocality': 'Da Nang'},
+        }
+        sessions = [{
+            '@type': 'Event',
+            'name': 'HYROX 90: buổi tập theo cặp sáng thứ Bảy ở Engine Room',
+            'location': location,
+            'startDate': f'2026-11-{day}T09:00:00+07:00',
+            'endDate': f'2026-11-{day}T10:30:00+07:00',
+        } for day in (14, 21)]
+        html = f'<script type="application/ld+json">{json.dumps(sessions)}</script>'
+        event, = adapter.parse_many(
+            BeautifulSoup(html, 'html.parser'),
+            'https://lifeofdanang.com/vi/danang/weekly-engine-room-hyrox-90',
+            NOW,
+        )
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual((event.category, event.city_slug, event.address),
+                         ('sports', 'danang', '05-07 Dương Khuê, Da Nang'))
+        self.assertEqual([session.starts_at for session in event.occurrences],
+                         [session['startDate'] for session in sessions])
+
     def test_opera_uses_individual_program_days_and_primary_venue(self):
         url = 'https://hoguomopera.vn/chuong-trinh-bieu-dien/don-quixote-2099'
         html = '''<h1>Ballet Cuba: Don Quixote</h1>
@@ -68,6 +123,239 @@ class WeeklyCoverage(unittest.TestCase):
         conflict = html.replace('</p>', '<br>Thời gian: 21h00, ngày 11 và 13/11/2026</p>')
         candidate = adapter.parse(BeautifulSoup(conflict, 'html.parser'), url, NOW)
         self.assertIn('unresolved_individual_sessions', candidate.validate(NOW))
+
+    def test_opera_discovery_skips_only_archive_rows_with_agreeing_timetables(self):
+        slug = 'hoguomopera'
+        config = load_sources()[slug]
+        catalogue = config['seeds'][0]
+        origin = 'https://hoguomopera.vn'
+        old = '2026-11-07T18:00:00Z', '2026-11-07T19:00:00Z'
+        future = '2026-11-08T20:00:00Z', '2026-11-08T23:00:00Z'
+        rows, cards, detail_urls = [], [], []
+        for article, clocks, display in [
+            (1, [old], ['18:00 - 19:00, 07/11/2026']),
+            (2, [old, future], ['18:00 - 19:00, 07/11/2026', '20:00 - 23:00, 08/11/2026']),
+            (3, [old], ['18:00 - 20:00, 07/11/2026']),
+            (4, [], []),
+            (5, [old], ['18:00 - 19:00, 07/11/2026']),
+        ]:
+            program = f'program-{article}'
+            path = f'/chuong-trinh-bieu-dien/{program}'
+            title = f'Program {article}'
+            rows.append({'slug': program, 'articleId': article, 'name': title, 'showSches': [
+                {'articleId': article, 'isAvailFS': False, 'startTime': start, 'endTime': end}
+                for start, end in clocks
+            ]})
+            visible = ''.join(f'<p>{line}</p>' for line in display)
+            cards.append(f'<section><a href="{path}">{title}</a><img alt="calendar">{visible}</section>')
+            detail_urls.append(origin + path)
+        rows.append({**rows[-1], 'showSches': []})
+
+        def catalogue_page(programmes, html):
+            data = {'props': {'pageProps': {'data': {'items': programmes}}}}
+            return BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(data)}</script>'
+                                 + html, 'html.parser')
+
+        listing = catalogue_page(rows, ''.join(cards))
+        adapter = HoGuomOpera(slug, config)
+        self.assertEqual(adapter.calendar_links(listing, catalogue, NOW), detail_urls[1:])
+        self.assertEqual(adapter.calendar_links(listing, catalogue, NOW - timedelta(minutes=1)), detail_urls)
+
+        client = Mock()
+        client.get.side_effect = lambda url, *_args, **_kwargs: listing if url == catalogue else (
+            BeautifulSoup('<h1>Event detail</h1>', 'html.parser'))
+        collect_source(slug, config, client, NOW, limit=2)
+        self.assertEqual([call.args[0] for call in client.get.call_args_list],
+                         [catalogue, *detail_urls[1:3]])
+        client.reset_mock()
+        collect_source(slug, config, client, NOW, extra_urls=detail_urls[:1], existing_only=True)
+        self.assertEqual([call.args[0] for call in client.get.call_args_list], detail_urls[:1])
+
+        client.get.side_effect = None
+        client.get.return_value = catalogue_page(rows[:1], cards[0])
+        self.assertEqual(collect_source(slug, config, client, NOW), ([], []))
+        client.get.return_value = catalogue_page([], '<main></main>')
+        self.assertEqual(collect_source(slug, config, client, NOW),
+                         ([], [{'stage': 'listing', 'reason': 'no_detail_links'}]))
+
+    def test_opera_rechecks_each_visible_slot_against_its_booking(self):
+        adapter = HoGuomOpera('hoguomopera', load_sources()['hoguomopera'])
+        legacy = 'https://hoguomopera.vn/chuong-trinh-bieu-dien/st-petersburg-night-2088'
+        path = '/chuong-trinh-bieu-dien/st-petersburg-night-2088'
+        title = 'ST PETERSBURG NIGHT'
+
+        def page(data, body=''):
+            node = {'props': {'pageProps': {'data': data}}}
+            return BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(node)}</script>{body}', 'html.parser')
+
+        slots = [
+            {'showId': show, 'articleId': 2088, 'isAvailFS': True,
+             'startTime': f'2026-11-{day}T20:00:00Z', 'endTime': f'2026-11-{day}T23:00:00Z'}
+            for show, day in [(126, 14), (127, 15)]
+        ]
+        programme = {'slug': 'st-petersburg-night-2088', 'articleId': 2088, 'isShow': True,
+                     'name': title, 'shortDescription': 'Hai đêm hòa nhạc', 'showSches': slots}
+        catalogue = page({'items': [programme]}, f'''
+          <div><section><a href="{path}">{title}</a>
+          <img alt="calendar"><p>20:00 - 23:00, 14/11/2026</p>
+          <img alt="calendar"><p>20:00 - 23:00, 15/11/2026</p></section>
+          <section><a href="/adjacent">Chương trình khác</a><p>20:00 - 23:00, 16/11/2026</p></section></div>
+        ''')
+
+        class Client:
+            def __init__(self, wrong_article=False):
+                self.wrong_article = wrong_article
+
+            def get(self, url, hosts, **kwargs):
+                if url == legacy:
+                    raise FetchError('http_404')
+                if url == adapter.config['seeds'][0]:
+                    return catalogue
+                slot = next(slot for slot in slots if url.endswith(f'/dat-ve/{slot["showId"]}'))
+                article_id = 2099 if self.wrong_article and slot['showId'] == 127 else 2088
+                return page({
+                    'id': slot['showId'], 'article': {'id': article_id}, 'articleName': title,
+                    'isAvailFS': True, 'startTime': slot['startTime'], 'endTime': slot['endTime'],
+                }, '<span>Địa chỉ: 40 Hàng Bài, Phường Cửa Nam, TP. Hà Nội</span>')
+
+        client = Client()
+        candidate, = adapter.parse_many(adapter.fetch(client, legacy), legacy, NOW)
+        adapter.enrich(candidate, catalogue, client, NOW)
+        self.assertEqual(candidate.validate(NOW), [])
+        self.assertEqual(candidate.entry_key, 'program-2088')
+        self.assertEqual(candidate.replaces_source_url, legacy)
+        self.assertEqual([s.starts_at for s in candidate.occurrences],
+                         ['2026-11-14T20:00:00+07:00', '2026-11-15T20:00:00+07:00'])
+        broken, = adapter.parse_many(catalogue, adapter.config['seeds'][0], NOW)
+        adapter.enrich(broken, catalogue, Client(wrong_article=True), NOW)
+        self.assertIn('unresolved_individual_sessions', broken.validate(NOW))
+        self.assertEqual(broken.occurrences, [])
+
+    def test_opera_holds_gala_when_verified_bookings_omit_an_announced_night(self):
+        config = load_sources()['hoguomopera']
+        adapter = HoGuomOpera('hoguomopera', config)
+        programme = 'ballet-cuba-a-gala-of-ballet-masterpiecies-2098'
+        title = 'BALLET CUBA: A GALA OF BALLET MASTERPIECES'
+        path = f'/chuong-trinh-bieu-dien/{programme}'
+        original = f'https://hoguomopera.vn{path}'
+        now = NOW + timedelta(days=17)
+
+        def page(data, body):
+            node = {'props': {'pageProps': {'data': data}}}
+            return BeautifulSoup(f'<script id="__NEXT_DATA__">{json.dumps(node)}</script>{body}', 'html.parser')
+
+        for days, expected_hold in (((8,), True), ((8, 9), False)):
+            with self.subTest(days=days):
+                slots = [{'showId': 120 + day, 'articleId': 2098, 'isAvailFS': True,
+                           'startTime': f'2026-12-{day:02d}T20:00:00Z', 'endTime': f'2026-12-{day:02d}T23:00:00Z'}
+                         for day in days]
+                visible = ''.join(f'<p>20:00 - 23:00, {day:02d}/12/2026</p>' for day in days)
+                catalogue = page({'items': [
+                    {'slug': programme, 'articleId': 2098, 'isShow': True, 'name': title, 'showSches': slots,
+                     'shortDescription': 'Chương trình diễn ra trong hai đêm 08 và 09/12/2026.'},
+                ]}, f'<section><a href="{path}">{title}</a><img alt="calendar">{visible}</section>')
+                bookings = [page({**slot, 'id': slot['showId'], 'article': {'id': 2098}, 'articleName': title},
+                                 '<p>Địa chỉ: 40 Hàng Bài, Phường Cửa Nam, TP. Hà Nội</p>') for slot in slots]
+                client = Mock()
+                client.get.side_effect = [FetchError('http_404'), catalogue, *bookings]
+                rows, failures = collect_source('hoguomopera', config, client, now,
+                                                extra_urls=[original], existing_only=True)
+                self.assertEqual(failures, [])
+                event, = rows
+                self.assertEqual(event.replaces_source_url, original)
+                self.assertEqual(event.status, 'active')
+                if expected_hold:
+                    self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, event.validate(now))
+                    self.assertEqual(event.occurrences, [])
+                else:
+                    self.assertEqual(event.validate(now), [])
+                    self.assertEqual(len(event.occurrences), 2)
+
+    def test_varan_daily_exhibition_uses_admission_hours_instead_of_opening_ceremony(self):
+        config = load_sources()['varanvietnam']
+        adapter = VaranVietnam('varanvietnam', config)
+        html = '''<main><h2>Varan Vietnam tại Triển lãm Một bát thương</h2>
+          <div class="project-content"><p><b>THÔNG TIN SỰ KIỆN</b><br>
+            * Khai mạc: 15:00, ngày 12 tháng 11 năm 2026<br>
+            * Thời gian triển lãm: Từ ngày 12 đến ngày 30 tháng 11 năm 2026<br>
+            * Địa điểm: Bảo tàng Phụ nữ Việt Nam, 36 Lý Thường Kiệt, Hà Nội<br>
+            * Giờ mở cửa: Hàng ngày, 08:00–17:00<br>
+            * Vào cửa miễn phí</p></div>
+            <p>Giờ mở cửa: Hàng ngày, 05:00–23:00</p></main>'''
+        url = config['detail_pages'][0]
+        event = adapter.parse(BeautifulSoup(html, 'html.parser'), url, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.price_text, 'Miễn phí')
+        self.assertEqual(len(event.occurrences), 19)
+        self.assertEqual((event.occurrences[0].starts_at, event.occurrences[-1].ends_at),
+                         ('2026-11-12T08:00:00+07:00', '2026-11-30T17:00:00+07:00'))
+        broken = html.replace('Giờ mở cửa: Hàng ngày, 08:00–17:00', 'Giờ mở cửa: Xem thông báo sau')
+        self.assertIn('unresolved_individual_sessions',
+                      adapter.parse(BeautifulSoup(broken, 'html.parser'), url, NOW).validate(NOW))
+
+    def test_heritage_tea_uses_only_the_reviewed_section(self):
+        config = load_sources()['hoankiemheritage']
+        adapter = HoanKiemHeritage('hoankiemheritage', config)
+        html = '''<div class="lang-vi">
+            <h3>7. Di tích 40 Lãn Ông</h3>
+            <p>Thời gian: 04/11 – 30/11/2026.</p>
+            <p>Trải nghiệm văn hóa “Dược trà” tại tầng hai khu nhà Pháp.</p>
+            <h3>8. Địa điểm khác</h3><p>Thời gian: 12/11 – 13/11/2026.</p></div>'''
+        url = config['detail_pages'][0]
+        event = adapter.parse(BeautifulSoup(html, 'html.parser'), url, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.entry_key, 'duoc-tra-40-lan-ong')
+        self.assertEqual(event.occurrences[0].ends_at, '2026-12-01T00:00:00+07:00')
+        self.assertEqual(event.occurrences[0].precision, 'date')
+        incomplete = html.replace('<p>Thời gian: 04/11 – 30/11/2026.</p>', '')
+        self.assertIn('unresolved_individual_sessions',
+                      adapter.parse(BeautifulSoup(incomplete, 'html.parser'), url, NOW).validate(NOW))
+
+    def test_youth_theatre_requires_the_reviewed_local_start_and_venue(self):
+        config = load_sources()['hanoiyouththeatre']
+        adapter = HanoiYouthTheatre('hanoiyouththeatre', config)
+        html = '''<table><tbody>
+          <tr><td>CN 29/11/2026</td><td class="rbc-agenda-time-cell">15:00 – 17:00</td>
+              <td>Tuổi Thơ Dữ Dội</td><td>Đặt vé</td></tr>
+          <tr><td>CN 29/11/2026</td><td class="rbc-agenda-time-cell">13:00 – 15:00</td>
+              <td>Quân khu Nam Đồng</td><td>Đặt vé</td></tr>
+          <tr><td>CN 20/12/2026</td><td class="rbc-agenda-time-cell">20:00 – 22:00</td>
+              <td>Quân khu Nam Đồng</td><td>Đặt vé</td></tr>
+        </tbody></table>'''
+        page = BeautifulSoup(html, 'html.parser')
+        event, = adapter.parse_many(page, config['detail_pages'][0], NOW)
+        self.assertEqual(event.entry_key, 'tuoi-tho-du-doi-20261129')
+        self.assertIn('unverified_destination', event.validate(NOW))
+        client = Mock()
+        client.get.return_value = BeautifulSoup(
+            '<p>Địa chỉ: 11 Ngô Thì Nhậm, Phường Hai Bà Trưng, TP Hà Nội</p>', 'html.parser')
+        adapter.enrich(event, page, client, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.occurrences[0].ends_at, '2026-11-29T17:00:00+07:00')
+
+    def test_yoga_workshop_uses_its_own_session_and_booking_address(self):
+        config = load_sources()['yogalabhanoi']
+        adapter = YogaLabHanoi('yogalabhanoi', config)
+        html = f'''<main><a href="{config["booking_url"]}">Booking page</a>
+          <div data-testid="mesh-container-content">
+            <p>Detox Your Posture: 90-min Special Class</p>
+            <p>Sunday, 29th November | 10:00 – 11:30</p>
+          </div><div data-testid="mesh-container-content">
+            <p>The Intelligent Backbend</p><p>Sunday, 06th December | 14:00 – 15:30</p>
+          </div></main>'''
+        page = BeautifulSoup(html, 'html.parser')
+        url = config['detail_pages'][0]
+        event = adapter.parse(page, url, NOW)
+        client = Mock()
+        client.get.return_value = BeautifulSoup('''<main><p>Address: Level 5, no.19-21 Yen Ninh Alley
+          (turn right from no.23 Yen Ninh), Ba Dinh</p></main>''', 'html.parser')
+        adapter.enrich(event, page, client, NOW)
+        self.assertEqual(event.validate(NOW), [])
+        self.assertEqual(event.occurrences[0].starts_at, '2026-11-29T10:00:00+07:00')
+        self.assertEqual(event.occurrences[0].ends_at, '2026-11-29T11:30:00+07:00')
+        changed = html.replace('10:00 – 11:30', '10:00 – 12:00')
+        unsupported = adapter.parse(BeautifulSoup(changed, 'html.parser'), url, NOW)
+        self.assertIn('unresolved_individual_sessions', unsupported.validate(NOW))
 
     def test_seven_day_verification_boundary(self):
         c=candidate('place')
@@ -133,6 +421,68 @@ class WeeklyCoverage(unittest.TestCase):
         event['location']['name'] = 'Xưởng Mây, 12 Trần Phú, 16 Lê Duẩn'
         self.assertIn('unverified_street_address', parse().validate(NOW))
 
+    def test_da_nang_visible_session_starts_prevent_an_aggregate_time_window(self):
+        url = 'https://lifeofdanang.com/vi/danang/pickleball'
+        adapter = LifeOfDaNang('lifeofdanang', load_sources()['lifeofdanang'])
+        event = {
+            '@type': 'Event',
+            'name': 'Giao lưu pickleball',
+            'location': {'name': 'Sân Pickleball', 'address': {
+                'streetAddress': '84 Chế Lan Viên', 'addressLocality': 'Da Nang',
+            }},
+            'startDate': '2026-11-09T14:30:00+07:00',
+            'endDate': '2026-11-09T17:30:00+07:00',
+        }
+
+        def parse(agenda, events):
+            html = (f'<main><dl><div><dt>Thời gian</dt><dd><span>Thứ Hai, 9 tháng 11</span>'
+                    f'<span>{agenda}</span></dd></div></dl></main>'
+                    f'<script type="application/ld+json">{json.dumps(events)}</script>')
+            return adapter.parse_many(BeautifulSoup(html, 'html.parser'), url, NOW)[0]
+
+        starts = '14h30, 17h30 và 19h30'
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse(starts, [event]).reasons)
+        next_sessions = [
+            dict(event, startDate=f'2026-11-09T{start}:00+07:00', endDate=f'2026-11-09T{end}:00+07:00')
+            for start, end in [('17:30', '19:15'), ('19:30', '21:00')]
+        ]
+        self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, parse(starts, [event, *next_sessions]).reasons)
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse('14h30, 17h30', [event, *next_sessions]).reasons)
+        self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, parse('14h30 đến 17h30', [event]).reasons)
+
+    def test_da_nang_daily_opening_windows_keep_both_sessions_only_on_dated_days(self):
+        url = 'https://lifeofdanang.com/vi/danang/weekly-exhibition'
+        adapter = LifeOfDaNang('lifeofdanang', load_sources()['lifeofdanang'])
+        event = {
+            '@type': 'Event', 'name': 'Triển lãm', 'eventStatus': 'https://schema.org/EventScheduled',
+            'location': {'name': 'Bảo tàng', 'address': {
+                'streetAddress': '281 Phan Bội Châu', 'addressLocality': 'Da Nang',
+            }},
+            'startDate': '2026-11-09T07:30:00+07:00', 'endDate': '2026-11-09T11:00:00+07:00',
+        }
+
+        def parse(events, heading='Hằng ngày, 7h30 đến 11h và 13h30 đến 16h30'):
+            soup = BeautifulSoup(f'''<main><dl><dt>Thời gian</dt><dd><span>{heading}</span>
+                <span>Sắp tới</span></dd></dl></main>
+                <script type="application/ld+json">{json.dumps(events)}</script>''', 'html.parser')
+            return adapter.parse_many(soup, url, NOW)[0]
+
+        later = dict(event, startDate='2026-11-11T00:30:00+00:00', endDate='2026-11-11T04:00:00+00:00')
+        candidate = parse([event, later])
+        self.assertEqual(candidate.validate(NOW), [])
+        self.assertEqual([(o.starts_at, o.ends_at) for o in candidate.occurrences], [
+            (f'2026-11-{day}T{start}:00+07:00', f'2026-11-{day}T{end}:00+07:00')
+            for day in ('09', '11') for start, end in [('07:30', '11:00'), ('13:30', '16:30')]
+        ])
+
+        conflict = dict(later, endDate='2026-11-11T04:30:00+00:00')
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse([event, conflict]).validate(NOW))
+        overlapping = 'Hằng ngày, 7h30 đến 14h và 13h30 đến 16h30'
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, parse([event], overlapping).validate(NOW))
+        cancelled = dict(event, eventStatus='https://schema.org/EventCancelled')
+        self.assertEqual(parse([cancelled]).status, 'cancelled')
+        self.assertEqual(len(parse([cancelled]).occurrences), 1)
+
     def test_reviewed_da_nang_event_requires_matching_venue_and_complete_session(self):
         config = load_sources()['lifeofdanang']
         url, review = next(iter(config['reviewed_events'].items()))
@@ -181,3 +531,54 @@ class WeeklyCoverage(unittest.TestCase):
                 self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, reasons)
         event['description'] = 'Lễ thắp sáng cây thông.\nTiệc tối riêng từ 17h30 đến 19h.'
         self.assertNotIn(CONFIRMED_SCHEDULE_CONFLICT, enrich().reasons)
+
+    def test_reviewed_jazz_requires_both_sessions_and_an_exact_organizer_link(self):
+        config = load_sources()['lifeofdanang']
+        event_id = 'city-da-nang-jazz-festival-2026-at-the-furama-2026-11-27'
+        url = f'https://lifeofdanang.com/vi/danang/{event_id}'
+        review = config['reviewed_events'][url]
+        adapter = LifeOfDaNang('lifeofdanang', config)
+        event = {
+            '@type': 'Event',
+            'name': 'Lễ hội Jazz Đà Nẵng 2026 tại Furama',
+            'description': 'Nhạc jazz sống từ 17h đến 23h cả hai tối.',
+            'startDate': '2026-11-27',
+            'endDate': '2026-11-28',
+            'location': {'name': review['location'], 'address': {'addressLocality': 'Da Nang'}},
+        }
+        link = (f'<a data-ev="organiser" data-ev-id="{event_id}" '
+                f'href="{review["schedule_url"].rstrip("/")}">Nguồn chính thức</a>')
+        schedule = '''<header class="hero"><div class="when">
+        <p class="day">Friday 27 and Saturday 28 November 2026</p>
+        <p class="time">5 pm to 11 pm, both nights</p>
+        <p class="place">Lounge Bar, Furama Danang</p>
+        </div></header>'''
+
+        def enrich(publisher=event, source=schedule, official_link=link):
+            class Client:
+                def get(self, url, hosts):
+                    pages = {
+                        review['schedule_url']: source,
+                        review['address_url']: f'<p>{review["address"]}, Việt Nam</p>',
+                    }
+                    return BeautifulSoup(pages[url], 'html.parser')
+
+            html = f'<main>{official_link}</main><script type="application/ld+json">{json.dumps(publisher)}</script>'
+            soup = BeautifulSoup(html, 'html.parser')
+            now = NOW + timedelta(days=14)
+            candidate, = adapter.parse_many(soup, url, now)
+            return adapter.enrich(candidate, soup, Client(), now)
+
+        result = enrich()
+        self.assertEqual(result.validate(NOW + timedelta(days=14)), [])
+        self.assertEqual(result.address, review['address'])
+        self.assertEqual([(o.starts_at, o.ends_at, o.precision) for o in result.occurrences], [
+            (f'2026-11-{day}T17:00:00+07:00', f'2026-11-{day}T23:00:00+07:00', 'time')
+            for day in (27, 28)
+        ])
+        self.assertIn('unresolved_reviewed_venue', enrich(official_link=link.replace(event_id, 'another-event')).reasons)
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, enrich(source=schedule.replace('11 pm', '10 pm')).reasons)
+        self.assertIn(CONFIRMED_SCHEDULE_CONFLICT, enrich(publisher=dict(event, endDate='2026-11-27')).reasons)
+        for incomplete in (schedule.replace('both nights', 'Friday only'),
+                           schedule.replace('Lounge Bar', 'Main Lobby'), schedule + schedule):
+            self.assertIn('unresolved_cross_source_session_times', enrich(source=incomplete).reasons)

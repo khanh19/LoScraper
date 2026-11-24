@@ -12,6 +12,7 @@ ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 CITIES = {"hcmc": "TP. Hồ Chí Minh", "hanoi": "Hà Nội", "danang": "Đà Nẵng"}
 CATEGORIES = {"restaurant", "cafe", "bar", "nightlife", "workshop", "culture", "music", "experience", "sports", "market"}
 CONFIRMED_SCHEDULE_CONFLICT = "confirmed_schedule_conflict"
+PUBLISHER_CONFIRMED_CANCELLATION = "publisher_confirmed_cancellation"
 
 
 def folded(text: str) -> str:
@@ -97,6 +98,7 @@ class Candidate:
     image_permission: dict | None = None
     entry_key: str = ""
     evidence_locator: str = ""
+    replaces_source_url: str = ""
 
     def validate(self, now: datetime) -> list[str]:
         reasons = list(self.reasons)

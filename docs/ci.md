@@ -20,6 +20,13 @@ Both collection workflows are manual-only. Their shared concurrency group preven
 
 All PR targets (including stacked PRs), pushes to `main`, `develop`, and `stephen-*`, and manual dispatch run CI. Jobs have read-only repository permissions, time limits, and cancel superseded runs. They use no provider credentials or live scraping. No deployment, signed iOS build, merge, or schedule activation is configured.
 
+For an earlier stack PR without its own workflow, dispatch **Scraper CI**
+from the reviewed release branch with `review_commit` set to the PR head's
+full SHA. The job records that checkout and runs its unit tests without
+staging secrets or live collection. PostgreSQL suites skip when no test
+database is configured. Cite the run as evidence for the tested commit.
+GitHub associates the workflow check with the branch that ran it.
+
 After the parent PRs merge, an administrator should make the job name above required in branch protection/rulesets on the integration branches. Workflow files alone do not enforce merge protection. Keep production deployment as a separate, explicitly approved environment gate.
 
 ## Verified run — 15 November 2026

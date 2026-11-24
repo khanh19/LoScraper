@@ -5,18 +5,37 @@ from itertools import islice
 import json
 import os
 from pathlib import Path
+import re
 from urllib.parse import urlsplit,urljoin
 from .adapters import CLASSES, is_type, load_sources, structured
-from .http import PublicClient,FetchError
+from .http import PublicClient, FetchError, fetch_failure_reason
 from .model import CITIES,canonical
-from .social_links import extract_posts, remember_lead
+from .social_links import TikTokShareResolver, extract_posts, lead_identity, remember_lead
 from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
+MAX_INSTAGRAM_PROFILES_PER_CITY = 4
+MAX_ORIGINAL_INSTAGRAM_LEAD_READS = 3
+MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS = 3
+MAX_PUBLIC_TIKTOK_LEAD_READS = 3
 
-def reviewed_tiktok_profile(city, client):
+def canonical_tiktok_profile(url):
+    if not isinstance(url, str):
+        return None
+    try:
+        parts = urlsplit(canonical(url))
+    except ValueError:
+        return None
+    if (parts.hostname in {'tiktok.com', 'www.tiktok.com'}
+            and re.fullmatch(r'/@[A-Za-z0-9_.]+', parts.path)):
+        return 'https://www.tiktok.com' + parts.path
+    return None
+
+
+def reviewed_profiles(city, client, platform, normalize):
+    seen = set()
     for source in json.loads(DIRECTORY.read_text()):
-        accounts = [a for a in source['accounts'] if a['platform'] == 'tiktok']
+        accounts = [a for a in source['accounts'] if a['platform'] == platform]
         if city not in source['cities'] or not accounts:
             continue
         page = source['review_evidence']
@@ -24,34 +43,91 @@ def reviewed_tiktok_profile(city, client):
             soup = client.get(page, {urlsplit(page).hostname})
         except FetchError:
             continue
-        links = {a['href'].rstrip('/') for a in soup.select('a[href]')}
+        links = {normalize(a['href']) for a in soup.select('a[href]')}
         for entry in structured(soup):
             owner, aliases = entry.get('url'), entry.get('sameAs')
             if (is_type(entry, 'Organization') and isinstance(owner, str)
                     and owner.rstrip('/') == page.rstrip('/') and isinstance(aliases, list)):
-                links.update(alias.rstrip('/') for alias in aliases if isinstance(alias, str))
+                links.update(normalize(alias) for alias in aliases)
         for account in accounts:
-            if account['url'].rstrip('/') in links:
-                return {'url': account['url'], 'ownership_evidence': page,
-                        'publisher_id': source['publisher_id'], 'city_hint': city}
-    return None
+            url = normalize(account['url'])
+            if url and url in links and url not in seen:
+                seen.add(url)
+                yield {'url': url, 'ownership_evidence': page,
+                       'publisher_id': source['publisher_id'], 'city_hint': city}
+
+def reviewed_tiktok_profiles(city, client):
+    return reviewed_profiles(city, client, 'tiktok', canonical_tiktok_profile)
+
+
+def reviewed_tiktok_profile(city, client):
+    return next(reviewed_tiktok_profiles(city, client), None)
+
+
+def review_tiktok_leads(posts, client, now):
+    from .tiktok_public import post_permalink, review_post
+
+    leads = []
+    reviews = []
+    for post in posts:
+        if post['platform'] != 'tiktok':
+            leads.append(post)
+            continue
+
+        # A publisher's link and timestamp are hints. Only the original post
+        # may establish when it was published for TikTok lead freshness.
+        lead = {**post, 'published_at': None}
+        if post.get('published_at'):
+            lead['publisher_reported_publication'] = post['published_at']
+        url = post_permalink(post['url'])
+        if url and len(reviews) < MAX_PUBLIC_TIKTOK_LEAD_READS:
+            review = review_post(url, client, now)
+            reviews.append(review)
+            if review['status'] == 'outside_fresh_window':
+                continue
+            if review['status'] == 'fresh_needs_venue_review':
+                lead['published_at'] = review['published_at']
+                lead['publication_evidence'] = 'verified_original_tiktok_post'
+                if 'engagement_snapshot' in review:
+                    lead['engagement_snapshot'] = review['engagement_snapshot']
+        leads.append(lead)
+    return leads, reviews
+
 
 def discover(city,client,now,counts=None,limit=6):
-    seeds=[s for s in json.loads(DIRECTORY.read_text()) if city in s['cities']]
+    seeds = [source for source in json.loads(DIRECTORY.read_text())
+             if city in source['cities'] and not source.get('profiles_only')]
     seeds.sort(key=lambda s:(sum((counts or {}).get(c,0) for c in s['categories']),s['id']))
     configs = load_sources()
+    resolver = TikTokShareResolver(client)
     posts={};pages=[]
     for seed in seeds[:limit]:
         try:
-            host=urlsplit(seed['url']).hostname
-            soup=client.get(seed['url'],{host})
-            targets=[(seed['url'],soup)]
             slug = seed['id']
+            host = urlsplit(seed['url']).hostname
+            adapter = CLASSES[slug](slug, configs[slug]) if slug in CLASSES and slug in configs else None
+
+            def fetch(url):
+                if adapter and getattr(client, 'browser_enabled', False):
+                    return adapter.fetch(client, url)
+                return client.get(url, {host})
+
+            soup = fetch(seed['url'])
+            targets = [(seed['url'], soup)]
             seed_url = canonical(seed['url'])
-            if slug in CLASSES and slug in configs:
+            if slug == 'ticketbox' and adapter:
+                # Listing city labels route the limited detail reads. The
+                # destination still needs independent verification.
+                try:
+                    links = adapter.public_listing_links(client, city_hint=city)
+                except (FetchError, ValueError) as error:
+                    pages.append({'source': slug, 'stage': 'on_sale_listing',
+                                  'status': 'failed', 'reason': fetch_failure_reason(error)})
+                    links = []
+            elif adapter:
                 # Website adapters already distinguish detail links from calendar
                 # exports, related indexes, and locale switches.
-                links = CLASSES[slug](slug, configs[slug]).links(soup, seed['url'])
+                links = adapter.links(soup, seed['url'])
             else:
                 links = (
                     urljoin(seed['url'], a['href']) for a in soup.select('a[href]')
@@ -59,23 +135,120 @@ def discover(city,client,now,counts=None,limit=6):
                 )
             details = (u for u in dict.fromkeys(links) if urlsplit(u).hostname == host and u != seed_url)
             for u in islice(details, 2):
-                try:targets.append((u,client.get(u,{host})))
-                except (FetchError,ValueError) as e:pages.append({'source':seed['id'],'url':u,'status':'failed','reason':str(e)})
+                try:
+                    targets.append((u, fetch(u)))
+                except (FetchError, ValueError) as error:
+                    pages.append({'source': slug, 'url': u, 'status': 'failed', 'reason': fetch_failure_reason(error)})
             for u,html in targets:
-                found=extract_posts(str(html),u,now)
+                found=extract_posts(str(html),u,now,resolve_share=resolver.resolve)
                 pages.append({'source':seed['id'],'url':u,'status':'complete','leads':len(found)})
                 for post in found:
                     post['publisher_id']=seed['publisher_id']
                     post['city_hint']=city  # NEVER independent location evidence.
                     remember_lead(posts, post)
-        except (FetchError,ValueError) as e:pages.append({'source':seed['id'],'status':'failed','reason':str(e)})
-    return {'city':city,'pages':pages,'posts':list(posts.values())[:30],
+        except (FetchError, ValueError) as error:
+            pages.append({'source': slug, 'url': seed['url'], 'status': 'failed', 'reason': fetch_failure_reason(error)})
+    leads, tiktok_reviews = review_tiktok_leads(posts.values(), client, now)
+    # A website may report when it embedded a post. Use the original Instagram
+    # evidence to verify that post's own publication time.
+    for lead in leads:
+        if lead['platform'] == 'instagram' and lead['published_at']:
+            lead['publisher_reported_publication'] = lead['published_at']
+            lead['published_at'] = None
+    return {'city':city,'pages':pages,'posts':leads[:30],
+            'tiktok_share_links':resolver.results,
+            'public_tiktok_reviews':tiktok_reviews,
             'queries':queries(city,counts),'provider_requests':0,'published':0}
+
+
+def review_instagram_leads(report, client, now):
+    from .instagram_public import instagram_profile, original_attribution, review, review_profile
+
+    urls = (post['url'] for post in report['posts'] if post['platform'] == 'instagram')
+    original_reviews = report['public_instagram_reviews'] = [
+        review(url, client, now) for url in islice(urls, MAX_ORIGINAL_INSTAGRAM_LEAD_READS)
+    ]
+    originals = {lead_identity(post['url']): post for post in original_reviews}
+    profiles = reviewed_profiles(report['city'], client, 'instagram', instagram_profile)
+    profile_reports = report['public_instagram_profile_reviews'] = [
+        review_profile(profile, client, now) for profile in islice(profiles, MAX_INSTAGRAM_PROFILES_PER_CITY)
+    ]
+    attribution_reviews = report['public_instagram_attribution_reviews'] = []
+    remaining = MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS
+    leads = {}
+    for lead in report['posts']:
+        original = originals.get(lead_identity(lead['url']))
+        if original:
+            lead = {**lead, 'original_post_status': original['status']}
+            if original['status'] == 'recent_day_needs_venue_review':
+                lead.update(
+                    publication_day=original['publication_day'],
+                    publication_evidence='verified_original_post_preview',
+                    engagement_snapshot=instagram_engagement(original, 'verified_original_post_preview', now),
+                )
+        remember_lead(leads, lead)
+    for profile in profile_reports:
+        for post in profile['posts']:
+            extra_evidence = {}
+            metrics_source = 'verified_profile_embed'
+            metrics = post
+            identity = lead_identity(post['url'])
+            original = originals.get(identity)
+            if post['status'] == 'coauthored_or_unknown_attribution':
+                if identity not in originals and remaining:
+                    originals[identity] = review(post['url'], client, now)
+                    remaining -= 1
+                original = originals.get(identity)
+                attribution = original_attribution(post, original) if original else 'attribution_read_limit'
+                attribution_reviews.append({**(original or {}), 'url': post['url'],
+                                            'profile_account': post['profile_account'], 'attribution': attribution})
+                if attribution != 'confirmed_profile_account':
+                    continue
+                extra_evidence['attribution_evidence'] = 'verified_original_post_preview'
+                metrics_source = 'verified_original_post_preview'
+                metrics = original
+            elif post['status'] != 'fresh_needs_venue_review':
+                continue
+            elif original and original['status'] == 'recent_day_needs_venue_review':
+                attribution = original_attribution({**post, 'profile_account': post['account']}, original)
+                attribution_reviews.append({**original, 'url': post['url'],
+                                            'profile_account': post['account'], 'attribution': attribution})
+                if attribution != 'confirmed_profile_account':
+                    continue
+                metrics_source = 'verified_original_post_preview'
+                metrics = original
+            if original:
+                extra_evidence['original_post_status'] = original['status']
+                if original['status'] == 'recent_day_needs_venue_review':
+                    extra_evidence['publication_day'] = original['publication_day']
+            if snapshot := instagram_engagement(metrics, metrics_source, now):
+                extra_evidence['engagement_snapshot'] = snapshot
+            remember_lead(leads, {
+                'url': post['url'], 'platform': 'instagram', 'city_hint': report['city'],
+                'published_at': post['published_at'], 'text': post['caption'],
+                'discovered_on': profile['embed_url'], 'publisher_id': profile['publisher_id'],
+                'publication_evidence': 'verified_profile_embed', 'requires_provider_validation': True,
+                **extra_evidence,
+            })
+    report['posts'] = sorted(leads.values(), key=lambda row: (
+        row['published_at'] or row.get('publication_day', ''), row['url'],
+    ), reverse=True)[:30]
+
+
+def instagram_engagement(post, source, now):
+    counts = {key: post[key] for key in ('likes', 'comments') if key in post}
+    if not counts:
+        return None
+    return {**counts, 'source': source, 'account': post['account'], 'evaluated_at': now.isoformat()}
+
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--city',choices=list(CITIES),required=True)
     p.add_argument('--max-sources',type=int,default=6)
+    p.add_argument('--browser', action='store_true', help='Use website adapters with browser support for public publisher pages')
+    p.add_argument('--review-instagram', action='store_true',
+                   help=f'Check discovered Instagram permalinks and up to {MAX_INSTAGRAM_PROFILES_PER_CITY} verified organizer profiles')
     p.add_argument('--write-leads',action='store_true')
     p.add_argument('--env-file',action='append',default=[])
     args=p.parse_args()
@@ -83,6 +256,7 @@ def main():
     from .__main__ import load_env_files
     load_env_files(args.env_file)
     store=None;counts={};now=datetime.now(timezone.utc)
+    client = PublicClient(browser=args.browser)
     try:
         if args.write_leads:
             url=os.environ.get('DATABASE_URL','');parts=urlsplit(url)
@@ -91,7 +265,9 @@ def main():
             from .store import Store
             store=Store(url)
             counts={r['category']:r['n'] for r in store.db.execute("SELECT payload->>'category' category,count(*) n FROM discovery_evaluate_all(%s,%s) WHERE reason='eligible' GROUP BY 1",(now,args.city)).fetchall()}
-        report=discover(args.city,PublicClient(),now,counts,args.max_sources)
+        report=discover(args.city,client,now,counts,args.max_sources)
+        if args.review_instagram:
+            review_instagram_leads(report, client, now)
         if store:
             for row in report['posts']:
                 store.db.execute("""INSERT INTO discovery_leads(url,platform,discovered_on,published_at,publisher_id,city_slug)
@@ -99,6 +275,7 @@ def main():
         print(json.dumps(report,ensure_ascii=False,indent=2))
         return 2 if any(r['status']=='failed' for r in report['pages']) else 0
     finally:
+        client.close()
         if store:store.close()
 
 if __name__=='__main__':raise SystemExit(main())

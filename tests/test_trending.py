@@ -125,6 +125,24 @@ class Parsers(unittest.TestCase):
         self.assertEqual(category('Triển lãm Thực vật trong đời sống'), 'culture')
         self.assertEqual(category('Lễ hội ẩm thực địa phương'), 'restaurant')
 
+    def test_fitness_category_takes_precedence_over_incidental_food_and_drink(self):
+        self.assertEqual(category('Tập powerlifting và cử tạ Olympic với một thùng bia'), 'sports')
+        self.assertEqual(category('Yoga bay ở Spanda, cạnh quán café chay'), 'sports')
+
+    def test_life_of_danang_checks_each_nightly_show_start(self):
+        page = BeautifulSoup('''<main><dl><dt>Thời gian</dt>
+            <dd><span>Hằng đêm, 17h và 19h45</span>
+            <span>Sắp tới: Thứ 7, 7 thg 11, CN, 8 thg 11</span></dd></dl></main>''', 'html.parser')
+
+        def session(day, start, end):
+            return Occurrence(f'2026-11-{day}T{start}:00+07:00', f'2026-11-{day}T{end}:00+07:00')
+
+        check = CLASSES['lifeofdanang']._visible_starts_conflict
+        first = [session('07', '17:00', '18:00'), session('07', '19:45', '20:45')]
+        second = [session('08', '17:00', '18:00'), session('08', '19:45', '20:45')]
+        self.assertFalse(check(page, first + second))
+        self.assertTrue(check(page, first + [session('08', '17:00', '19:45')]))
+
     def test_ticketbox_sessions_override_aggregate(self):
         event={'@type':'Event','name':'Baking Workshop','startDate':'2026-11-10T07:00:00Z','endDate':'2026-11-24T09:00:00Z',
             'offers':{'@type':'Offer','price':300000,'priceCurrency':'VND'},
@@ -135,6 +153,26 @@ class Parsers(unittest.TestCase):
         self.assertEqual(len(c.occurrences),2);self.assertEqual(c.validate(NOW),[])
         self.assertEqual(c.price_text,'Giá niêm yết: 300.000 ₫')
         self.assertEqual(datetime.fromisoformat(c.occurrences[0].ends_at).day,10)
+
+    def test_only_structured_cancellation_supplies_notification_evidence(self):
+        for status, outcome, confirmed in (
+            ("https://schema.org/EventCancelled", "cancelled", True),
+            ("https://schema.org/EventPostponed", "cancelled", False),
+            ("https://example.com/EventCancelled", "active", False),
+            (None, "active", False),
+        ):
+            with self.subTest(status=status):
+                event = {
+                    "@type": "Event",
+                    "name": "Baking Workshop",
+                    "eventStatus": status,
+                }
+                candidate = self.parse(
+                    "ticketbox",
+                    f'<main><script type="application/ld+json">{json.dumps(event)}</script></main>',
+                )
+                self.assertEqual(candidate.status, outcome)
+                self.assertEqual("publisher_confirmed_cancellation" in candidate.reasons, confirmed)
 
     def test_article_publication_is_not_an_event(self):
         c=self.parse('danangfantasticity','''<h1>Lễ hội ẩm thực</h1><article><time datetime="2026-11-07"></time>

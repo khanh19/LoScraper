@@ -277,3 +277,465 @@ tourism profile both failed TLS before returning a post list. Fresh automatic
 TikTok discovery remains unverified. The canonical quota database was
 unreachable. The check made no metered requests and wrote no feed records.
 [TikTok creator-profile oEmbed](https://developers.tiktok.com/docs/en/embed-creator-profiles/)
+
+A read-only audit of the separate multimodal ledger on 23 November confirmed
+the exact provider dates for the two Instagram reels. The saved November 22
+snapshot recorded 4,495 plays for Tiệm Yến and 21,395 for Mì Cay Gangwon. Tiệm
+Yến's own article confirmed the Da Nang branch on November 21. Gangwon's
+promotion end date still needs evidence. The Instagram samples are for review.
+The 30 cached TikTok results have no publication later than November 15, and
+the November 22 reservation contains no records. Apify has 132 of 132 reserved
+units, including two unresolved requests. The old Bright Data/SerpAPI ledger
+was absent from this cluster. No new provider request or feed import was made.
+
+### November 24 provider and organizer recheck
+
+Social triage recognizes styled Unicode activity headings. The organizer
+schedule parser reads dotted dates such as `29.11.2026`. A dotted date
+without a four-digit year stays unresolved even when the caption names a
+weekday. The Yoga Lab post was recognized as an activity lead and held for
+its missing event year. The staging card uses the organizer website's
+reviewed schedule. [Original Instagram post](https://www.instagram.com/p/DgEXUf7hYR5/)
+
+The 1900 anniversary captions contain a 2019 founding date and a November 27,
+2026 event date. Explicitly labeled founding dates stay out of event sessions.
+Date-only captions containing only ended dates are recaps. A mix of ended and
+upcoming dates without that attribution stays unresolved. The three anniversary
+posts came from the same publisher. [Organizer post](https://www.instagram.com/p/DgDABDCk5Vj/)
+
+The original Bright Data and SerpAPI ledger remains unavailable. The separate
+multimodal ledger was audited from a local PostgreSQL copy with read-only
+transactions. Apify's account API reported the Free plan, a $5 monthly credit
+limit, and approximately $0.39 of November usage. The Lô campaign had all
+132 output units reserved. A read of the available actor-run history found
+no matching runs for the two reservations without a run ID. Both reservations
+remain unresolved. [Apify actor-run history](https://docs.apify.com/api/v2/actor-runs-get)
+
+The November 24 Bright Data dashboard showed 4,996 shared free credits and a
+$5 balance fully accounted for by promotional transactions. Both recharge
+switches showed off. The read-only API checks matched the existing account
+credentials and confirmed the same allowance and recharge state. The receipt
+was used in memory for this check. New jobs still require the complete
+canonical reservation ledger.
+
+KaT Jewelry's own homepage links to its TikTok profile and advertises its
+November in-person appointment calendar for HCMC. The HCMC public audit uses
+this profile as a lead. Each post still needs its own publication timestamp
+and the original activity or branch evidence.
+[KaT organizer page](https://katjewelry.vn/) ·
+[Original profile](https://www.tiktok.com/@katjewelry)
+
+The Vietnam Exposition Center calendar links to `@vec.expo` on Instagram and
+`@vec.global` on TikTok. The Firebeat festival site links to `@firebeat.global`
+on TikTok. Both accounts and the festival use VEC's publisher identity for
+independent-source counting. Their sites supplied account ownership evidence
+and no original post links in the sample, so they stay outside the six-site
+website scan. The Instagram profile returned fresh, review-only booth announcements
+for the same November 27–29 event. The venue listing opens at 09:00, while
+the festival's visitor guide and Hanoi's tourism portal say 10:00. The event
+remains held while the public schedules disagree.
+[VEC event listing](https://vec.global/events/hanoi-firebeat-world-festival-2026) ·
+[Festival visitor guide](https://firebeat.global/khach-tham-du) ·
+[Hanoi tourism portal](https://hanoigo.hanoi.gov.vn/event/hanoi-firebeat-world-festival-2026) ·
+[Sample booth announcement](https://www.instagram.com/p/DgEyy7qAgbL/)
+
+The Mắt Nghe project links its TikTok account from its official website.
+Youth+ reported its November 28 sign-language workshop and exhibition at
+Nest Cafe by LightHub in HCMC. This records an account to check for an original
+post. [Project website](https://www.matnghe.com/) ·
+[Youth+ announcement](https://youth.com.vn/posts/chinh-thuc-cong-bo-su-kien-da-mat-bat-tay)
+
+The Hanoi source directory now checks Yoga Lab Hanoi's public profile against
+the account linked on its own website. The profile embed tied its **Detox Your
+Posture** announcement to November 23 at 10:00 Vietnam time. The caption and
+organizer's workshop calendar agree on the November 29 session at 10:00–11:30.
+The caption and studio page agree on floor 5, 19–21 ngõ Yên Ninh, Ba Đình.
+The original Instagram preview confirmed the account and showed six likes
+and zero comments. Its unzoned day differs from the embed's timestamp, so
+the exact embed time is used for recency. The post remains an organizer lead
+for individual review. [Original Instagram post](https://www.instagram.com/p/DgEXUf7hYR5/) ·
+[Workshop calendar](https://www.yogalabhanoi.com/events) ·
+[Studio location](https://www.yogalabhanoi.com/locations)
+
+When a website link and its verified public Instagram profile give the same
+publication instant for the same post, the saved lead keeps the checked
+profile as its evidence. The page discovery report retains the website link.
+Conflicting times retain separate review evidence and cannot use that merge
+rule. The saved lead still requires review before publishing.
+
+The Saigon Garden Flea listing announces a November 28–29 event, but its
+linked Instagram announcement reports a November 11 publication day.
+The later event dates do not make it a recent social mention.
+[Event listing](https://www.discoversaigon.vn/su-kien/saigon-garden-flea-5a-nguyen-dinh-chieu-november-2026) ·
+[Original Instagram post](https://www.instagram.com/p/DfoeZp4nWAq/)
+
+## Public TikTok metadata check
+
+Run `python -m trending.tiktok_public` locally or manually dispatch **Scraper CI**
+with `public_tiktok_audit=true`. It verifies up to four creator links per city on
+reviewed organizer sites, calls the official profile oEmbed endpoint per distinct
+profile, and examines at most two original video pages from that creator. The
+job uses public HTTPS metadata and does not receive credentials.
+Pass `--browser` to render a public profile whose initial HTML has no video
+links. Use `LO_BROWSER_CHANNEL=chrome` to select an installed Chrome locally.
+If Chromium cannot launch, the affected sources report
+`browser_start_unavailable` and HTTP-only sources can still finish.
+The manual Actions check enables browser rendering. The first hosted check
+verified Ticketbox's profile identity, but its initial HTML had no original
+video links. The rendered check also found no links, and Da Nang's official
+tourism profile returned HTTP 400 at oEmbed. The expanded check also tries the
+profiles linked by 1900 Le Théâtre, Visit HCMC, and DANAGO. [Direct HTTP check](https://github.com/khanh19/LoScraper/actions/runs/45112850240) ·
+[First browser check](https://github.com/khanh19/LoScraper/actions/runs/45113197703)
+
+If the creator page opens with no original links, the browser audit can also
+render TikTok's public creator widget. The oEmbed author, cited profile, and
+creator handle must match. The widget runs in a fresh page that allows only
+its HTTPS frame and scripts. It blocks media requests and accepts same-account
+video or photo permalinks. Each permalink still needs its own publication
+timestamp. The report records the widget result as `creator_embed`.
+[TikTok creator widget](https://developers.tiktok.com/docs/en/embed-creator-profiles/)
+
+An oEmbed HTTP 400 is recorded separately. For an account linked from the
+reviewed organizer website, the audit can still check the account's public
+profile for original post links. Access, throttling, and TLS errors stop that
+audit. Fresh original posts can also carry a timestamped snapshot of the
+visible counts in their own public page data. The post ID, media type and
+author must match. A single snapshot does not establish an engagement trend
+or verify the event and venue.
+
+On 23 November, the local HTTPS diagnostic identified the certificate
+presented for TikTok as Virginia Tech's DNS-block certificate. The curl and
+browser checks both correctly rejected the hostname mismatch. This diagnosis
+applies to the local network. The hosted audit reached creator oEmbed for
+several reviewed profiles and still found no original videos. Treat these as
+separate results. Keep hostname verification enabled and use a permitted
+environment for subsequent TikTok checks. [Virginia Tech application restrictions](https://it.vt.edu/projects/app-restrictions.html) · [Hosted audit](https://github.com/khanh19/LoScraper/actions/runs/45124845084)
+
+The report requires a timestamp with a timezone from structured video metadata
+bound to the exact original post. City hints from the organizer still need
+venue corroboration. A fresh date produces a lead for review. The command keeps
+publication and scheduled collection separate. The GitHub job runs only on
+explicit manual dispatch. [TikTok creator embeds](https://developers.tiktok.com/docs/en/embed-creator-profiles/) ·
+[TikTok player URLs](https://developers.tiktok.com/docs/en/embed-player/)
+
+The expanded hosted check on 23 November verified five profile links from
+organizer sites across all three cities. Four profiles loaded without any
+original video links after rendering. The official Da Nang tourism profile
+returned HTTP 400 from oEmbed. That check recorded zero fresh posts and zero
+metered provider requests. [Hosted audit](https://github.com/khanh19/LoScraper/actions/runs/45113777936)
+
+### TikTok links shared from the phone
+
+The contributor workbook uses 33 distinct `vm.tiktok.com` or `vt.tiktok.com`
+links. Publisher discovery now resolves up to three distinct TikTok share links
+per city with at most two redirect hops each. It accepts a TikTok video or photo
+permalink, deduplicates the post with any full URL already found, and preserves
+any dated evidence from the publisher. A redirect only establishes identity.
+The post still needs its own fresh date, relevant activity, and venue evidence.
+Shop destinations, profiles, and off-platform redirects do not create leads.
+
+Use `python -m trending.social_links --url <public-publisher-page>` for a
+free-only transport check. If the local network cannot reach TikTok, dispatch
+**Scraper CI** with `public_tiktok_audit=true` and `public_share_publisher_url`
+set to a public page. The job reads link metadata, omits post text from the log,
+and keeps metered collection and publication disabled.
+
+### Social links in streamed page data
+
+The public-page extractor reads complete JSON records in inline React Flight
+chunks without running scripts. It keeps the same original-permalink checks,
+freshness filter, deduplication, and per-page result bound. A link found in
+page data still needs a publication date from the platform and verified venue
+evidence before promotion.
+
+On November 24, three public guide pages placed JSON records immediately
+after length-prefixed text. Reading the stream as newline-delimited JSON
+missed those records. The extractor now advances by the text frame's UTF-8
+byte length. It recovered 7 original TikTok links for Hà Nội, 5 for TP.HCM,
+and 4 for Đà Nẵng, from zero on each page before the fix. A read of all 16
+original posts confirmed 15 were outside seven days (2022–2025). The
+remaining post had no verifiable publication time and stayed in review.
+The audit used zero metered requests and published zero cards.
+[Hà Nội guide](https://airial.travel/attractions/vietnam/xom-ha-hoi-V2vzPEOE) ·
+[TP.HCM guide](https://airial.travel/attractions/vietnam/nguyen-hue-walking-street-XMOzHhP7) ·
+[Đà Nẵng guide](https://airial.travel/attractions/vietnam/helio-night-market-da-nang-o72b-VMm)
+
+On 23 November, the public ANs Vegetarian Cuisine page yielded seven original
+TikTok permalinks from its inline data. The same page and clock yielded zero
+links with the previous parser. The page supplied no publication dates, so
+all seven links stayed in review. The check started no provider jobs and
+wrote no feed records. [Public venue page used for link discovery](https://airial.travel/restaurants/vietnam/da-nang/ans-vegetarian-cuisine-S9TuRweh)
+
+### Check an original TikTok post
+
+```sh
+python -m trending.tiktok_public --url https://www.tiktok.com/@danangzip.site/video/7707589251193474312
+```
+
+Pass up to six original video or photo permalinks locally. To check a single link from
+the hosted runner, dispatch **Scraper CI** with `public_tiktok_video_url`.
+The audit reads the original post's public HTML. Structured timestamps need
+an exact page and post match. If a photo post has JSON-LD, its date must come
+from `SocialMediaPosting` and name the original permalink. The audit also
+reads the creator and publication timestamp from the original page's public
+post details. The post ID, author, and media type must match. Conflicting dates
+stay in review. Dates attached to individual images or inferred from post IDs
+do not count.
+For videos with no date, the official oEmbed response can confirm
+the video ID by matching its product ID and player URL. A legacy response
+with a matching creator and permalink also confirms those fields. Both
+response formats leave the publication time unresolved.
+The report includes transport and evidence status and performs no feed writes,
+metered requests, or video downloads. [TikTok embed metadata](https://developers.tiktok.com/docs/en/embed-videos)
+
+The city discovery command now checks up to three original TikTok links per
+city after finding them on public websites. `public_tiktok_reviews` records
+each check. Dated posts outside seven days leave the candidate list, undated
+posts stay in review, and a publisher-supplied date remains a hint until
+confirmed on the original page. A verified date still needs independent
+event and venue evidence before the post can support a feed card.
+
+On November 24 Vietnam time, the standard city discovery scan completed 10
+pages in Hà Nội, 14 in TP.HCM and 15 in Đà Nẵng. One additional Hà Nội page
+failed. The standard sources returned no original TikTok links. A targeted
+run of the same discovery code against the public ANs venue page found seven
+links and checked three. The verified April 2025 post left the candidate
+list. Two checked posts remained undated and four were outside the read
+budget. Both runs used zero provider credits and published zero cards.
+
+On November 24 Vietnam time, the original Đà Nẵng video returned no canonical
+tag or JSON-LD. Its public post details matched the requested ID and author
+and dated it to November 13, outside the seven-day window. The ANs venue-page
+check rediscovered seven original posts and read six. Three had verified 2025
+dates and three confirmed only the video ID. All six retained worksheet photo
+posts returned no matching date. The reviewed profiles yielded no original post
+links in the static audit. No result was freshly eligible, and the checks made
+zero metered requests. [Original Đà Nẵng video](https://www.tiktok.com/@danangzip.site/video/7707589251193474312)
+
+### Publisher transport and city-targeted links
+
+Social lead discovery can use the existing website adapters' browser support
+for public publisher pages. For example, the Hanoi Grapevine adapter can
+retry its TLS handshake failure in a browser while keeping normal certificate
+verification. The CLI reports the remaining error when the browser also
+fails.
+
+```sh
+python -m trending.discover --city hanoi --browser
+```
+
+Ticketbox social discovery selects its two detail pages from public on-sale
+entries that match the requested city. A mixed homepage put a Sài Gòn event
+into the Hanoi detail budget. Listing city labels now route the fetches.
+Venue verification still comes from the event and independent location
+evidence. Dated post evidence still comes from the original post or a matching
+provider record.
+
+On 23 November, an audit opened 14 of 18 official detail pages from the
+verified staging feed. Four Hanoi Grapevine pages failed TLS on the local
+network. None of the 14 readable pages linked to an original Instagram or
+TikTok post. The venue site for Mì Cay Sasin An Hải did link to an original
+TikTok video. Its article is dated 15 November, and TikTok's source did not
+return a verifiable publication timestamp. The link remains held.
+[Venue's original-post reference](https://micayhanquoc.com/tin-nha-hang/sasin-an-hai-tren-tiktok-nicherryy)
+
+Five public Instagram profile embeds returned no original-post links.
+The source directory now records the publisher-confirmed Life of Da Nang,
+Da Nang Fantasticity, REALITY and 1900 accounts as discovery leads.
+New checks made zero metered requests and published zero records. The
+Bright Data preflight found no currently verified free allowance. The
+legacy quota ledger is still unavailable, and Apify's existing campaign
+remains fully reserved.
+[Life of Da Nang](https://lifeofdanang.com/weekly) ·
+[Da Nang Fantasticity](https://danangfantasticity.com/vi) ·
+[REALITY](https://realitydn.com/vn/) ·
+[1900 Le Théâtre](https://1900club.vn/vi/ve-chung-toi/)
+
+### Public Instagram post verification
+
+```sh
+python -m trending.discover --city hcmc --review-instagram
+python -m trending.instagram_public --url https://www.instagram.com/reel/Df_0zs_oXt6/
+```
+
+The first command checks up to three Instagram permalinks found on publisher
+pages. The second accepts up to six existing permalinks. Each check requests the
+public HTML and matches the page's canonical or Open Graph identity to the
+post. Recognized descriptions report the publication day, account, likes, and
+comments. Profile links, conflicting identity or metadata, and unavailable pages
+remain unresolved. The date has day precision and is kept separate from an
+exact timestamp or event date. Review considers today and the previous six
+Vietnam calendar days. These commands write no feed records and use no credits.
+
+#### Keep original Instagram evidence with the lead
+
+Discovery keeps a publisher-reported timestamp as a hint. A matching original
+post preview adds its calendar day, account and available likes and comments to
+the lead. When the original preview and a verified profile embed agree on the
+account and their dates are within one calendar day, the merged lead keeps the
+embed's exact timestamp and the original preview's engagement snapshot. This
+tolerance allows for the preview's unspecified time zone. An observed mismatch
+leaves the original as a day-only review lead. Counts are a snapshot and do not
+establish popularity on their own.
+
+On 24 November Vietnam time, the free scan visited 11 Hà Nội, 14 TP.HCM and 15
+Đà Nẵng publisher pages. Five publisher-linked Instagram previews and four
+additional profile-linked previews retained their original day and counts in
+the consolidated results. No original TikTok leads surfaced in this scan.
+
+| City | Review example | Decision |
+| --- | --- | --- |
+| Hà Nội | [Yoga Lab's post](https://www.instagram.com/p/DgEXUf7hYR5/) showed 6 likes and 0 comments. | The [organizer's events page](https://www.yogalabhanoi.com/vi/events) confirms the workshop for 29 November, 10:00–11:30. Corroborated for review. |
+| TP.HCM | [Saigon Outcast's reopening post](https://www.instagram.com/p/DgG5NUnAVuG/) showed 9 likes and 0 comments. | The post gives 188/1 Nguyễn Văn Hưởng. [Earlier venue material](https://www.saigonoutcast.com/) lists 182 Nguyễn Văn Hưởng. Hold until the reopening address is independently confirmed. |
+| Đà Nẵng | [REALITY's Buildathon post](https://www.instagram.com/p/DgEl9LqI6AH/) was recovered from its linked public profile. | The [organizer's listing](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) confirms 26 November, 11:00–13:00, at 86 Mai Thúc Lân. Corroborated for review. |
+
+No metered provider requests or feed writes were made. The separate publication
+review remains in place.
+
+On 23 November Vietnam time, the HCMC publisher scan discovered two original
+posts. Saigon Outcast's 18 November reel showed 23 likes and one comment, but
+its line-dancing event ended on 22 November. The 16 November post fell outside
+the date-only review window. The Hanoi and Da Nang publisher scans found no
+original links in their bounded set. [Publisher](https://www.saigonoutcast.com/) · [Line-dancing reel](https://www.instagram.com/reel/Df4uHYdTFDg/) · [16 November post](https://www.instagram.com/p/DfzcxWlk-xE/)
+
+Direct checks of the two existing Da Nang reels independently confirmed their
+reported publication days. Tiệm Yến showed 32 likes and zero comments on a
+21 November reel, and the restaurant corroborates the branch. Mì Cay Gangwon
+showed 137 likes and one comment on a 19 November reel. The promotion end date
+remains unknown. The older 8 November Burger Fest reel was rejected by date.
+The public checks made no metered requests or imports. Fresh TikTok validation
+remains open. [Tiệm Yến reel](https://www.instagram.com/reel/Df_0zs_oXt6/) · [Restaurant branch](https://tiemyen.vn/chao-yen-tuoi-mua-o-dau/) · [Gangwon reel](https://www.instagram.com/reel/Df7X04roCHE/)
+
+#### Discover new posts from reviewed Instagram accounts
+
+Run `python -m trending.discover --city danang --review-instagram`. The same
+option works for `hanoi` and `hcmc`. The collector verifies profile ownership
+against the reviewed publisher's website first, then checks at most three
+public profile embeds per city and reports up to six recent posts per profile.
+It decodes the embed's literal JSON data without executing its JavaScript.
+Profile username and URL are checked against the requested account, and each
+post must have the matching owner ID, an original shortcode, a public status,
+and a timestamp within the past seven days. Hidden likes stay unknown.
+
+Exact profile timestamps go into unverified discovery leads. Native post
+previews still report a timezone-unspecified date and are kept as separate
+evidence. The direct previews of two REALITY posts displayed November 22
+while the exact embed timestamps were on November 23 in Vietnam. Neither
+publication timestamp is a session date. City hints route review and do not
+verify a place. No contact with a metered provider is needed.
+
+Coauthored posts and posts with missing attribution metadata stay in the
+profile review output. The audit reuses any checked previews and reads up to
+three additional original posts per city. An ambiguous post can become a
+review lead when the direct preview verifies the same shortcode and reviewed
+profile account and gives a date within one calendar day of the embed's local
+date. The lead retains the exact timestamp from the embed. The optional
+`attribution_evidence` field records this independent original-page check.
+Venue, timing, and publication review still apply. In the Nghề Nghệ sample,
+the COMPLEX 01 embed named itself while the original Instagram page credited
+`nghenghe.vn`, so the post remained held under COMPLEX 01.
+[Original Instagram post](https://www.instagram.com/p/DgDCfuTnxt8/)
+
+The November 23 live run found **29** recent records from six publisher-linked
+profiles. Hanoi returned six posts from 1900, HCMC eight from Saigon Outcast
+and Saigoneer, and Da Nang 15 from three profiles. One Hanoi listing page failed
+transport. The original links included recent recaps and posts with no specific
+local destination, both of which stay out of the feed. The REALITY Buildathon
+announcement was corroborated by the organizer's public November 26
+11:00–13:00 ICT listing. The Bếp Hên caption's address agrees with Michelin's
+listing. Both are review candidates. This run published zero cards and used
+zero metered requests. [Instagram Buildathon](https://www.instagram.com/p/DgEl9LqI6AH/) · [Organizer listing](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) · [Bếp Hên post](https://www.instagram.com/p/Df6vOXfmjhg/) · [Michelin listing](https://guide.michelin.com/vn/en/da-nang-region/da-nang_2984390/restaurant/bep-hen)
+
+The same path now covers COMPLEX 01 in Hanoi and Discover:Saigon in HCMC.
+Their publisher sites link to the exact Instagram profiles and the pilot
+returned six and three recent posts respectively. The COMPLEX 01 post about
+Nghề Nghệ corresponds to an ongoing exhibition through November 28. In the
+Discover:Saigon market roundup, Dấu Sắc Việt has a separately corroborated
+venue and window through November 24. Its other entries require individual
+review. These are discovery leads awaiting publication review. [COMPLEX 01](https://complex01.vn/) · [Nghề Nghệ Instagram](https://www.instagram.com/p/DgDCfuTnxt8/) · [Exhibition listing](https://hanoigrapevine.com/vi/2026/11/nghe-nghe-art-salon-mau-xua-sac-nay/) · [Discover:Saigon](https://www.discoversaigon.vn/) · [Market roundup](https://www.instagram.com/p/Df9uPUGoL37/) · [Dấu Sắc Việt venue evidence](https://codongson.vn/co-dong-son-le-hoi-van-hoa-dau-sac-viet-2026/)
+
+On November 24 Vietnam time, direct previews confirmed four previously
+ambiguous author attributions. The three Da Nang place leads were New Phương
+Đông, Bếp Hên, and PRIME Pilates. The November 18 Saigon Outcast post's event
+had already ended. Three Hanoi previews named a different original account,
+and the run left two more attribution checks deferred under the read limit.
+The Hanoi website scan was partial. All three city checks used zero metered
+requests and published zero cards.
+[New Phương Đông post](https://www.instagram.com/p/Df_4KPoGvG9/) · [Bếp Hên post](https://www.instagram.com/p/Df6vOXfmjhg/) · [PRIME Pilates post](https://www.instagram.com/p/Df4YX_jmqEb/) · [PRIME venue](https://primepilates.vn/)
+
+### November 24 · Three-city event check
+
+Public profile metadata supplied exact publication times. The original post
+previews confirmed each author and reported the engagement counts below.
+Local times are Vietnam time. A single snapshot supplies no growth signal.
+
+| City | Original post and publication | Likes / comments | Confirmed outing |
+| --- | --- | ---: | --- |
+| Hà Nội | [Yoga Lab Hanoi](https://www.instagram.com/p/DgEXUf7hYR5/) · 23 Nov 10:00 | 6 / 0 | [Detox Your Posture](https://www.yogalabhanoi.com/vi/events), 29 Nov 10:00–11:30 at 19–21 ngõ Yên Ninh, Ba Đình. |
+| TP.HCM | [Discover:Saigon arts roundup](https://www.instagram.com/p/Df7Dl-OILZM/) · 19 Nov 19:14 | 3 / 0 | [Mạch Thổ](https://quangsan.museum/su-kien/) at Quang San Art Museum, 189B/3 Nguyễn Văn Hưởng, Phường An Khánh, through 29 Nov. The counts belong to the roundup as a whole. |
+| Đà Nẵng | [REALITY Đà Nẵng](https://www.instagram.com/p/DgEl9LqI6AH/) · 23 Nov 12:07 | 5 / 0 | [Vibe Coding × AI Buildathon](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) at [86 Mai Thúc Lân](https://realitydn.com/vn/). Four timed sessions remain on 26 Nov and 3, 10, and 17 Dec, 11:00–13:00. |
+
+The REALITY website adapter uses the organizer's series and checks each
+session page for matching identity, venue, status, start, and end. The series
+groups the session links under one stable URL. Its title is in Vietnamese in
+Discover. The Instagram posts remain review evidence and do not add a second
+publisher count for the same organizer. Public TikTok searches included these
+and other current events but did not return a verifiable original video. No
+metered provider requests or social publication were made in this check.
+
+### November 24 · Review follow-up
+
+The consolidated Instagram lead includes an `engagement_snapshot` when likes
+or comments are available. The snapshot records the account, evaluation time,
+and whether the counts come from the verified profile embed or the original
+post preview. A collaborative post uses only the confirmed original account's
+preview counts. Hidden metrics are omitted. These diagnostics do not change
+public feed eligibility or rank.
+
+- **Hà Nội.** COMPLEX 01's post gives November 28, 15:00–17:00 for Behind the
+  Book. The venue's site links to the account and confirms the Tây Sơn address.
+  The preview showed 11 likes and zero comments. The event stayed in review.
+  The VEC Firebeat post corroborates the date range, with the opening-time
+  conflict still unresolved. [COMPLEX 01 post](https://www.instagram.com/p/DgE149XhIMN/) ·
+  [Venue and account link](https://complex01.vn/) ·
+  [VEC calendar](https://vec.global/events) · [Firebeat organizer](https://firebeat.global/)
+- **TP.HCM.** The new Discover:Saigon post had 3 likes and zero comments. It
+  directs readers to a general events guide without identifying a specific
+  outing in the caption. It remains a discovery lead.
+  [Discover:Saigon post](https://www.instagram.com/p/DgIDIoUoEgf/)
+- **Đà Nẵng.** The REALITY charity karaoke post had 12 likes and zero
+  comments. The organizer confirms November 26 at 21:00 at 86 Mai Thúc Lân
+  and lists the end as open-ended. This stays in review for timed sessions.
+  [REALITY post](https://www.instagram.com/p/DgEr2OLI9dP/) ·
+  [Organizer session](https://app.realitydn.com/events/6d529474-91e8-475a-86ae-7c4e707cd6f9)
+
+The public scan covered all three cities and published zero social cards. One
+Hanoi Grapevine page failed its TLS handshake during the local lead scan.
+Public TikTok search remained inaccessible. These checks used zero metered
+provider requests.
+
+### November 24 · Latest Instagram leads and TikTok public rankings
+
+The public profile scan covered Hà Nội, TP.HCM, and Đà Nẵng. Original post
+previews confirmed the accounts and the counts below at 10:31 Vietnam time.
+Publication times use the profile timestamp converted to Vietnam time. This
+single engagement snapshot cannot establish growth or popularity.
+
+| City | Original post and publication | Likes / comments | Evidence and disposition |
+| --- | --- | ---: | --- |
+| Hà Nội | [COMPLEX 01](https://www.instagram.com/p/DgG8Sk9zQEB/) · 24 Nov 10:02 | 8 / 1 | The venue announces *Đêm độc thoại* for 27 Nov, 19:30–21:00. Its [venue site](https://complex01.vn/) links to the account and confirms the Tây Sơn address. The event-specific booking link remains unverified. Held for review. |
+| TP.HCM | [Saigon Outcast](https://www.instagram.com/p/DgG5NUnAVuG/) · 24 Nov 09:34 | 8 / 0 | The venue announces a demo opening from 25 Nov, 08:00–22:00 daily. The [venue site](https://www.saigonoutcast.com/) carries prior material for the location. Treat the opening hours as a place lead pending corroboration. |
+| Đà Nẵng | [Life of Da Nang](https://www.instagram.com/p/Df9uyeKmpqd/) · 20 Nov 20:10 | 16 / 0 | The post identifies the Cầu Rồng show at 21:00 Friday through Sunday. The [event listing](https://lifeofdanang.com/danang/weekly-dragon-bridge-fire) gives 27–29 Nov at Cầu Rồng over the Hàn River and links to the [city tourism source](https://danangfantasticity.com/en/cau-rong-phun-lua-va-nuoc). Corroborated for review. |
+
+The [Da Nang Tourism recap](https://www.instagram.com/p/DgF1l-qhMWN/) mentions
+a holiday date beside coverage of a past arts program. The schedule parser now
+recognizes the Vietnamese recap wording before reading dates. The regression
+also covers a fully written holiday date, which the previous parser returned
+as an event session.
+
+TikTok Creative Center's public preview for Vietnam, Last 7 days, Lifestyle &
+Leisure, sorted by highest engagement, showed four videos without a relevant
+local outing. Its View more action required sign-in. That route produced zero
+fresh TikTok candidates for verification. Across the three city scans there
+were zero metered requests and zero social cards published.
+[TikTok Creative Center](https://ads.tiktok.com/creative/creativeCenter/trends/video?region=VN&period=7)

@@ -5,12 +5,46 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from bs4 import BeautifulSoup
 from trending.discover import reviewed_tiktok_profile
-from trending.social_links import extract_posts, remember_lead
+from trending.social_links import TikTokShareResolver, extract_posts, remember_lead
+from trending.http import FetchError
 from trending.providers import BrightSocial, ProviderDisabled
 
 NOW = datetime(2026, 11, 8, 12, tzinfo=timezone.utc)
 
 class SocialDiscoveryTests(unittest.TestCase):
+    def test_shared_tiktok_link_keeps_publication_evidence_and_deduplicates(self):
+        client = Mock()
+        post = 'https://www.tiktok.com/@venue/video/123'
+        client.get.side_effect = ['https://www.tiktok.com/t/second/', post + '?share=1']
+        resolver = TikTokShareResolver(client)
+        record = {'link': 'https://vt.tiktok.com/first/?utm_medium=share',
+                  'datePublished': '2026-11-07T07:00:00+07:00'}
+        markup = '<script type="application/json">' + json.dumps(record) + '</script>'
+        markup += f'<a href="{post}">Full URL</a><a href="https://vt.tiktok.com/first/">Share</a>'
+        row, = extract_posts(markup, 'https://example.com/event', NOW, resolve_share=resolver.resolve)
+        self.assertEqual(row['url'], post)
+        self.assertEqual(row['published_at'], '2026-11-07T07:00:00+07:00')
+        self.assertTrue(row['requires_provider_validation'])
+        self.assertEqual([call.args[0] for call in client.get.call_args_list],
+                         ['https://vt.tiktok.com/first/', 'https://www.tiktok.com/t/second/'])
+        self.assertTrue(all(call.kwargs['redirect_only'] for call in client.get.call_args_list))
+
+    def test_short_links_hold_nonposts_and_stop_after_three_inputs(self):
+        client = Mock()
+        client.get.side_effect = ['https://www.tiktok.com/shop/pdp/123', FetchError('redirect_not_allowed'),
+                                  'https://www.tiktok.com/@venue/photo/789']
+        resolver = TikTokShareResolver(client)
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com.evil.example/one/'))
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/shop/?page=TikTokShop'))
+        self.assertIsNone(resolver.resolve('https://vm.tiktok.com/one/'))
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/two/'))
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/two/?utm_source=other'))
+        self.assertEqual(resolver.resolve('https://vt.tiktok.com/three/'), 'https://www.tiktok.com/@venue/photo/789')
+        self.assertIsNone(resolver.resolve('https://vt.tiktok.com/four/'))
+        self.assertEqual(client.get.call_count, 3)
+        self.assertEqual([row['status'] for row in resolver.results.values()],
+                         ['no_original_post', 'redirect_not_allowed', 'original_post_found'])
+
     def test_nested_embeds_freshness_and_dedup(self):
         recent = {'link':'https://www.instagram.com/p/example/', 'timestamp':'2026-11-07T01:00:00Z', 'description':'A local festival'}
         stale = dict(recent, link='https://www.instagram.com/p/old/', timestamp='2025-11-07T00:00:00Z')
@@ -48,6 +82,47 @@ class SocialDiscoveryTests(unittest.TestCase):
         markup += '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/venue/reel/example/"></blockquote>'
         self.assertEqual(extract_posts(markup, 'https://example.com/event', NOW), [])
 
+    def test_public_streamed_page_data_keeps_original_links_as_leads(self):
+        fresh_url = 'https://www.tiktok.com/@venue/video/123'
+        old_url = 'https://www.tiktok.com/@venue/video/234'
+        undated_url = 'https://www.instagram.com/reel/review'
+        records = [
+            {'url': fresh_url, 'timestamp': '2026-11-07T01:00:00Z', 'caption': 'Xưởng gốm'},
+            {'url': old_url, 'timestamp': '2025-11-07T01:00:00Z'},
+            {'url': undated_url},
+            {'url': 'https://www.tiktok.com.example/@venue/video/567'},
+        ]
+        wire = '4:I["Component"]\nc:' + json.dumps(['$', '$L14', None, {'data': records}]) + '\n'
+        boundary = wire.index(fresh_url) + 14
+        markup = ''.join(
+            '<script>self.__next_f.push(' + json.dumps([1, part]) + ')</script>'
+            for part in (wire[:boundary], wire[boundary:])
+        )
+        markup += f'<a href="{fresh_url}?ref=dupe">Duplicate</a><a href="{old_url}">Stale link</a>'
+        markup += '<script>self.__next_f.push([1,"c:{\\"url\\":\\"https://www.tiktok.com/@venue/video/555\\"}"]); other()</script>'
+        rows = extract_posts(markup, 'https://example.com/event', NOW)
+        self.assertEqual([row['url'] for row in rows], [fresh_url, undated_url])
+        self.assertEqual(rows[0]['published_at'], '2026-11-07T01:00:00+00:00')
+        self.assertEqual(rows[0]['text'], 'Xưởng gốm')
+        self.assertIsNone(rows[1]['published_at'])
+        self.assertTrue(all(row['requires_provider_validation'] for row in rows))
+
+    def test_streamed_text_uses_byte_length_before_the_next_json_row(self):
+        post_url = 'https://www.tiktok.com/@venue/video/731'
+        text_only_url = 'https://www.tiktok.com/@venue/video/732'
+        prose = 'Xóm Hạ Hồi ☕\n' + 'a:' + json.dumps({'url': text_only_url}) + '\nXem thêm'
+        following = 'e:' + json.dumps({'url': post_url}) + '\n'
+        wire = f'd:T{len(prose.encode("utf-8")):x},' + prose + following
+        boundary = wire.index('Xem thêm') + 3
+        markup = ''.join(
+            '<script>self.__next_f.push(' + json.dumps([1, part]) + ')</script>'
+            for part in (wire[:boundary], wire[boundary:])
+        )
+        row, = extract_posts(markup, 'https://example.com/event', NOW)
+        self.assertEqual(row['url'], post_url)
+        self.assertIsNone(row['published_at'])
+        self.assertTrue(row['requires_provider_validation'])
+
     def test_repeated_post_prefers_dated_page_and_reel_link(self):
         links = {}
         embed, = extract_posts('<a href="https://www.instagram.com/venue/reel/valid/">Reel</a>',
@@ -61,6 +136,29 @@ class SocialDiscoveryTests(unittest.TestCase):
         self.assertEqual(merged['url'], embed['url'])
         self.assertEqual(merged['discovered_on'], dated['discovered_on'])
         self.assertEqual(merged['published_at'], dated['published_at'])
+
+    def test_repeated_instagram_post_retains_verified_profile_provenance(self):
+        website, = extract_posts(
+            '<script type="application/json">{"url":"https://www.instagram.com/reel/verified/",'
+            '"timestamp":"2026-11-07T08:00:00+07:00"}</script>',
+            'https://example.com/roundup', NOW)
+        profile = {
+            **website, 'url': 'https://www.instagram.com/p/verified',
+            'published_at': '2026-11-07T01:00:00+00:00',
+            'publisher_id': 'reviewed-account', 'publication_evidence': 'verified_profile_embed',
+            'discovered_on': 'https://www.instagram.com/reviewed_account/embed/',
+        }
+        for rows in ((website, profile), (profile, website)):
+            leads = {}
+            for row in rows:
+                remember_lead(leads, row)
+            result, = leads.values()
+            self.assertEqual(result, {**profile, 'url': website['url']})
+            self.assertTrue(result['requires_provider_validation'])
+        leads = {}
+        remember_lead(leads, website)
+        remember_lead(leads, {**profile, 'published_at': '2026-11-07T03:00:00+00:00'})
+        self.assertEqual(list(leads.values()), [website])
 
     def test_reels_and_posts_use_distinct_datasets(self):
         for path,dataset in [('p','gd_lk5ns7kz21pck8jpis'),('reel','gd_lyclm20il4r5helnj')]:

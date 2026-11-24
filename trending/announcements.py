@@ -1,6 +1,7 @@
 """Conservative text-only organizer announcements; never infer facts from media."""
 from datetime import datetime, timedelta
 import re
+from unicodedata import normalize
 from .dates import plain
 from .model import Candidate, Occurrence, ICT, folded, parse_time, city_from_address
 from .providers import post_platform
@@ -9,8 +10,20 @@ from .providers import post_platform
 def social_sessions(text, published_at):
     published=parse_time(published_at)
     if not published:return [],'unknown_publication_time'
-    published=published.astimezone(ICT);value=plain(text)
-    if re.search(r'\b(recap|da dien ra|nhin lai|throwback)\b',value):return [],'past_recap'
+    published=published.astimezone(ICT)
+    value=plain(normalize('NFKC', text))
+    # Dotted dates are explicit too. Do not resolve an omitted or two-digit
+    # year by moving the announcement to the next occurrence of its weekday.
+    value=re.sub(
+        r'(?<![\d./])(0?[1-9]|[12]\d|3[01])\.(0?[1-9]|1[0-2])(?:\.(20\d{2}|\d{2}))?(?!\d|[./]\d)',
+        lambda date: f'{date[1]}/{date[2]}' + (f'/{date[3]}' if date[3] and len(date[3]) == 4 else ''),
+        value,
+    )
+    if re.search(r'\b(recap|da dien ra|nhin lai|throwback|xem lai\s+(?:nhung\s+)?khoanh khac)\b', value):
+        return [], 'past_recap'
+    # Anniversary posts can carry a fully written founding date alongside the
+    # event date. Only remove dates that are explicitly labeled this way.
+    value=re.sub(r'\bthanh lap\s+(?:vao\s+)?ngay\s+\d{1,2}/\d{1,2}/20\d{2}\b', '', value)
     # Explicit dates override relative language; never assume a missing year.
     dates=[]
     # A fully written range is not a list of two sessions. Without explicit
@@ -41,11 +54,13 @@ def social_sessions(text, published_at):
             if clocks:
                 ah,am,bh,bm=map(int,clocks[0]);start=date.replace(hour=ah,minute=am);end=date.replace(hour=bh,minute=bm)
                 if end<=start:end+=timedelta(days=1)
-                if end<=published:return [],'past_recap'
                 out.append(Occurrence(start.isoformat(),end.isoformat(),'time'))
             else:
                 if any(x in value for x in ['toi nay','hom nay','thu ','chu nhat']):return [],'relative_date_without_hours'
                 out.append(Occurrence(date.isoformat(),(date+timedelta(days=1)).isoformat(),'date'))
+        ended=sum(parse_time(slot.ends_at)<=published for slot in out)
+        if ended:
+            return [],'past_recap' if ended==len(out) else 'ambiguous_schedule'
         return out,None
     except ValueError:return [],'invalid_schedule'
 

@@ -76,6 +76,7 @@ def run(args):
                 try:
                     discovered=discover(city,client,now,counts)
                     city_report['website_pages']=discovered['pages']
+                    city_report['public_tiktok_reviews']=discovered['public_tiktok_reviews']
                     leads.update({r['url']:r for r in discovered['posts']})
                 except Exception as exc:
                     city_report['errors'].append({'provider':'website','reason':type(exc).__name__,'stage':'discovery'})

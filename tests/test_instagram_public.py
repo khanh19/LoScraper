@@ -1,0 +1,277 @@
+from datetime import datetime, timedelta, timezone
+from html import escape
+import json
+import unittest
+from unittest.mock import Mock, patch
+
+from bs4 import BeautifulSoup
+
+from trending.discover import discover, review_instagram_leads
+from trending.http import FetchError
+from trending.instagram_public import instagram_profile, review, review_profile
+
+
+POST = 'https://www.instagram.com/reel/Abc123'
+NOW = datetime(2026, 11, 22, 20, tzinfo=timezone.utc)  # November 23 in Vietnam.
+PROFILE = 'https://www.instagram.com/sample.account/'
+
+
+def post_page(*descriptions, canonical=POST, og_url=POST):
+    markup = '<html><head>'
+    if canonical:
+        markup += f'<link rel="canonical" href="{canonical}">'
+    if og_url:
+        markup += f'<meta property="og:url" content="{og_url}">'
+    for description in descriptions:
+        markup += f'<meta property="og:description" content="{escape(description)}">'
+    return BeautifulSoup(markup + '</head></html>', 'html.parser')
+
+
+def profile_page(*media, username='sample.account', link=PROFILE):
+    context = {'type': 'Profile', 'username': username, 'profile_link': link, 'owner_id': 123,
+               'graphql_media': [{'shortcode_media': item} for item in media]}
+    config = {'isProfileEmbed': True, 'contextJSON': json.dumps({'context': context})}
+    payload = {'require': [['PolarisEmbedSimple@' + 'a' * 32, 'init', [], [config]]]}
+    html = '<script>var s = {}; s.handle(' + json.dumps(payload) + ');</script>'
+    return BeautifulSoup(html, 'html.parser')
+
+
+def media(code='Abc123', hour=2):
+    return {
+        'shortcode': code, 'taken_at_timestamp': int((NOW - timedelta(hours=hour)).timestamp()),
+        'is_video': True, 'owner': {'id': '123', 'username': 'Sample.Account',
+                                   'is_private': False, 'is_unpublished': False},
+        'edge_media_to_caption': {'edges': [{'node': {'text': 'Sự kiện tại Hà Nội ngày 28/11'}}]},
+        'edge_liked_by': {'count': 48}, 'edge_media_to_comment': {'count': 0},
+        'like_and_view_counts_disabled': False, 'coauthor_producers': [],
+    }
+
+
+class InstagramPublicTests(unittest.TestCase):
+    def test_publisher_lead_keeps_original_engagement_and_day_without_guessing_time(self):
+        client = Mock()
+        client.get.return_value = post_page(
+            '1,234 likes, 0 comments - sample.account on November 21, 2026: Workshop.',
+        )
+        source = {'id': 'fixture', 'publisher_id': 'fixture', 'cities': ['hanoi'],
+                  'categories': ['culture'], 'url': 'https://publisher.example/'}
+        timestamp = '2026-11-23T00:00:00+07:00'
+        linked_post = {'url': POST, 'platform': 'instagram', 'text': 'Workshop',
+                       'published_at': timestamp, 'discovered_on': source['url'],
+                       'requires_provider_validation': True}
+        directory = Mock()
+        directory.read_text.return_value = json.dumps([source])
+        with (patch('trending.discover.DIRECTORY', directory),
+              patch('trending.discover.extract_posts', return_value=[linked_post]),
+              patch('trending.discover.reviewed_profiles', return_value=iter([]))):
+            report = discover('hanoi', client, NOW)
+            review_instagram_leads(report, client, NOW)
+        post = report['posts'][0]
+        self.assertIsNone(post['published_at'])
+        self.assertEqual(post['publisher_reported_publication'], timestamp)
+        self.assertEqual(post['publication_day'], '2026-11-21')
+        self.assertEqual(post['publication_evidence'], 'verified_original_post_preview')
+        self.assertEqual(post['original_post_status'], 'recent_day_needs_venue_review')
+        self.assertEqual(post['engagement_snapshot'], {
+            'source': 'verified_original_post_preview', 'account': 'sample.account',
+            'evaluated_at': NOW.isoformat(), 'likes': 1234, 'comments': 0,
+        })
+        self.assertEqual(post['discovered_on'], source['url'])
+        self.assertTrue(post['requires_provider_validation'])
+        self.assertEqual(report['published'], 0)
+
+    def test_outside_window_lead_has_no_recent_preview_evidence(self):
+        client = Mock()
+        client.get.return_value = post_page(
+            '100 likes, 2 comments - sample.account on November 13, 2026: Workshop.',
+        )
+        report = {'city': 'hanoi', 'posts': [{'url': POST, 'platform': 'instagram', 'published_at': None}]}
+        with patch('trending.discover.reviewed_profiles', return_value=iter([])):
+            review_instagram_leads(report, client, NOW)
+        post = report['posts'][0]
+        self.assertEqual(post['original_post_status'], 'outside_review_window')
+        self.assertNotIn('engagement_snapshot', post)
+        self.assertNotIn('publication_day', post)
+
+    def test_dedup_keeps_original_engagement_and_requires_matching_account_for_exact_time(self):
+        profile = {'url': PROFILE, 'embed_url': PROFILE + 'embed/', 'publisher_id': 'sample',
+                   'posts': [{'url': POST, 'status': 'fresh_needs_venue_review',
+                              'published_at': '2026-11-22T18:00:00+00:00', 'caption': 'Workshop',
+                              'account': 'sample.account', 'likes': 48}]}
+        for owner, attribution in (('sample.account', 'confirmed_profile_account'),
+                                   ('different', 'different_original_account')):
+            with self.subTest(owner=owner):
+                client = Mock()
+                client.get.return_value = post_page(
+                    f'50 likes, 1 comment - {owner} on November 22, 2026: Workshop.',
+                )
+                report = {'city': 'hanoi', 'posts': [{'url': POST, 'platform': 'instagram', 'published_at': None}]}
+                with (patch('trending.discover.reviewed_profiles', return_value=iter([profile])),
+                      patch('trending.instagram_public.review_profile', return_value=profile)):
+                    review_instagram_leads(report, client, NOW)
+                self.assertEqual(len(report['posts']), 1)
+                post = report['posts'][0]
+                self.assertEqual(post['publication_day'], '2026-11-22')
+                self.assertEqual(post['engagement_snapshot']['likes'], 50)
+                self.assertEqual(post['engagement_snapshot']['account'], owner)
+                self.assertEqual(report['public_instagram_attribution_reviews'][0]['attribution'], attribution)
+                expected_time = profile['posts'][0]['published_at'] if owner == 'sample.account' else None
+                self.assertEqual(post['published_at'], expected_time)
+
+    def test_collaboration_needs_same_original_account_and_a_consistent_day(self):
+        shared = [{
+            'url': POST + str(i), 'status': 'coauthored_or_unknown_attribution',
+            'published_at': '2026-11-22T18:00:00+00:00', 'caption': 'Event caption',
+            'profile_account': 'sample.account',
+        } for i in range(4)]
+        originals = [{
+            'url': post['url'], 'status': 'recent_day_needs_venue_review',
+            'publication_day': day, 'account': account, 'likes': 11, 'comments': 0,
+        } for post, day, account in zip(
+            shared, ('2026-11-22', '2026-11-23', '2026-11-20'),
+            ('sample.account', 'another.account', 'sample.account'),
+        )]
+        profile = {'url': PROFILE, 'embed_url': PROFILE + 'embed/', 'publisher_id': 'sample', 'posts': shared}
+        report = {'city': 'hanoi', 'posts': [], 'published': 0}
+        client = Mock()
+        with (patch('trending.discover.reviewed_profiles', return_value=iter([profile])),
+              patch('trending.instagram_public.review_profile', return_value=profile),
+              patch('trending.instagram_public.review', side_effect=originals) as reads):
+            review_instagram_leads(report, client, NOW)
+        self.assertEqual(reads.call_count, 3)
+        self.assertEqual([r['attribution'] for r in report['public_instagram_attribution_reviews']], [
+            'confirmed_profile_account', 'different_original_account', 'publication_day_conflict',
+            'attribution_read_limit',
+        ])
+        self.assertEqual([post['url'] for post in report['posts']], [shared[0]['url']])
+        self.assertEqual(report['posts'][0]['attribution_evidence'], 'verified_original_post_preview')
+        self.assertEqual(report['posts'][0]['published_at'], shared[0]['published_at'])
+        self.assertEqual(report['posts'][0]['engagement_snapshot'], {
+            'source': 'verified_original_post_preview', 'account': 'sample.account',
+            'evaluated_at': NOW.isoformat(), 'likes': 11, 'comments': 0,
+        })
+        self.assertTrue(report['posts'][0]['requires_provider_validation'])
+        self.assertEqual(report['published'], 0)
+
+    def test_profile_counts_stay_with_the_lead_and_omit_hidden_metrics(self):
+        photo = {**media('Photo'), 'is_video': False, 'like_and_view_counts_disabled': True}
+        client = Mock()
+        client.get.return_value = profile_page(photo)
+        profile = {'url': PROFILE, 'publisher_id': 'sample'}
+        report = {'city': 'hanoi', 'posts': [], 'published': 0}
+
+        with patch('trending.discover.reviewed_profiles', return_value=iter([profile])):
+            review_instagram_leads(report, client, NOW)
+
+        self.assertEqual(report['posts'][0]['engagement_snapshot'], {
+            'source': 'verified_profile_embed', 'account': 'sample.account',
+            'evaluated_at': NOW.isoformat(), 'comments': 0,
+        })
+        self.assertEqual(report['published'], 0)
+
+    def test_profile_embed_returns_only_fresh_original_owned_posts(self):
+        clip = media()
+        unrelated = {**media('Other'), 'owner': {**clip['owner'], 'id': '124'}}
+        unpublished = {**media('Private'), 'owner': {**clip['owner'], 'is_unpublished': True}}
+        client = Mock()
+        client.get.return_value = profile_page(
+            media('Future', hour=-1), clip, unrelated, unpublished, media('Old', hour=169),
+        )
+        result = review_profile({'url': PROFILE}, client, NOW)
+        self.assertEqual(result['status'], 'reviewed')
+        self.assertEqual(result['posts'], [{
+            'url': POST, 'published_at': '2026-11-22T18:00:00+00:00',
+            'status': 'fresh_needs_venue_review', 'account': 'sample.account',
+            'caption': 'Sự kiện tại Hà Nội ngày 28/11', 'likes': 48, 'comments': 0,
+        }])
+        client.get.assert_called_once_with(PROFILE + 'embed/', {'instagram.com', 'www.instagram.com'})
+
+    def test_profile_embed_ignores_conflicts_and_hides_unavailable_counts(self):
+        client = Mock()
+        hidden = {**media('Photo'), 'is_video': False, 'like_and_view_counts_disabled': True}
+        client.get.return_value = profile_page(media(), media(hour=3), hidden)
+        result = review_profile({'url': PROFILE}, client, NOW)
+        self.assertEqual(result['conflicting_posts'], 1)
+        self.assertEqual(len(result['posts']), 1)
+        self.assertEqual(result['posts'][0]['url'], 'https://www.instagram.com/p/Photo')
+        self.assertNotIn('likes', result['posts'][0])
+
+    def test_profile_embed_does_not_attribute_collaboration_to_profile_owner(self):
+        client = Mock()
+        collaborative = {**media(), 'coauthor_producers': [{'username': 'sample.account'}]}
+        missing_attribution = media('Unknown')
+        missing_attribution.pop('coauthor_producers')
+        client.get.return_value = profile_page(collaborative, missing_attribution)
+        result = review_profile({'url': PROFILE}, client, NOW)
+        self.assertEqual(len(result['posts']), 2)
+        for row in result['posts']:
+            self.assertEqual(row['status'], 'coauthored_or_unknown_attribution')
+            self.assertEqual(row['profile_account'], 'sample.account')
+            self.assertNotIn('account', row)
+
+    def test_profile_embed_requires_expected_module_and_profile_identity(self):
+        client = Mock()
+        client.get.return_value = profile_page(media(), link='https://www.instagram.com/unrelated/')
+        self.assertEqual(review_profile({'url': PROFILE}, client, NOW)['status'], 'profile_identity_unverified')
+        html = str(profile_page(media())).replace('PolarisEmbedSimple', 'UnrelatedWidget')
+        client.get.return_value = BeautifulSoup(html, 'html.parser')
+        self.assertEqual(review_profile({'url': PROFILE}, client, NOW)['status'], 'public_profile_metadata_missing')
+        self.assertIsNone(instagram_profile('https://www.instagram.com.example.org/sample.account/'))
+        self.assertIsNone(instagram_profile(POST))
+
+    def test_exact_public_preview_records_day_and_engagement(self):
+        client = Mock()
+        client.get.return_value = post_page(
+            '1,234 likes, 1 comment - Sample.Account trên November 21, 2026: Caption November 28.',
+            '1,234 likes, 1 comment - sample.account on November 21, 2026: Another caption.',
+            og_url='https://instagram.com/p/Abc123/?utm_source=fixture',
+        )
+        result = review(POST + '/?igsh=fixture', client, NOW)
+        self.assertEqual(result, {
+            'url': POST, 'publication_day': '2026-11-21', 'status': 'recent_day_needs_venue_review',
+            'account': 'sample.account', 'likes': 1234, 'comments': 1,
+        })
+        client.get.assert_called_once_with(POST + '/', {'www.instagram.com', 'instagram.com'})
+
+    def test_old_date_with_current_caption_and_future_date_stay_outside_window(self):
+        client = Mock()
+        for day, status in ((16, 'outside_review_window'), (17, 'recent_day_needs_venue_review'),
+                            (23, 'recent_day_needs_venue_review'), (24, 'outside_review_window')):
+            with self.subTest(day=day):
+                client.get.return_value = post_page(
+                    f'0 likes, 0 comments - sample on November {day}, 2026: Event on November 23.',
+                )
+                result = review(POST, client, NOW)
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['publication_day'], f'2026-11-{day}')
+                self.assertEqual(result['likes'], 0)
+
+    def test_no_identity_or_contradictory_identity_holds_the_evidence(self):
+        client = Mock()
+        for canonical, og_url in ((None, None), (POST, POST + '4'), (POST, 'https://www.instagram.com/accounts/login/')):
+            with self.subTest(canonical=canonical, og_url=og_url):
+                client.get.return_value = post_page('5 likes, 1 comment - sample on November 21, 2026: Test',
+                                                   canonical=canonical, og_url=og_url)
+                result = review(POST, client, NOW)
+                self.assertEqual(result['status'], 'post_identity_unverified')
+                self.assertIsNone(result['publication_day'])
+
+    def test_unrecognized_or_conflicting_previews_do_not_invent_metrics(self):
+        client = Mock()
+        client.get.return_value = post_page('Workshop on November 21, 2026')
+        self.assertEqual(review(POST, client, NOW)['status'], 'public_metadata_missing')
+        client.get.return_value = post_page('5 likes, 1 comment - sample on November 21, 2026: One',
+                                          '5 likes, 1 comment - sample on November 20, 2026: Other')
+        result = review(POST, client, NOW)
+        self.assertEqual(result['status'], 'public_metadata_conflict')
+        self.assertNotIn('likes', result)
+
+    def test_transport_failure_and_bad_input_are_bounded(self):
+        client = Mock()
+        client.get.side_effect = FetchError('http_429')
+        result = review(POST, client, NOW)
+        self.assertEqual(result['status'], 'public_post_unavailable')
+        self.assertEqual(result['reason'], 'http_429')
+        with self.assertRaisesRegex(ValueError, 'invalid_instagram_permalink'):
+            review('https://instagram.com/sample/', client, NOW)
+        client.get.assert_called_once()

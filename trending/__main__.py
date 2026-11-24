@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from dataclasses import asdict
 from datetime import datetime, timezone
 import json
 import os
@@ -10,9 +11,9 @@ from urllib.parse import urlsplit
 
 from .adapters import CLASSES, collect_source, load_sources, supplemental_links
 from .http import PublicClient
-from .model import CITIES, CONFIRMED_SCHEDULE_CONFLICT
+from .model import CITIES, CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION
 from .providers import BrightSocial, ProviderDisabled, SerpDiscovery, post_platform, social_evidence
-from .store import Store
+from .store import DatabaseTargetError, Store
 from .progress import Progress
 
 
@@ -62,7 +63,9 @@ def run(args):
         if len(matched) != 1:
             raise ValueError('Lead must match exactly one selected source')
         lead_map[matched[0]].append(lead)
-    store = Store(url) if url and (args.write_db or args.providers) else None
+    store = None
+    if url and (args.write_db or args.providers):
+        store = Store(url, expected_target=os.environ.get('LO_DISCOVERY_DATABASE_TARGET'))
     client = PublicClient(browser=args.browser)
     progress = Progress(store if args.write_db else None, selected, [args.city] if args.city else list(CITIES),
                         mode="refresh_existing" if refresh else "discovery")
@@ -103,14 +106,17 @@ def run(args):
                     report['rejected'].append({'source':slug,'reasons':invalid,
                         'sample': {k:c.payload().get(k) for k in
                             ('source_url','title','city_slug','published_at','verified_at','venue_name','kind')}})
-                    if c.status == 'cancelled' and store and args.write_db:
-                        ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key)
-                        if not ok:
-                            progress.count('failed',city,['cancellation_write_failed'])
-                    elif CONFIRMED_SCHEDULE_CONFLICT in invalid and store and args.write_db:
-                        ok,_ = progress.call('hold_schedule',c,now)
-                        if not ok:
-                            progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
+                    if store and args.write_db and 'event_identity_conflict' not in invalid:
+                        if c.status == 'cancelled':
+                            ok,_ = progress.call('cancel',slug,c.source_url,now,c.entry_key,
+                                                 confirmed=PUBLISHER_CONFIRMED_CANCELLATION in invalid,
+                                                 kind=c.kind, city=city)
+                            if not ok:
+                                progress.count('failed',city,['cancellation_write_failed'])
+                        elif CONFIRMED_SCHEDULE_CONFLICT in invalid:
+                            ok,_ = progress.call('hold_schedule',c,now)
+                            if not ok:
+                                progress.count('failed',city,['schedule_hold_write_failed'],kind=c.kind)
                     return
                 payload = c.payload()
                 if store and args.write_db:
@@ -146,20 +152,28 @@ def run(args):
                     urls = list(dict.fromkeys(t['source_url'] for t in targets))
                     selected_urls = urls[:200]
                     known = {(t['source_url'],t['entry_key']) for t in targets if t['source_url'] in selected_urls}
-                    found = set()
+                    rechecked = {}
                     stats.update(existing_entries=len(known),deferred_pages=max(0,len(urls)-200))
 
                     def recheck_candidate(c):
                         key = c.source_url, c.entry_key
-                        if key in known:
-                            found.add(key)
+                        if key not in known and c.replaces_source_url:
+                            key = c.replaces_source_url, ''
+                        if key not in known:
+                            return
+                        # The catalogue and a legacy link can yield the same evidence.
+                        evidence = asdict(c)
+                        seen = rechecked.setdefault(key, [])
+                        if evidence not in seen:
+                            seen.append(evidence)
                             record_candidate(slug, c)
 
                     _, failures = collect_source(slug,config,client,now,200,selected_urls,
                         heartbeat=progress.collection_heartbeat,metrics=stats,existing_only=True,
                         on_candidate=recheck_candidate)
                     candidates = ()
-                    if known-found: failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
+                    if known - rechecked.keys():
+                        failures.append({'stage':'refresh','reason':'existing_entry_not_recovered'})
                     if len(urls)>200: failures.append({'stage':'refresh','reason':'refresh_page_limit'})
                 else:
                     candidates, failures = collect_source(slug,config,client,now,args.limit,extra.get(slug,[]),
@@ -258,6 +272,9 @@ def main():
         load_env_files(args.env_file)
         report = run(args)
         raise SystemExit({'complete':0,'partial':2,'failed':1}[report.get('status','complete')])
+    except DatabaseTargetError as exc:
+        print(json.dumps({'status': 'failed', 'reason': str(exc)}))
+        raise SystemExit(1) from None
     except (Exception, KeyboardInterrupt) as exc:
         # Connection/provider exceptions may contain credentials: only print their class.
         print(json.dumps({'status':'failed','reason':type(exc).__name__}))

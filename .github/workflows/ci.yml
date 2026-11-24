@@ -5,23 +5,92 @@ on:
   push:
     branches: [main, develop, 'stephen-*']
   workflow_dispatch:
+    inputs:
+      review_commit:
+        description: Test an earlier stack commit by its full SHA
+        type: string
+        default: ''
+      public_tiktok_audit:
+        description: Check reviewed organizers through the public TikTok endpoints
+        type: boolean
+        default: false
+      public_share_publisher_url:
+        description: Check TikTok share links on a public publisher page in the manual audit
+        type: string
+        default: ''
+      public_tiktok_video_url:
+        description: Check the metadata of one original public TikTok video or photo post
+        type: string
+        default: ''
+      staging_collection:
+        description: Rehearse staging collection or run a read-only database check
+        type: choice
+        options: [none, full, refresh, check-staging, inspect-scheduled, check-scheduled]
+        default: none
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.staging_collection || 'checks' }}-${{ inputs.review_commit || 'current' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   unit:
     name: Offline scraper tests
+    # A standalone target check verifies TLS, permissions and counts. It
+    # never starts the media pipeline or writes to the staging feed.
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      !contains(fromJSON('["check-staging","inspect-scheduled","check-scheduled"]'), inputs.staging_collection) ||
+      inputs.review_commit != '' || inputs.public_tiktok_audit || inputs.public_tiktok_video_url != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require an immutable review commit
+        if: inputs.review_commit != ''
+        env:
+          REVIEW_COMMIT: ${{ inputs.review_commit }}
+        run: |
+          if ! [[ "$REVIEW_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Provide the full 40-character commit SHA." >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.review_commit || '' }}
           persist-credentials: false
+      - name: Record the scraper revision under test
+        run: |
+          printf 'Scraper commit under test\n\n' >> "$GITHUB_STEP_SUMMARY"
+          git rev-parse HEAD | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install media test dependency
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+            exit 0
+          fi
+          # Use the signed Ubuntu archive for this install. Runner images may
+          # load a regional mirror from several differently named source files.
+          source /etc/os-release
+          ubuntu_sources="$RUNNER_TEMP/lo-media.sources"
+          printf '%s\n' \
+            'Types: deb' \
+            'URIs: https://archive.ubuntu.com/ubuntu/' \
+            "Suites: ${VERSION_CODENAME:?} $VERSION_CODENAME-updates" \
+            'Components: main universe' \
+            'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+            '' \
+            'Types: deb' \
+            'URIs: https://security.ubuntu.com/ubuntu/' \
+            "Suites: $VERSION_CODENAME-security" \
+            'Components: main universe' \
+            'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > "$ubuntu_sources"
+          apt_options=(-o "Dir::Etc::sourcelist=$ubuntu_sources" -o Dir::Etc::sourceparts=-
+                       -o Acquire::Languages=none -o Acquire::Retries=2 -o Acquire::https::Timeout=15)
+          sudo apt-get "${apt_options[@]}" --no-list-cleanup update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg
+          command -v ffmpeg
+          command -v ffprobe
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -29,3 +98,74 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m pip check
       - run: python scripts/ci_tests.py
+        if: inputs.review_commit == ''
+      - name: Test the earlier scraper revision
+        if: inputs.review_commit != ''
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+  staging_collection:
+    name: Isolated staging collection
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.review_commit == '' &&
+      contains(fromJSON('["full","refresh","check-staging"]'), inputs.staging_collection) &&
+      (needs.unit.result == 'success' ||
+      (inputs.staging_collection == 'check-staging' && needs.unit.result == 'skipped')) }}
+    needs: unit
+    # Reusable workflows may restrict the caller's token but cannot add permissions.
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/trending.yml
+    with:
+      mode: ${{ inputs.staging_collection }}
+      city: all
+      pilot: false
+    secrets:
+      TRENDING_STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
+      TRENDING_STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}
+
+  scheduled_target:
+    name: Read-only scheduled target
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.review_commit == '' &&
+      contains(fromJSON('["inspect-scheduled","check-scheduled"]'), inputs.staging_collection)
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/trending.yml
+    with:
+      mode: ${{ inputs.staging_collection }}
+    secrets:
+      TRENDING_DATABASE_URL: ${{ secrets.TRENDING_DATABASE_URL }}
+      TRENDING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_DATABASE_ROOT_CA }}
+
+  public_tiktok:
+    name: Review public TikTok metadata
+    if: github.event_name == 'workflow_dispatch' && inputs.review_commit == '' && (inputs.public_tiktok_audit || inputs.public_tiktok_video_url != '')
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+        if: inputs.public_share_publisher_url == '' && inputs.public_tiktok_video_url == ''
+      - run: python -m trending.tiktok_public --browser
+        if: inputs.public_share_publisher_url == '' && inputs.public_tiktok_video_url == ''
+      - name: Check an original public TikTok post
+        if: inputs.public_tiktok_video_url != ''
+        env:
+          POST_URL: ${{ inputs.public_tiktok_video_url }}
+        run: python -m trending.tiktok_public --url "$POST_URL"
+      - name: Check original post links without fetching post media
+        if: inputs.public_share_publisher_url != '' && inputs.public_tiktok_video_url == ''
+        env:
+          PUBLISHER_PAGE: ${{ inputs.public_share_publisher_url }}
+        run: |
+          set -o pipefail
+          python -m trending.social_links --url "$PUBLISHER_PAGE" | jq 'del(.pages[].posts[]?.text)'

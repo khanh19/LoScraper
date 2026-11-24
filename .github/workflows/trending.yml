@@ -2,14 +2,15 @@ name: Collect verified local discovery
 
 on:
   schedule:
-    # 23:00 UTC is 06:00 the following day in Vietnam (no DST).
-    - cron: '0 23 * * *'
+    # Monday and Thursday UTC map to Tuesday and Friday in Vietnam.
+    - cron: '0 23 * * 1,4'
+    - cron: '0 23 * * 0,2,3,5,6'
   workflow_dispatch:
     inputs:
       mode:
-        description: Full discovery or existing website checks only
+        description: Collect website evidence or inspect a database target read-only
         type: choice
-        options: [full, refresh]
+        options: [full, refresh, check-staging, inspect-scheduled, check-scheduled, full-scheduled, refresh-scheduled]
         default: full
       city:
         description: City (all collects all three)
@@ -20,6 +21,26 @@ on:
         description: Audit adapters without importing
         type: boolean
         default: true
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        required: true
+      city:
+        type: string
+        default: all
+      pilot:
+        type: boolean
+        default: true
+    secrets:
+      TRENDING_STAGING_DATABASE_URL:
+        required: false
+      TRENDING_STAGING_DATABASE_ROOT_CA:
+        required: false
+      TRENDING_DATABASE_URL:
+        required: false
+      TRENDING_DATABASE_ROOT_CA:
+        required: false
 
 permissions:
   contents: read
@@ -29,8 +50,11 @@ concurrency:
 
 jobs:
   policy:
-    if: github.event_name == 'workflow_dispatch' || vars.TRENDING_SCHEDULE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.TRENDING_SCHEDULE_ENABLED == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
       mode: ${{ steps.policy.outputs.mode }}
     steps:
@@ -38,19 +62,40 @@ jobs:
       - id: policy
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_CRON: ${{ github.event.schedule }}
           MANUAL_MODE: ${{ inputs.mode }}
+          MANUAL_PILOT: ${{ inputs.pilot }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.event_name == 'schedule' && github.token || '' }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "mode=${MANUAL_MODE:-full}" >> "$GITHUB_OUTPUT"
+            case "$MANUAL_MODE" in
+              full|refresh|check-staging|inspect-scheduled|check-scheduled) echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT" ;;
+              full-scheduled|refresh-scheduled)
+                if [ -z "$DEFAULT_BRANCH" ] || [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ] || [ "$MANUAL_PILOT" != "false" ]; then
+                  echo "Scheduled-target rehearsal requires the default branch and pilot=false" >&2
+                  exit 1
+                fi
+                echo "mode=$MANUAL_MODE" >> "$GITHUB_OUTPUT"
+                ;;
+              *) echo "Invalid manual collection mode" >&2; exit 1 ;;
+            esac
           else
-            python -m trending.schedule >> "$GITHUB_OUTPUT"
+            triggered_at=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq '.created_at')
+            python -m trending.schedule --cron "$EVENT_CRON" --triggered-at "$triggered_at" >> "$GITHUB_OUTPUT"
           fi
+      - name: Record scheduled slot
+        if: github.event_name == 'schedule'
+        env:
+          DUE: ${{ steps.policy.outputs.due }}
+          MODE: ${{ steps.policy.outputs.mode }}
+        run: printf 'Scheduled slot %s\n\nCollection mode %s\n' "$DUE" "$MODE" >> "$GITHUB_STEP_SUMMARY"
   collect:
     needs: policy
     if: needs.policy.outputs.mode != 'disabled'
     runs-on: ubuntu-latest
     # Full runs include a recheck before discovering new events.
-    timeout-minutes: ${{ needs.policy.outputs.mode == 'full' && 90 || 45 }}
+    timeout-minutes: ${{ startsWith(needs.policy.outputs.mode, 'full') && 90 || 45 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,31 +103,37 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+        if: startsWith(needs.policy.outputs.mode, 'full') || startsWith(needs.policy.outputs.mode, 'refresh')
       - run: python -m playwright install --with-deps chromium
+        if: startsWith(needs.policy.outputs.mode, 'full') || startsWith(needs.policy.outputs.mode, 'refresh')
       - name: Collect and validate
         env:
           STAGING_DATABASE_URL: ${{ secrets.TRENDING_STAGING_DATABASE_URL }}
           STAGING_DATABASE_ROOT_CA: ${{ secrets.TRENDING_STAGING_DATABASE_ROOT_CA }}
           SCHEDULE_DATABASE_URL: ${{ secrets.TRENDING_DATABASE_URL }}
           SCHEDULE_DATABASE_ROOT_CA: ${{ secrets.TRENDING_DATABASE_ROOT_CA }}
+          SCHEDULE_DATABASE_TARGET: ${{ vars.TRENDING_SCHEDULE_TARGET_SHA256 }}
           EVENT_NAME: ${{ github.event_name }}
           MODE: ${{ needs.policy.outputs.mode }}
           INPUT_CITY: ${{ inputs.city }}
           INPUT_PILOT: ${{ inputs.pilot }}
         run: |
+          set -o pipefail
           database_root_ca=
-          if [ "$EVENT_NAME" = "schedule" ]; then
+          scheduled_write=false
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "full-scheduled" ] || [ "$MODE" = "refresh-scheduled" ]; then
+            scheduled_write=true
+            MODE=${MODE%-scheduled}
+          fi
+          if [ "$scheduled_write" = "true" ] || [ "$MODE" = "inspect-scheduled" ] || [ "$MODE" = "check-scheduled" ]; then
             export DATABASE_URL="$SCHEDULE_DATABASE_URL"
+            export LO_DISCOVERY_DATABASE_TARGET="$SCHEDULE_DATABASE_TARGET"
             database_root_ca="$SCHEDULE_DATABASE_ROOT_CA"
-          elif [ "$INPUT_PILOT" = "true" ]; then
+          elif [ "$INPUT_PILOT" = "true" ] && [ "$MODE" != "check-staging" ]; then
             unset DATABASE_URL
           else
             export DATABASE_URL="$STAGING_DATABASE_URL"
             database_root_ca="$STAGING_DATABASE_ROOT_CA"
-          fi
-          if [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
-            echo "Missing collection database configuration" >&2
-            exit 1
           fi
           if [ -n "$database_root_ca" ]; then
             database_ca_path=$(mktemp)
@@ -90,6 +141,24 @@ jobs:
             printf '%s\n' "$database_root_ca" > "$database_ca_path"
             export PGSSLROOTCERT="$database_ca_path"
           fi
+          coverage_args=(--require-verified-tls --check-collector-writes)
+          if [ "$scheduled_write" = "true" ] || [ "$MODE" = "check-scheduled" ]; then
+            coverage_args+=(--require-target-match)
+          fi
+          case "$MODE" in
+            check-staging|inspect-scheduled|check-scheduled)
+              python -m trending.coverage "${coverage_args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit $?
+              ;;
+          esac
+          if [ "$scheduled_write" = "true" ]; then
+            python -m trending.coverage "${coverage_args[@]}" \
+              | tee -a "$GITHUB_STEP_SUMMARY" || exit 1
+          elif [ "$INPUT_PILOT" != "true" ] && [ -z "$DATABASE_URL" ]; then
+            echo "Missing collection database configuration" >&2
+            exit 1
+          fi
+          collection_status=0
           if [ "$MODE" = "refresh" ]; then
             if [ "$INPUT_PILOT" = "true" ]; then
               echo "Existing-item checks require pilot=false" >&2
@@ -97,7 +166,7 @@ jobs:
             fi
             args=(--browser --write-db --refresh-existing)
             if [ -n "$INPUT_CITY" ] && [ "$INPUT_CITY" != "all" ]; then args+=(--city "$INPUT_CITY"); fi
-            python -m trending "${args[@]}"
+            python -m trending "${args[@]}" || collection_status=$?
           else
             # Full updates also recheck existing entries, so verification runs daily.
             refresh_status=0
@@ -109,9 +178,13 @@ jobs:
             args=(--browser --supplemental --limit 20)
             if [ -n "$INPUT_CITY" ] && [ "$INPUT_CITY" != "all" ]; then args+=(--city "$INPUT_CITY"); fi
             if [ "$INPUT_PILOT" = "true" ]; then args+=(--pilot); else args+=(--write-db); fi
-            discovery_status=0
-            python -m trending "${args[@]}" || discovery_status=$?
-            if [ "$discovery_status" -ne 0 ]; then exit "$discovery_status"; fi
-            exit "$refresh_status"
+            python -m trending "${args[@]}" || collection_status=$?
+            if [ "$collection_status" -eq 0 ]; then collection_status="$refresh_status"; fi
           fi
+          coverage_status=0
+          if [ "$INPUT_PILOT" != "true" ]; then
+            python -m trending.coverage >> "$GITHUB_STEP_SUMMARY" || coverage_status=$?
+          fi
+          if [ "$collection_status" -ne 0 ]; then exit "$collection_status"; fi
+          exit "$coverage_status"
       # No raw scrape artifacts or media uploads; receipts live in Postgres.

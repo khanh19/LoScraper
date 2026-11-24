@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, timedelta
+from collections import Counter
+from datetime import date, datetime, time, timedelta
 from itertools import zip_longest
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
-from .dates import iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
+from .dates import MONTHS, iso_occurrence, plain, schedule_occurrences, ticketbox_sessions, weekly
 from .http import FetchError, PublicClient, fetch_failure_reason
 from .model import (
-    CONFIRMED_SCHEDULE_CONFLICT, ICT, Candidate, canonical, city_from_address, folded,
-    outside_supported_cities, parse_time,
+    CONFIRMED_SCHEDULE_CONFLICT, PUBLISHER_CONFIRMED_CANCELLATION, ICT,
+    Candidate, Occurrence, canonical, city_from_address, folded, outside_supported_cities, parse_time,
 )
 
 
@@ -45,7 +46,12 @@ def meta(soup, key):
 
 def category(text):
     value = folded(text)
-    if re.search(r"\b(giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua)\b", value): return "sports"
+    if re.search(
+        r"\b(?:giai chay|marathon|bong ro|bong da|the thao|watch party|pickleball|quan vot|co vua"
+        r"|hyrox|crossfit|padel|muay thai|powerlifting|cu ta olympic|yoga bay|aerial yoga)\b",
+        value,
+    ):
+        return "sports"
     if re.search(r"\b(pop up|popup|cho phien|phien cho|hoi cho|cho giang sinh|local brand market)\b", value): return "market"
     if re.search(r"\b(book club|cau lac bo doc sach|clb doc sach)\b", value): return "culture"
     for name, pattern in [
@@ -150,8 +156,15 @@ class Adapter:
                 c.price_text='Giá niêm yết: '+' – '.join(amounts)+' ₫'
             occ = iso_occurrence(str(event.get("startDate", "")), event.get("endDate"))
             c.occurrences = [occ] if occ else []
-            if event.get("eventStatus", "").endswith(("EventCancelled", "EventPostponed")):
+            event_status = event.get("eventStatus")
+            status = re.fullmatch(
+                r'(?:https?://schema\.org/)?(EventCancelled|EventPostponed)',
+                event_status if isinstance(event_status, str) else "",
+            )
+            if status:
                 c.status = "cancelled"
+                if status[1] == "EventCancelled":
+                    c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
         # Only address-labelled lines in the primary article; never the footer/sidebar.
         if not address:
             lines = paragraphs or [line.strip() for line in text.splitlines() if line.strip()]
@@ -180,7 +193,7 @@ class Adapter:
 
 
 class Ticketbox(Adapter):
-    def public_listing_links(self, client):
+    def public_listing_links(self, client, city_hint=None):
         host = "api-v2.ticketbox.vn"
         url = f"https://{host}/gin/api/v2/discovery/onsale-sections/newly-on-sale"
         data = client.get(url, {host}, json_response=True).get("data")
@@ -191,6 +204,13 @@ class Ticketbox(Adapter):
         for item in results:
             if not isinstance(item, dict) or item.get("saleStage") != "on_sale":
                 continue
+            if city_hint:
+                city = item.get("city")
+                if not isinstance(city, dict):
+                    continue
+                names = [city.get(key) for key in ("vi", "en")]
+                if city_from_address(" ".join(name for name in names if isinstance(name, str))) != city_hint:
+                    continue
             raw_url = item.get("deeplink")
             if not isinstance(raw_url, str):
                 continue
@@ -224,10 +244,14 @@ class Ticketbox(Adapter):
         if str(data.get("id")) != event_id:
             c.reasons.append("event_identity_conflict")
             return c
+        # The same-ID official endpoint determines whether a Ticketbox page can
+        # send a cancellation alert. Its HTML can still trigger a feed hold.
+        if PUBLISHER_CONFIRMED_CANCELLATION in c.reasons:
+            c.reasons.remove(PUBLISHER_CONFIRMED_CANCELLATION)
         if data.get("status") in {"cancelled", "canceled", "postponed"}:
             c.status = "cancelled"
             if data["status"] != "postponed":
-                c.reasons.append("publisher_confirmed_cancellation")
+                c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
             return c
         venue = data.get("venue") or c.venue_name
         address = data.get("address") or ""
@@ -248,13 +272,78 @@ class Ticketbox(Adapter):
         if not sessions:
             c.reasons.append("unresolved_individual_sessions")
             return c
-        c.occurrences = sessions
+        c.occurrences = self._exclude_multi_show_windows(sessions)
+        if self._has_admission_windows(data, c.occurrences):
+            c.occurrences = []
+            c.reasons.extend(('unresolved_admission_session_times', CONFIRMED_SCHEDULE_CONFLICT))
         categories = {"music": "music", "sport": "sports", "theatersandart": "culture",
                       "attractionsexperiences": "experience", "seminarsworkshops": "workshop"}
         if not c.category:
             c.category = next((categories[value] for value in (data.get("categoriesV2") or [])
                                if value in categories), "")
         return c
+
+    @staticmethod
+    def _has_admission_windows(data, sessions):
+        description = data.get('description')
+        if 'attractionsexperiences' not in (data.get('categoriesV2') or []) or not isinstance(description, str):
+            return False
+        markup = BeautifulSoup(description, 'html.parser')
+        details = folded(markup.get_text(' ', strip=True))
+        # A flexible visit begins at the guest's check-in, even if the API labels the gate hours a showing.
+        if 'tinh tu thoi diem check in tai quay ve' in details:
+            return True
+        # For daily passes, require the publisher's park-hours and on-site session instructions
+        # before interpreting a midnight-to-23:59 showing as an admission date.
+        park_pass = ('gio hoat dong cua cong vien' in details
+                     and 'kiem tra thoi diem bat dau trai nghiem' in details)
+        # Some exhibition listings put a ticket's calendar-day window in
+        # showings and publish different daily visiting hours in the description.
+        # Keep adjacent inline text together so 0<strong>9:00</strong> reads 09:00.
+        daily_hours = re.search(r'\bgio tham quan (\d{1,2}) (\d{2}) (\d{1,2}) (\d{2}) moi ngay\b',
+                                folded(markup.get_text()))
+        visiting = None
+        if daily_hours:
+            first_hour, first_minute, last_hour, last_minute = map(int, daily_hours.groups())
+            try:
+                visiting = time(first_hour, first_minute), time(last_hour, last_minute)
+            except ValueError:
+                pass
+        if not park_pass and visiting is None:
+            return False
+        for slot in sessions:
+            start = parse_time(slot.starts_at).astimezone(ICT)
+            end = parse_time(slot.ends_at).astimezone(ICT)
+            if slot.precision != 'time' or start.date() != end.date() or start.time() != time(0):
+                continue
+            if (park_pass and end.time() == time(23, 59)) or (
+                visiting is not None and (start.time(), end.time()) != visiting
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _exclude_multi_show_windows(sessions):
+        # An outer booking window can appear in the same list as real shows.
+        # Require shorter shows to match both endpoints and leave a gap.
+        day = timedelta(days=1)
+        periods = [(parse_time(slot.starts_at), parse_time(slot.ends_at), slot) for slot in sessions]
+        short = sorted({(start, end) for start, end, slot in periods
+                        if slot.precision == 'time' and end - start <= day})
+        verified = []
+        for start, end, slot in periods:
+            if slot.precision == 'time' and end - start > day:
+                inner = [(a, b) for a, b in short if start <= a < b <= end]
+                if inner and inner[0][0] == start and max(b for _, b in inner) == end:
+                    covered_through = start
+                    for a, b in inner:
+                        if a > covered_through:
+                            break
+                        covered_through = max(covered_through, b)
+                    if covered_through < end:
+                        continue
+            verified.append(slot)
+        return verified
 
     def parse(self, soup, url, now):
         c = super().parse(soup, url, now)
@@ -540,6 +629,13 @@ class LifeOfDaNang(Adapter):
         events=[e for e in structured(soup) if is_type(e,'Event')]
         if events and all(e.get('name')==events[0].get('name') and e.get('location')==events[0].get('location') for e in events):
             c.occurrences=[o for e in events if (o:=iso_occurrence(str(e.get('startDate','')),e.get('endDate')))]
+            split_sessions = self._visible_daily_sessions(soup, c.occurrences)
+            if split_sessions == [] or self._visible_starts_conflict(soup, c.occurrences):
+                c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+            elif split_sessions and c.status == 'active' and len(c.occurrences) == len(events) and all(
+                event.get('eventStatus') == 'https://schema.org/EventScheduled' for event in events
+            ):
+                c.occurrences = split_sessions
             # Related-event cards in <main> must not supply the primary category
             # or text evidence. Use only this event's structured description.
             c.original_text = str(events[0].get('description') or '')
@@ -563,18 +659,102 @@ class LifeOfDaNang(Adapter):
                 c.reasons.append('unverified_street_address')
         return [c]
 
+    @staticmethod
+    def _visible_daily_sessions(soup, occurrences):
+        # Some recurring listings emit only the first opening window per date in JSON-LD.
+        # Use exact ranges from the dedicated agenda, keeping the publisher's dated coverage.
+        clock = r'((?:[01]?\d|2[0-3])(?:h(?:[0-5]\d)?|:[0-5]\d))'
+        window = rf'{clock}\s*(?:den|toi|to|-)\s*{clock}'
+        for label in soup.select('main dt'):
+            if plain(label.get_text(' ', strip=True)) not in {'thoi gian', 'time'}:
+                continue
+            agenda = label.find_next_sibling('dd')
+            heading = agenda.find('span', recursive=False) if agenda else None
+            if heading is None:
+                continue
+            match = re.fullmatch(rf'(?:hang ngay|daily),\s*{window}\s*(?:va|and)\s*{window}',
+                                 plain(heading.get_text(' ', strip=True)))
+            if match is None:
+                continue
+            slots = []
+            for value in match.groups():
+                hour, minute = value.replace('h', ':').split(':')
+                slots.append(time(int(hour), int(minute or 0)))
+            first_start, first_end, second_start, second_end = slots
+            if not occurrences or not first_start < first_end <= second_start < second_end:
+                return []
+            windows = [(first_start, first_end), (second_start, second_end)]
+            days = set()
+            for occurrence in occurrences:
+                start = parse_time(occurrence.starts_at).astimezone(ICT)
+                end = parse_time(occurrence.ends_at).astimezone(ICT)
+                if (occurrence.precision != 'time' or start.date() != end.date()
+                        or (start.time(), end.time()) not in windows):
+                    return []
+                days.add(start.date())
+            return [Occurrence(datetime.combine(day, start, ICT).isoformat(),
+                               datetime.combine(day, end, ICT).isoformat())
+                    for day in sorted(days) for start, end in windows]
+        return None
+
+    @staticmethod
+    def _visible_starts_conflict(soup, occurrences):
+        def starts_in(text):
+            labels = re.split(r'\s*(?:,|\bva\b|\band\b)\s*', text)
+            starts = [re.fullmatch(r'([01]?\d|2[0-3])(?:h([0-5]\d)?|:([0-5]\d))', label) for label in labels]
+            if len(starts) < 2 or not all(starts):
+                return set()
+            return {(int(match[1]), int(match[2] or match[3] or '0')) for match in starts}
+
+        # The visible "Thời gian" block may list separate starts while JSON-LD
+        # compresses the same day into one window.
+        for label in soup.select('main dt'):
+            if plain(label.get_text(' ', strip=True)) not in {'thoi gian', 'time'}:
+                continue
+            agenda = label.find_next_sibling('dd')
+            parts = agenda.find_all('span', recursive=False) if agenda else []
+            if not parts:
+                continue
+            heading = plain(parts[0].get_text(' ', strip=True))
+            nightly = re.fullmatch(r'(?:hang dem|moi toi|nightly|every night),\s*(.+)', heading)
+            if nightly and (visible := starts_in(nightly[1])):
+                starts_by_day = {}
+                for occurrence in occurrences:
+                    if occurrence.precision == 'time':
+                        local = parse_time(occurrence.starts_at).astimezone(ICT)
+                        starts_by_day.setdefault(local.date(), set()).add((local.hour, local.minute))
+                return not starts_by_day or any(starts != visible for starts in starts_by_day.values())
+            if len(parts) < 2:
+                continue
+            day_month = re.search(r'\b(\d{1,2}) thang (\d{1,2})\b', heading)
+            visible = starts_in(plain(parts[1].get_text(' ', strip=True)))
+            if not day_month or not visible:
+                continue
+            day, month = map(int, day_month.groups())
+            structured_starts = set()
+            for occurrence in occurrences:
+                if occurrence.precision != 'time':
+                    continue
+                local = parse_time(occurrence.starts_at).astimezone(ICT)
+                if (local.day, local.month) == (day, month):
+                    structured_starts.add((local.hour, local.minute))
+            return bool(structured_starts and structured_starts != visible)
+        return False
+
     def enrich(self, c, soup, client, now):
         review = self.config.get('reviewed_events', {}).get(canonical(c.source_url))
         if not review or c.status != 'active' or c.kind != 'event':
             return c
         event_id = urlsplit(c.source_url).path.rstrip('/').rsplit('/', 1)[-1]
-        venue_links = [
+        link_type = 'venue' if 'venue_url' in review else 'organiser'
+        expected_url = review.get('venue_url') or review['schedule_url']
+        evidence_links = [
             canonical(urljoin(c.source_url, link['href']))
-            for link in soup.select('main a[data-ev=venue][data-ev-id][href]')
-            if link['data-ev-id'] == event_id
+            for link in soup.select('main a[data-ev][data-ev-id][href]')
+            if link['data-ev-id'] == event_id and link['data-ev'] == link_type
         ]
         address = review['address']
-        if (venue_links != [review['venue_url']]
+        if (evidence_links != [canonical(expected_url)]
                 or folded(c.venue_name) != folded(review['location'])
                 or city_from_address(address) != c.city_slug):
             c.reasons.append('unresolved_reviewed_venue')
@@ -604,6 +784,8 @@ class LifeOfDaNang(Adapter):
     def _corroborated_schedule(self, c, review, client, now):
         evidence = review['schedule_url']
         page = client.get(evidence, {urlsplit(evidence).hostname})
+        if review.get('schedule_format') == 'danang_jazz_hero':
+            return self._jazz_sessions(c, review, page)
         # These reviewed listings have one dated row per venue. Administrative
         # or related-event text elsewhere on either page must not supply times.
         rows = [
@@ -637,10 +819,235 @@ class LifeOfDaNang(Adapter):
             return [], True
         return source_sessions, False
 
+    @staticmethod
+    def _jazz_sessions(c, review, page):
+        # The listing describes two evenings with a single date interval. Only
+        # split it when the organizer and listing cover both days and times.
+        blocks = page.select('header.hero .when')
+        if len(blocks) != 1 or len(c.occurrences) != 1 or c.occurrences[0].precision != 'date':
+            return [], False
+        dates, times, venues = (
+            [plain(node.get_text(' ', strip=True)) for node in blocks[0].select(f':scope > p.{field}')]
+            for field in ('day', 'time', 'place')
+        )
+        if (len(dates), len(times), len(venues)) != (1, 1, 1):
+            return [], False
+        if folded(venues[0]) != folded(review['venue_name']):
+            return [], False
+        days = re.fullmatch(r'(\w+) (\d{1,2}) and (\w+) (\d{1,2}) (\w+) (20\d{2})', dates[0])
+        hours = re.fullmatch(r'(1[0-2]|[1-9]) pm to (1[0-2]|[1-9]) pm, both nights', times[0])
+        listing_hours = re.findall(
+            r'\b(\d{1,2})h den (\d{1,2})h ca hai toi\b', plain(c.original_text))
+        if not days or not hours or len(listing_hours) != 1 or days[5] not in MONTHS:
+            return [], False
+        try:
+            start_day, end_day = (
+                datetime(int(days[6]), MONTHS[days[5]], int(day), tzinfo=ICT)
+                for day in (days[2], days[4])
+            )
+        except ValueError:
+            return [], False
+        if (end_day - start_day != timedelta(days=1)
+                or (start_day.strftime('%A').lower(), end_day.strftime('%A').lower()) != (days[1], days[3])):
+            return [], False
+        start_hour, end_hour = (int(hour) % 12 + 12 for hour in hours.groups())
+        if end_hour <= start_hour:
+            return [], False
+        occurrence = c.occurrences[0]
+        if ((parse_time(occurrence.starts_at), parse_time(occurrence.ends_at))
+                != (start_day, end_day + timedelta(days=1))
+                or tuple(map(int, listing_hours[0])) != (start_hour, end_hour)):
+            return [], True
+        sessions = [
+            iso_occurrence(day.replace(hour=start_hour).isoformat(), day.replace(hour=end_hour).isoformat())
+            for day in (start_day, end_day)
+        ]
+        return sessions, False
+
 
 class HoGuomOpera(Adapter):
     content_selector = '.ck-content'
     link_pattern = r'^/chuong-trinh-bieu-dien/[^/]+-\d+$'
+
+    def calendar_links(self, soup, url, now):
+        # Only drop corroborated, ended timetable entries from discovery.
+        # Explicit leads and persisted recheck targets bypass this listing filter.
+        entries = self._page_data(soup).get('items')
+        if not isinstance(entries, list):
+            return None
+        counts = Counter(row['slug'] for row in entries
+                         if isinstance(row, dict) and isinstance(row.get('slug'), str))
+        archived = set()
+        for row in entries:
+            if not isinstance(row, dict):
+                continue
+            program, title = row.get('slug'), row.get('name')
+            if not isinstance(program, str) or counts[program] != 1 or not isinstance(title, str):
+                continue
+            path = f'/chuong-trinh-bieu-dien/{program}'
+            if not re.fullmatch(self.link_pattern, path):
+                continue
+            article_id = int(program.rsplit('-', 1)[1])
+            slots = row.get('showSches')
+            if row.get('articleId') != article_id or not isinstance(slots, list) or not slots:
+                continue
+            if not all(isinstance(slot, dict) and slot.get('articleId') == article_id
+                       and slot.get('isAvailFS') is False
+                       and isinstance(slot.get('startTime'), str) and isinstance(slot.get('endTime'), str)
+                       for slot in slots):
+                continue
+            visible = self._visible_slots(soup, path, title)
+            clocks = {(slot['startTime'], slot['endTime']) for slot in slots}
+            if len(clocks) == len(slots) and clocks == visible.keys() and all(
+                    parse_time(session.ends_at) <= now for session in visible.values()):
+                archived.add(path)
+        links = list(self.links(soup, url))
+        if not links:
+            return None
+        return [link for link in links if urlsplit(link).path not in archived]
+
+    def fetch(self, client, url):
+        try:
+            return super().fetch(client, url)
+        except FetchError as exc:
+            program = urlsplit(url).path.rsplit('/', 1)[-1]
+            if str(exc) != 'http_404' or program not in self.config.get('reviewed_programs', {}):
+                raise
+            return client.get(self.config['seeds'][0], self.hosts)
+
+    @staticmethod
+    def _page_data(soup):
+        node = soup.find('script', id='__NEXT_DATA__')
+        try:
+            data = json.loads(node.string)['props']['pageProps']['data'] if node else {}
+        except (KeyError, TypeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def parse_many(self, soup, url, now):
+        catalogue = self.config['seeds'][0]
+        programs = self.config.get('reviewed_programs', {})
+        selected = urlsplit(url).path.rsplit('/', 1)[-1]
+        if url != catalogue and (selected not in programs or soup.select_one(self.content_selector)):
+            return super().parse_many(soup, url, now)
+        entries = self._page_data(soup).get('items')
+        if not isinstance(entries, list):
+            return super().parse_many(soup, url, now)
+        candidates = []
+        for program, review in programs.items():
+            if url != catalogue and program != selected:
+                continue
+            rows = [row for row in entries if isinstance(row, dict) and row.get('slug') == program]
+            if len(rows) != 1 or rows[0].get('isShow') is not True:
+                continue
+            row = rows[0]
+            article_id = int(program.rsplit('-', 1)[1])
+            if row.get('articleId') != article_id or not isinstance(row.get('name'), str):
+                continue
+            old_url = urljoin(catalogue, f'/chuong-trinh-bieu-dien/{program}')
+            candidates.append(Candidate(
+                self.slug, self.config['name'], catalogue, row['name'].strip(), 'event',
+                city_slug='hanoi', venue_name='Nhà hát Hồ Gươm', address=review['address'],
+                category=review['category'], original_text=str(row.get('shortDescription') or ''),
+                verified_at=now.isoformat(), entry_key=f'program-{article_id}',
+                evidence_locator=program, replaces_source_url=old_url,
+            ))
+        return candidates
+
+    def enrich(self, candidate, soup, client, now):
+        if not candidate.replaces_source_url:
+            return candidate
+        review = self.config['reviewed_programs'][candidate.evidence_locator]
+        rows = self._page_data(soup)['items']
+        row = next(entry for entry in rows if isinstance(entry, dict)
+                   and entry.get('slug') == candidate.evidence_locator)
+        slots = row.get('showSches')
+        visible = self._visible_slots(soup, urlsplit(candidate.replaces_source_url).path, candidate.title)
+        count = review['sessions']
+        reconcile = review.get('reconcile_announcement', False)
+        announced_days = self._announced_days(candidate.original_text) if reconcile else set()
+        if (not isinstance(slots, list) or not slots or len(slots) != len(visible)
+                or (len(announced_days) != count if reconcile else len(slots) != count)
+                or re.search(r'\b(?:da huy|hoan lich|hoan chuong trinh|cancelled|postponed)\b',
+                             folded(candidate.original_text))):
+            candidate.reasons.append('unresolved_individual_sessions')
+            return candidate
+        article_id = row['articleId']
+        confirmed = {}
+        for slot in slots:
+            if not isinstance(slot, dict) or type(slot.get('showId')) is not int or slot.get('articleId') != article_id:
+                break
+            show_id = slot['showId']
+            booking_url = urljoin(candidate.source_url, f'/dat-ve/{show_id}')
+            booking = client.get(booking_url, self.hosts)
+            record = self._page_data(booking)
+            article = record.get('article')
+            clock = slot.get('startTime'), slot.get('endTime')
+            # This publisher serializes its local wall times with a Z suffix.
+            # Interpret it only when the visible timetable independently agrees.
+            if (clock not in visible or clock in confirmed or record.get('id') != show_id
+                    or not isinstance(article, dict) or article.get('id') != article_id
+                    or record.get('isAvailFS') is not True or slot.get('isAvailFS') is not True
+                    or not isinstance(record.get('articleName'), str)
+                    or folded(record['articleName']) != folded(candidate.title)
+                    or (record.get('startTime'), record.get('endTime')) != clock):
+                break
+            if not booking.find(string=lambda text: text and re.fullmatch(
+                    r'dia chi 40 hang bai phuong cua nam tp ha noi', folded(text))):
+                break
+            confirmed[clock] = booking_url
+        if len(confirmed) != len(slots):
+            candidate.reasons.append('unresolved_individual_sessions')
+            return candidate
+        candidate.location_evidence = next(iter(confirmed.values()))
+        if reconcile and (len(confirmed) != count or announced_days != {
+                parse_time(session.starts_at).date() for session in visible.values()}):
+            candidate.reasons.extend(['unresolved_individual_sessions', CONFIRMED_SCHEDULE_CONFLICT])
+            return candidate
+        candidate.occurrences = sorted(visible.values(), key=lambda session: session.starts_at)
+        return candidate
+
+    @staticmethod
+    def _announced_days(text):
+        matches = re.findall(r'\bdiễn ra trong hai đêm\s+(\d{1,2})\s+và\s+(\d{1,2})/(\d{1,2})/(20\d{2})\b',
+                             text, re.IGNORECASE)
+        if len(matches) != 1:
+            return set()
+        first, second, month, year = map(int, matches[0])
+        try:
+            return {date(year, month, first), date(year, month, second)}
+        except ValueError:
+            return set()
+
+    @staticmethod
+    def _visible_slots(soup, path, title):
+        titles = [link for link in soup.find_all('a', href=path)
+                  if folded(link.get_text(' ', strip=True)) == folded(title)]
+        if len(titles) != 1:
+            return {}
+        for block in titles[0].parents:
+            paths = {link['href'] for link in block.select('a[href]')}
+            if paths - {path}:
+                return {}
+            if not block.select_one('img[alt="calendar"]'):
+                continue
+            slots = {}
+            for line in block.select('p'):
+                match = re.fullmatch(r'(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2}),\s*(\d{2}/\d{2}/20\d{2})',
+                                     line.get_text(' ', strip=True))
+                if not match:
+                    continue
+                try:
+                    start, end = (datetime.strptime(f'{match[3]} {clock}', '%d/%m/%Y %H:%M').replace(tzinfo=ICT)
+                                  for clock in (match[1], match[2]))
+                except ValueError:
+                    return {}
+                key = tuple(t.strftime('%Y-%m-%dT%H:%M:%SZ') for t in (start, end))
+                if key in slots or end <= start:
+                    return {}
+                slots[key] = iso_occurrence(start.isoformat(), end.isoformat())
+            return slots
+        return {}
 
     def parse(self, soup, url, now):
         candidate = super().parse(soup, url, now)
@@ -783,9 +1190,389 @@ class HanoiGo(Adapter):
         c.occurrences=[Occurrence(a.isoformat(),b.isoformat()) for a,b in sorted(sessions)]
         return c
 
+class VaranVietnam(Adapter):
+    def parse(self, soup, url, now):
+        heading = next((tag.get_text(' ', strip=True) for tag in soup.select('main h2')
+                        if tag.get_text(' ', strip=True).startswith('Varan Vietnam tại Triển lãm ')), '')
+        title = heading.removeprefix('Varan Vietnam tại ')
+        sections = [list(p.stripped_strings) for p in soup.select('main .project-content p')
+                    if p.get_text(' ', strip=True).startswith('THÔNG TIN SỰ KIỆN')]
+        event = Candidate(self.slug, self.config['name'], url, title, 'event',
+                          category='culture', verified_at=now.isoformat())
+        if len(sections) != 1:
+            event.reasons.append('missing_primary_content')
+            return event
+        lines = [text.removeprefix('* ').strip() for text in sections[0][1:]]
+        event.original_text = '\n'.join(lines)
+        venue_rows = [line.removeprefix('Địa điểm: ') for line in lines if line.startswith('Địa điểm: ')]
+        if len(venue_rows) == 1:
+            venue, _, address = venue_rows[0].partition(',')
+            event.venue_name, event.address = venue, address.strip()
+            event.city_slug = city_from_address(event.address)
+            if event.city_slug and re.match(r'^\d+\s', event.address):
+                event.location_evidence = url
+        status_text = folded(heading + ' ' + event.original_text)
+        if re.search(r'\b(?:trang thai da huy|da huy trien lam)\b', status_text):
+            event.status = 'cancelled'
+            return event
+        if re.search(r'\b(?:trang thai hoan lich|hoan trien lam)\b', status_text):
+            event.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+            return event
+        if 'Vào cửa miễn phí' in lines:
+            event.price_text = 'Miễn phí'
+        dates = [m for line in lines if (m := re.fullmatch(
+            r'thoi gian trien lam: tu ngay (\d{1,2}) den ngay (\d{1,2}) thang (\d{1,2}) nam (20\d{2})', plain(line)))]
+        hours = [m for line in lines if (m := re.fullmatch(
+            r'gio mo cua: hang ngay, ([0-2]\d:[0-5]\d)\s*-\s*([0-2]\d:[0-5]\d)', plain(line)))]
+        if len(dates) == len(hours) == 1:
+            first, last, month, year = map(int, dates[0].groups())
+            start, end = hours[0].groups()
+            if 1 <= first <= last <= 31 and start < end:
+                daily = [schedule_occurrences(f'{day}/{month}/{year} {start}-{end}', now)
+                         for day in range(first, last + 1)]
+                if all(len(one_day) == 1 for one_day in daily):
+                    event.occurrences = [one_day[0] for one_day in daily]
+        if not event.occurrences:
+            event.reasons.append('unresolved_individual_sessions')
+        return event
+
+
+class HoanKiemHeritage(Adapter):
+    def parse(self, soup, url, now):
+        # This is the separately announced tea experience, on the second floor.
+        # Do not treat the multi-venue press release as a single festival card.
+        event = Candidate(self.slug, self.config['name'], url, 'Trải nghiệm Dược trà', 'event',
+                          category='experience', verified_at=now.isoformat(), entry_key='duoc-tra-40-lan-ong')
+        headings = [h for h in soup.select('.lang-vi > h3') if re.fullmatch(
+            r'\d+\. Di tích 40 Lãn Ông', h.get_text(' ', strip=True))]
+        if len(headings) != 1:
+            event.reasons.append('missing_primary_content')
+            return event
+        paragraphs = []
+        for sibling in headings[0].next_siblings:
+            if getattr(sibling, 'name', None) in {'h2', 'h3'}:
+                break
+            if getattr(sibling, 'name', None) == 'p':
+                paragraphs.append(sibling.get_text(' ', strip=True))
+        descriptions = [p for p in paragraphs if p.startswith('Trải nghiệm văn hóa “Dược trà” tại tầng hai')]
+        schedules = [p.removeprefix('Thời gian: ').rstrip('.') for p in paragraphs if p.startswith('Thời gian: ')]
+        if len(descriptions) == 1 and len(schedules) == 1 and url in self.config['detail_pages']:
+            span = re.fullmatch(r'\d{1,2}/\d{1,2}\s*-\s*\d{1,2}/\d{1,2}/20\d{2}', plain(schedules[0]))
+            event.occurrences = schedule_occurrences(span[0], now) if span else []
+            event.city_slug, event.venue_name = 'hanoi', 'Di tích 40 Lãn Ông'
+            event.address, event.location_evidence = '40 Lãn Ông, Hoàn Kiếm, Hà Nội', url
+            event.original_text = descriptions[0]
+            event.evidence_locator = headings[0].get_text(' ', strip=True)
+            update = folded(' '.join(paragraphs))
+            if re.search(r'\bda huy\b', update):
+                event.status = 'cancelled'
+            elif re.search(r'\b(?:hoan lich|hoan trai nghiem)\b', update):
+                event.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+        if not event.occurrences:
+            event.reasons.append('unresolved_individual_sessions')
+        return event
+
+
+class HanoiYouthTheatre(Adapter):
+    def fetch(self, client, url):
+        return client.get(url, self.hosts, render=True)
+
+    def parse_many(self, soup, url, now):
+        rows = soup.select('tbody tr:has(td.rbc-agenda-time-cell)')
+        if not rows:
+            return [{'extraction_failure': 'missing_primary_schedule'}]
+        performances = {}
+        for row in rows:
+            cells = [td.get_text(' ', strip=True) for td in row.select(':scope > td')]
+            if len(cells) != 4 or cells[3] != 'Đặt vé':
+                continue
+            label, hours, title, _ = cells
+            review = self.config['reviewed_performances'].get(folded(title))
+            if not review:
+                continue
+            day = re.fullmatch(r'(?:T[2-7]|CN) (\d{2}/\d{2}/20\d{2})', label)
+            if not day or not re.fullmatch(r'\d{2}:\d{2}\s*-\s*\d{2}:\d{2}', plain(hours)):
+                continue
+            sessions = schedule_occurrences(f'{day[1]} {hours}', now)
+            if len(sessions) != 1 or sessions[0].starts_at != review['starts_at']:
+                continue
+            performances.setdefault(review['key'], []).extend(sessions)
+        results = []
+        for review in self.config['reviewed_performances'].values():
+            key = review['key']
+            sessions = performances.get(key, [])
+            if len(sessions) == 1:
+                results.append(Candidate(self.slug, self.config['name'], url, review['title'], 'event',
+                    city_slug='hanoi', category='culture', venue_name='Nhà hát Tuổi trẻ',
+                    address=review['address'], verified_at=now.isoformat(), occurrences=sessions,
+                    entry_key=key, evidence_locator=review['title'],
+                    original_text=f'{review["title"]} · {sessions[0].starts_at} – {sessions[0].ends_at}'))
+        return results
+
+    def enrich(self, candidate, soup, client, now):
+        contact = self.config['contact_url']
+        page = client.get(contact, self.hosts, render=True)
+        address = 'dia chi ' + folded(candidate.address)
+        if page.find(string=lambda t: t and folded(t) == address):
+            candidate.location_evidence = contact
+        return candidate
+
+
+class YogaLabHanoi(Adapter):
+    def parse(self, soup, url, now):
+        review = self.config['reviewed_class']
+        event = Candidate(self.slug, self.config['name'], url, review['title'], 'event',
+                          category='sports', venue_name='Yoga Lab Hanoi',
+                          address=review['address'], city_slug='hanoi',
+                          verified_at=now.isoformat(), entry_key=review['key'])
+        publisher_title = review['publisher_title']
+        headings = [p for p in soup.select('main p, main h3')
+                    if p.get_text(' ', strip=True) == publisher_title]
+        block = headings[0].find_parent(attrs={'data-testid': 'mesh-container-content'}) if len(headings) == 1 else None
+        if not block or not any(urljoin(url, node['href']) == self.config['booking_url']
+                                for node in soup.select('main a[href]')):
+            event.reasons.append('missing_primary_content')
+            return event
+        lines = [plain(p.get_text(' ', strip=True)).strip('\u200b ') for p in block.select('p')]
+        if any(re.fullmatch(r'(?:this class has been )?(?:cancelled|canceled)', line) for line in lines):
+            event.status = 'cancelled'
+            return event
+        expected = review['schedule_line']
+        if lines.count(expected) != 1 or any(re.search(r'\b(?:postponed|hoan lich)\b', line) for line in lines):
+            event.reasons.append('unresolved_individual_sessions')
+            return event
+        hours = expected.split('|', 1)[1].strip()
+        event.occurrences = schedule_occurrences(f'{review["date"]} {hours}', now)
+        event.original_text = f'{publisher_title}\n{expected}'
+        event.evidence_locator = publisher_title
+        return event
+
+    def enrich(self, candidate, soup, client, now):
+        if not candidate.occurrences:
+            return candidate
+        booking = self.config['booking_url']
+        page = client.get(booking, self.hosts)
+        address_rows = [folded(node.get_text(' ', strip=True)) for node in page.select('main p')]
+        if self.config['reviewed_class']['booking_address'] in address_rows:
+            candidate.location_evidence = booking
+        return candidate
+
+
+class RealityDaNang(Adapter):
+    scheduled = 'https://schema.org/EventScheduled'
+    cancelled = 'https://schema.org/EventCancelled'
+    venue_id = 'https://realitydn.com/#business'
+    event_path = re.compile(r'^/events/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
+
+    @classmethod
+    def venue_matches(cls, event):
+        location = event.get('location')
+        if not isinstance(location, dict) or location.get('@id') != cls.venue_id:
+            return False
+        address = location.get('address')
+        return (isinstance(address, dict) and location.get('name') == 'REALITY'
+                and folded(str(address.get('streetAddress', ''))) == '86 mai thuc lan'
+                and city_from_address(str(address.get('addressLocality', ''))) == 'danang')
+
+    def parse(self, soup, url, now):
+        review = self.config['reviewed_detail_pages'].get(canonical(url), {})
+        c = Candidate(self.slug, self.config['name'], url, review.get('title_vi', ''), 'event',
+                      category='workshop', venue_name='REALITY', address='86 Mai Thúc Lân, Đà Nẵng',
+                      city_slug='danang', verified_at=now.isoformat())
+        if not review:
+            c.reasons.append('unreviewed_reality_series')
+        return c
+
+    def enrich(self, c, soup, client, now):
+        if c.reasons:
+            return c
+        url = canonical(c.source_url)
+        review = self.config['reviewed_detail_pages'][url]
+        series = [item for item in structured(soup) if is_type(item, 'EventSeries') and item.get('url') == url]
+        heading = soup.select_one('h1')
+        if (len(series) != 1 or heading is None or heading.get_text(' ', strip=True) != review['publisher_title']
+                or series[0].get('name') != review['publisher_title'] or not self.venue_matches(series[0])):
+            c.reasons.append('unverified_reality_series')
+            return c
+        # The server streams some dated links outside <main>. Verify that the
+        # whole link set still matches the series and every linked detail page.
+        event_ids = {urljoin(url, a['href']): a.get_text(' ', strip=True)
+                     for a in soup.select('a[href]') if self.event_path.fullmatch(a['href'])}
+        rows = series[0].get('subEvent')
+        if (not isinstance(rows, list) or not 1 <= len(rows) <= 6
+                or not all(isinstance(row, dict) and isinstance(row.get('url'), str) for row in rows)
+                or len(event_ids) != len(rows) or set(event_ids) != {row['url'] for row in rows}):
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+        occurrences = []
+        for row in rows:
+            link = row['url']
+            detail_page = client.get(link, self.hosts)
+            details = [item for item in structured(detail_page) if is_type(item, 'Event') and item.get('url') == link]
+            row_status = row.get('eventStatus')
+            if (len(details) != 1 or not is_type(row, 'Event') or row.get('name') != review['publisher_title']
+                    or details[0].get('name') != row.get('name') or not self.venue_matches(row)
+                    or not self.venue_matches(details[0]) or row_status not in {self.scheduled, self.cancelled}
+                    or details[0].get('eventStatus') != row_status
+                    or not isinstance(details[0].get('superEvent'), dict)
+                    or details[0]['superEvent'].get('url') != url):
+                c.reasons.append('unresolved_individual_sessions')
+                return c
+            if row_status == self.cancelled:
+                continue
+            timestamps = [str(item.get(key, '')) for item in (row, details[0]) for key in ('startDate', 'endDate')]
+            shown = re.search(r'\b(\d{1,2})\.(\d{1,2})\s*·\s*(\d{1,2}:\d{2})\b', event_ids[link])
+            if shown is None or not all(re.search(r'(?:Z|[+-]\d{2}:\d{2})$', t) for t in timestamps):
+                c.reasons.append('unresolved_individual_sessions')
+                return c
+            start, end, detail_start, detail_end = map(parse_time, timestamps)
+            if not all((start, end, detail_start, detail_end)) or end <= start or detail_end <= detail_start:
+                c.reasons.append('unresolved_individual_sessions')
+                return c
+            local = start.astimezone(ICT)
+            if ((start, end) != (detail_start, detail_end)
+                    or (int(shown[1]), int(shown[2]), shown[3].zfill(5)) != (local.day, local.month, local.strftime('%H:%M'))):
+                c.reasons.append(CONFIRMED_SCHEDULE_CONFLICT)
+                return c
+            occurrences.append(Occurrence(start.isoformat(), end.isoformat()))
+        c.occurrences = occurrences
+        if not occurrences:
+            c.status = 'cancelled'
+            c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
+        c.location_evidence = review['venue_url']
+        c.original_text = str(series[0].get('description') or review['publisher_title'])
+        return c
+
+
+class Vio(Adapter):
+    link_pattern = r'^/vi-vn/event/[^/]+$'
+    hours_pattern = r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})'
+    scheduled = 'https://schema.org/EventScheduled'
+
+    def parse(self, soup, url, now):
+        url = canonical(url)
+        c = Candidate(self.slug, self.config['name'], url, '', 'event', verified_at=now.isoformat())
+        review = self.config['reviewed_detail_pages'].get(url)
+        if not review:
+            c.reasons.append('unreviewed_vio_event')
+            return c
+        events = [event for event in structured(soup) if is_type(event, 'Event')]
+        headings = soup.select('h1')
+        if len(events) != 1 or len(headings) != 1:
+            c.reasons.append('event_identity_conflict')
+            return c
+        event = events[0]
+        c.title = headings[0].get_text(' ', strip=True)
+        organizer = event.get('organizer')
+        if (event.get('url') != url or event.get('name') != c.title or folded(c.title) != folded(review['title'])
+                or not isinstance(organizer, dict) or organizer.get('name') != review['organizer']):
+            c.reasons.append('event_identity_conflict')
+            return c
+        c.category = review['category']
+        c.venue_name = review['venue']
+        c.owner_key = review['publisher_id']
+        location = event.get('location')
+        postal = location.get('address') if isinstance(location, dict) else None
+        if not isinstance(postal, dict) or postal.get('streetAddress') != review['booking_street']:
+            c.reasons.append('unverified_destination')
+            return c
+        _, c.address = location_fields(event)
+        c.city_slug = city_from_address(c.address)
+        if c.city_slug != 'hcmc':
+            c.reasons.append('unverified_destination')
+            return c
+        c.location_evidence = url
+
+        if event.get('eventStatus') == 'https://schema.org/EventCancelled':
+            c.status = 'cancelled'
+            c.reasons.append(PUBLISHER_CONFIRMED_CANCELLATION)
+            return c
+        details = soup.select_one('section#info')
+        if details is None or not details.get_text(strip=True) or event.get('eventStatus') != self.scheduled:
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+        c.original_text = details.get_text('\n', strip=True)
+        if re.search(r'\b(?:su kien|chuong trinh|workshop) (?:(?:da|bi) (?:huy|hoan)|(?:huy bo|hoan lich))\b',
+                     folded(c.original_text)):
+            c.reasons.extend(['unresolved_individual_sessions', CONFIRMED_SCHEDULE_CONFLICT])
+            return c
+        slots = self._structured_sessions(event)
+        if not slots:
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+
+        by_day = {}
+        for start, end in slots:
+            day = start.strftime('%d/%m/%Y')
+            by_day.setdefault(day, []).append((start.strftime('%H:%M'), end.strftime('%H:%M')))
+        expected = {day: (*times[0], len(times)) for day, times in by_day.items()}
+        visible = self._visible_sessions(soup)
+        described = {tuple(hour.zfill(5) for hour in match)
+                     for match in re.findall(self.hours_pattern, c.original_text)}
+        described_days = set(re.findall(r'\b\d{2}/\d{2}/20\d{2}\b', c.original_text))
+        expected_hours = {hours for times in by_day.values() for hours in times}
+        if ((described and described != expected_hours) or (described_days and described_days != expected.keys())
+                or (visible and visible != expected)):
+            c.reasons.extend(['unresolved_individual_sessions', CONFIRMED_SCHEDULE_CONFLICT])
+            return c
+        if visible != expected or (any(len(times) > 1 for times in by_day.values()) and not described):
+            c.reasons.append('unresolved_individual_sessions')
+            return c
+        c.occurrences = [iso_occurrence(start.isoformat(), end.isoformat()) for start, end in slots]
+        return c
+
+    @classmethod
+    def _structured_sessions(cls, event):
+        sessions = event.get('subEvent')
+        if not isinstance(sessions, list) or not sessions:
+            return []
+        slots, identities = set(), set()
+        prefix = event['url'] + '#showtime-'
+        for row in sessions:
+            if (not isinstance(row, dict) or not is_type(row, 'Event') or row.get('eventStatus') != cls.scheduled
+                    or row.get('location') != event['location'] or row.get('organizer') != event['organizer']):
+                return []
+            identity = row.get('@id')
+            if not isinstance(identity, str) or not identity.startswith(prefix) or identity in identities:
+                return []
+            identities.add(identity)
+            hours = row.get('startDate'), row.get('endDate')
+            if not all(isinstance(clock, str) and re.search(r'T\d{2}:\d{2}.*(?:Z|[+-]\d{2}:\d{2})$', clock)
+                       for clock in hours):
+                return []
+            start, end = map(parse_time, hours)
+            if not start or not end or not timedelta(0) < end - start <= timedelta(hours=24):
+                return []
+            slots.add((start.astimezone(ICT), end.astimezone(ICT)))
+        return sorted(slots) if len(slots) == len(sessions) else []
+
+    @classmethod
+    def _visible_sessions(cls, soup):
+        schedule = {}
+        for button in soup.select('section#tickets button[aria-expanded]'):
+            match = re.fullmatch(
+                rf'(CN|T[2-7]), (\d{{2}}/\d{{2}}/20\d{{2}}) {cls.hours_pattern}(?: \| (\d+) suất)?(?: Mua vé)?',
+                button.get_text(' ', strip=True),
+            )
+            if not match:
+                return {}
+            weekday, day, start, end, count = match.groups()
+            try:
+                local_date = datetime.strptime(day, '%d/%m/%Y').date()
+            except ValueError:
+                return {}
+            if day in schedule or weekday != ('CN' if local_date.weekday() == 6 else f'T{local_date.weekday() + 2}'):
+                return {}
+            schedule[day] = (start.zfill(5), end.zfill(5), int(count or '1'))
+        return schedule
+
+
 CLASSES = {"hanoigo": HanoiGo, "vietnamnightlife": Nightlife, "ticketbox": Ticketbox, "hanoigrapevine": Grapevine,
            "danangfantasticity": Fantasticity, "vnexpress": VnExpress, "ticketgo": TicketGo, "lifeofdanang": LifeOfDaNang,
-           "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer}
+           "hoguomopera": HoGuomOpera, "saigoneer": Saigoneer,
+           "varanvietnam": VaranVietnam, "hoankiemheritage": HoanKiemHeritage,
+           "hanoiyouththeatre": HanoiYouthTheatre, "yogalabhanoi": YogaLabHanoi,
+           "realitydanang": RealityDaNang, "vio": Vio}
 
 
 def load_sources():
@@ -800,6 +1587,9 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     links = list(extra_urls)
     failures = []
     seeds = [] if existing_only else list(config['seeds'])
+    if not existing_only:
+        links.extend(config.get('detail_pages', ()))
+        links.extend(config.get('reviewed_detail_pages', ()))
     if slug == 'ticketbox' and not existing_only:
         heartbeat()
         try:
@@ -813,12 +1603,15 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     if slug == 'lifeofdanang' and not existing_only:
         seeds = [*adapter.calendar_seeds(now), *seeds]
     seed_groups = []
+    archive_only = slug == 'hoguomopera' and bool(seeds)
     for seed in seeds:
         heartbeat()
         try:
             listing=adapter.fetch(client,seed)
             metrics['listing_pages']+=1
-            ordered = adapter.calendar_links(listing, seed, now) if slug == 'lifeofdanang' else None
+            ordered = (adapter.calendar_links(listing, seed, now)
+                       if slug in {'lifeofdanang', 'hoguomopera'} else None)
+            archive_only = archive_only and ordered == []
             if ordered is None:
                 ordered = list(adapter.links(listing, seed))
                 if slug != 'danangfantasticity':
@@ -847,7 +1640,7 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
     if slug == 'danangfantasticity' and not existing_only:
         # Reserve detail capacity for the individual activities linked by campaigns.
         links = links[:max(1,limit-3)]
-    if not links and not existing_only:
+    if not links and not existing_only and not (archive_only and not failures):
         failures.append({'stage':'listing','reason':'no_detail_links'})
     candidates = []
     consecutive_fetch_failures = 0
@@ -881,8 +1674,13 @@ def collect_source(slug, config, client, now, limit=12, extra_urls=(), heartbeat
                 except Exception as exc:
                     failures.append({'stage':'entry','reason':fetch_failure_reason(exc)})
         except Exception as exc:
-            failures.append({"stage": "detail", "reason": fetch_failure_reason(exc)})
-            if isinstance(exc,FetchError):
+            reason = fetch_failure_reason(exc)
+            failures.append({"stage": "detail", "reason": reason})
+            if reason in {'http_404', 'http_410'}:
+                # The publisher answered. A missing detail page can be followed
+                # by a healthy listing and is still an individual failure.
+                consecutive_fetch_failures = 0
+            elif isinstance(exc, FetchError):
                 consecutive_fetch_failures += 1
                 if consecutive_fetch_failures >= 3:
                     failures.append({'stage':'detail','reason':'source_fetch_circuit_open'})

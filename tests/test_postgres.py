@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import psycopg
 
 from trending.model import CONFIRMED_SCHEDULE_CONFLICT, Occurrence
+from trending.coverage import collector_write_blocker, read_coverage
 from trending.__main__ import run
 from trending.store import Store
 from trending.providers import BrightSocial, SerpDiscovery, ProviderDisabled
@@ -78,6 +79,68 @@ class Persistence(unittest.TestCase):
         self.assertEqual(len(self.feed()),1)
         self.assertEqual(len(self.feed()[0]['sources']),2)
 
+    def test_relocated_program_preserves_the_original_observation_and_item(self):
+        original = candidate()
+        item_id = self.store.upsert(original, NOW)
+        observation_id = self.store.db.execute('SELECT id FROM discovery_observations').fetchone()['id']
+        updated = copy.deepcopy(original)
+        updated.replaces_source_url = original.source_url
+        updated.source_url = 'https://ticketbox.vn/programs'
+        updated.entry_key = 'program-2088'
+        updated.verified_at = (NOW + timedelta(minutes=1)).isoformat()
+
+        substituted = copy.deepcopy(updated)
+        substituted.title = 'Một chương trình khác'
+        with self.assertRaisesRegex(ValueError, 'identity_conflict'):
+            self.store.upsert(substituted, NOW)
+        self.assertEqual(self.store.refresh_targets('ticketbox', NOW)[0]['source_url'], original.source_url)
+
+        self.assertEqual(self.store.upsert(updated, NOW), item_id)
+        self.assertEqual(self.store.upsert(updated, NOW), item_id)
+        observed = self.store.db.execute('SELECT id,source_url,entry_key FROM discovery_observations').fetchall()
+        self.assertEqual(observed, [{'id': observation_id, 'source_url': updated.source_url,
+                                     'entry_key': updated.entry_key}])
+        self.assertEqual(self.feed(NOW + timedelta(minutes=1))[0]['sources'][0]['url'], updated.source_url)
+
+    def test_coverage_snapshot_counts_eligible_items_by_section_and_platform(self):
+        now = self.store.db.execute('SELECT statement_timestamp() AS now').fetchone()['now']
+        weekly = candidate()
+        weekly.published_at = (now - timedelta(hours=1)).isoformat()
+        weekly.verified_at = now.isoformat()
+        weekly.occurrences = [Occurrence((now + timedelta(days=1)).isoformat(),
+                                         (now + timedelta(days=1, hours=2)).isoformat())]
+        item_id = self.store.upsert(weekly, now)
+        self.store.register('instagram', 'Instagram', True, 'instagram')
+        for source_url in ['https://www.instagram.com/p/test1', 'https://www.instagram.com/p/test2']:
+            supporting = copy.deepcopy(weekly)
+            supporting.source_slug = supporting.platform = 'instagram'
+            supporting.source_url = source_url
+            self.assertEqual(self.store.upsert(supporting, now), item_id)
+        planning = copy.deepcopy(weekly)
+        planning.title = 'Kịch thiếu nhi tháng sau'
+        planning.source_url = 'https://ticketbox.vn/event/planning'
+        planning.occurrences = [Occurrence((now + timedelta(days=12)).isoformat(),
+                                           (now + timedelta(days=12, hours=2)).isoformat())]
+        self.store.upsert(planning, now)
+
+        counts, checked_at = read_coverage(self.store.db)
+        self.assertGreaterEqual(checked_at, now)
+        self.assertEqual(counts['hanoi']['sections'], {'weekly': 1, 'planning': 1})
+        self.assertEqual(counts['hanoi']['items_by_supporting_platform'], {'instagram': 1, 'tiktok': 0})
+        self.assertEqual(counts['danang']['sections'], {'weekly': 0, 'planning': 0})
+
+    def test_coverage_only_connection_cannot_pass_collector_preflight(self):
+        db = self.store.db
+        self.assertIsNone(collector_write_blocker(db))
+        self.assertEqual(db.execute('SELECT count(*) AS count FROM discovery_ingestion_runs').fetchone()['count'], 0)
+        db.execute('SET default_transaction_read_only = on')
+        try:
+            coverage, _ = read_coverage(db)
+            self.assertEqual(set(coverage), {'hanoi', 'hcmc', 'danang'})
+            self.assertEqual(collector_write_blocker(db), 'read_only_connection')
+        finally:
+            db.execute('RESET default_transaction_read_only')
+
     def test_ticketbox_location_correction_preserves_observation_and_other_cards(self):
         legacy = candidate()
         legacy.source_url = 'https://ticketbox.vn/datnuocthienhungca-26630'
@@ -125,6 +188,30 @@ class Persistence(unittest.TestCase):
         self.store.upsert(c,NOW)
         self.store.register('ticketbox','Ticketbox',False)
         self.assertEqual(self.feed(),[])
+
+    def test_publisher_cancellation_preserves_identity_and_rejects_stale_replays(self):
+        c = candidate()
+        self.store.upsert(c, NOW)
+        later = NOW + timedelta(minutes=1)
+        for rejected in (
+            {'now': NOW - timedelta(seconds=1), 'kind': 'event', 'city': 'hanoi'},
+            {'now': later, 'kind': 'event', 'city': 'danang'},
+            {'now': later, 'kind': 'place', 'city': 'hanoi'},
+        ):
+            self.assertFalse(self.store.cancel(c.source_slug, c.source_url, confirmed=True, **rejected))
+        self.assertEqual(len(self.feed()), 1)
+        self.assertTrue(self.store.cancel(c.source_slug, c.source_url, later, confirmed=True, kind='event', city='hanoi'))
+        self.assertEqual(self.feed(later), [])
+        row = self.store.db.execute("""SELECT status,verified_at,facts->'publisher_confirmed_cancellation' AS confirmed
+            FROM discovery_observations""").fetchone()
+        self.assertEqual(row, {'status': 'cancelled', 'verified_at': later, 'confirmed': True})
+        self.assertFalse(self.store.cancel(c.source_slug, c.source_url, NOW))
+        with self.assertRaisesRegex(ValueError, 'stale_observation'):
+            self.store.upsert(c, later)
+        checked = later + timedelta(minutes=1)
+        c.verified_at = checked.isoformat()
+        self.store.upsert(c, checked)
+        self.assertEqual(len(self.feed(checked)), 1)
 
     def test_conflicting_source_dates_are_not_published(self):
         c=candidate();self.store.upsert(c,NOW)
@@ -188,6 +275,35 @@ class Persistence(unittest.TestCase):
         self.assertEqual(resolved, {'id': observation['id'], 'schedule_held_at': None})
         self.assertFalse(self.store.hold_schedule(rejected, held_at))
         self.assertEqual(self.feed(held_at + timedelta(minutes=1))[0]['id'], item_id)
+
+    def test_catalogue_hold_requires_the_legacy_event_identity_and_preserves_it(self):
+        original = candidate()
+        item_id = self.store.upsert(original, NOW)
+        old = self.store.db.execute('SELECT id FROM discovery_observations').fetchone()['id']
+        alternative = copy.deepcopy(original)
+        alternative.source_url = 'https://ticketbox.vn/catalogue'
+        alternative.entry_key = 'reviewed-event'
+        alternative.replaces_source_url = original.source_url
+        alternative.reasons = [CONFIRMED_SCHEDULE_CONFLICT]
+        checked = NOW + timedelta(minutes=1)
+        wrong_title = copy.deepcopy(alternative)
+        wrong_title.title = 'Sự kiện khác'
+        self.assertFalse(self.store.hold_schedule(wrong_title, checked))
+        self.assertEqual(self.feed(checked)[0]['id'], item_id)
+        self.assertTrue(self.store.hold_schedule(alternative, checked))
+        self.assertEqual(self.feed(checked), [])
+        observation = self.store.db.execute("""SELECT id,verified_at,status,schedule_held_at
+            FROM discovery_observations""").fetchone()
+        self.assertEqual(observation, {'id': old, 'verified_at': NOW, 'status': 'active',
+                                       'schedule_held_at': checked})
+        recovered = checked + timedelta(minutes=1)
+        alternative.verified_at = recovered.isoformat()
+        alternative.reasons = []
+        self.assertEqual(self.store.upsert(alternative, recovered), item_id)
+        self.assertEqual(self.feed(recovered)[0]['sources'][0]['url'], alternative.source_url)
+        self.assertEqual(self.store.db.execute(
+            'SELECT id,schedule_held_at FROM discovery_observations').fetchone(),
+            {'id': old, 'schedule_held_at': None})
 
     def test_reservations_persist_no_refund_and_monthly_cap(self):
         first=self.store.reserve('serpapi','search-a',1,2,10,{},NOW)
@@ -449,8 +565,11 @@ class Persistence(unittest.TestCase):
         failed=execute([], [{'stage':'detail','reason':'http_503'}])
         self.assertNotEqual(failed['status'],'complete')
         self.assertEqual(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
-        success=execute([fresh,sibling],[])
-        self.assertEqual(success['sources']['ticketbox']['accepted'],1)
+        incomplete = copy.deepcopy(fresh)
+        incomplete.reasons.append('unresolved_individual_sessions')
+        success = execute([incomplete, copy.deepcopy(incomplete), fresh, copy.deepcopy(fresh), sibling], [])
+        stats = success['sources']['ticketbox']
+        self.assertEqual((stats['accepted'], stats['rejected'], stats['failed']), (1, 1, 0))
         self.assertEqual(self.store.db.execute('SELECT count(*) AS n FROM discovery_observations').fetchone()['n'],1)
         self.assertGreater(self.store.db.execute('SELECT verified_at FROM discovery_observations').fetchone()['verified_at'],before)
 

@@ -6,7 +6,8 @@ from trending.announcements import social_sessions
 from trending.intent import queries
 from trending.model import city_from_address
 from trending.adapters import category
-from trending.discover import discover
+from trending.discover import discover, reviewed_tiktok_profiles
+from trending.http import FetchError
 from bs4 import BeautifulSoup
 
 NOW=datetime(2026,11,8,12,tzinfo=timezone.utc)
@@ -27,6 +28,20 @@ class Timely(unittest.TestCase):
             sessions,reason=social_sessions(f'Triển lãm 07/11/2026 {separator} 27/12/2026 09:00 - 17:00',NOW.isoformat())
             self.assertEqual(sessions,[])
             self.assertEqual(reason,'unresolved_individual_sessions')
+
+    def test_vietnamese_recap_with_a_holiday_date_is_not_a_session(self):
+        published = '2026-11-23T16:43:49+00:00'
+        recap = 'Cùng xem lại những khoảnh khắc của chương trình nghệ thuật.'
+        for date in ('24/11', '24/11/2026'):
+            with self.subTest(date=date):
+                caption = f'Chào mừng Ngày Văn hóa Việt Nam ({date}).\n\n{recap}'
+                self.assertEqual(social_sessions(caption, published), ([], 'past_recap'))
+        sessions, reason = social_sessions(
+            'Xem lại thông tin đăng ký workshop 27/11/2026 19:30 - 21:00', published,
+        )
+        self.assertIsNone(reason)
+        self.assertEqual([session.starts_at for session in sessions], ['2026-11-27T19:30:00+07:00'])
+
     def test_intents_are_not_location_evidence(self):
         q=queries('hcmc',{'music':5})
         self.assertNotEqual(q[0]['category'],'music');self.assertTrue(q[0]['variants'])
@@ -42,6 +57,82 @@ class Timely(unittest.TestCase):
         self.assertEqual(len(result['posts']),1)
         self.assertEqual(result['posts'][0]['city_hint'],'hanoi')
         self.assertTrue(result['posts'][0]['requires_provider_validation'])
+
+    def test_discovery_uses_original_tiktok_dates_with_bounded_reads(self):
+        publisher = 'https://publisher.example/'
+        base = 'https://www.tiktok.com/@venue/video/'
+        fresh, expired, unavailable, deferred = [base + str(n) for n in range(101, 105)]
+        instagram = 'https://www.instagram.com/p/example'
+        source = {'id': 'publisher', 'publisher_id': 'publisher', 'cities': ['hanoi'],
+                  'categories': [], 'url': publisher}
+        entries = [
+            {'url': url, 'datePublished': f'2026-11-08T{hour:02d}:00:00Z'}
+            for hour, url in zip(range(11, 7, -1), (fresh, expired, unavailable, deferred))
+        ]
+        markup = ('<script type="application/json">' + json.dumps(entries) + '</script>'
+                  f'<a href="{fresh}">Duplicate original</a><a href="{instagram}">Instagram</a>')
+
+        def original(url, date):
+            entry = {'@type': 'VideoObject', 'url': url, 'uploadDate': date}
+            return (f'<link rel="canonical" href="{url}">'
+                    '<script type="application/ld+json">' + json.dumps(entry) + '</script>')
+
+        pages = {publisher: markup, fresh: original(fresh, '2026-11-07T10:00:00+07:00'),
+                 expired: original(expired, '2026-10-28T12:00:00Z')}
+        requested = []
+
+        class Client:
+            def get(self, url, hosts):
+                requested.append((url, hosts))
+                if url == unavailable:
+                    raise FetchError('http_429')
+                return BeautifulSoup(pages[url], 'html.parser')
+
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps([source])
+            report = discover('hanoi', Client(), NOW)
+
+        self.assertEqual(requested, [(publisher, {'publisher.example'})] + [
+            (url, {'www.tiktok.com'}) for url in (fresh, expired, unavailable)
+        ])
+        by_url = {row['url']: row for row in report['posts']}
+        self.assertEqual(set(by_url), {fresh, unavailable, deferred, instagram})
+        self.assertEqual(by_url[fresh]['published_at'], '2026-11-07T03:00:00+00:00')
+        self.assertEqual(by_url[fresh]['publication_evidence'], 'verified_original_tiktok_post')
+        self.assertTrue(by_url[fresh]['requires_provider_validation'])
+        self.assertIsNone(by_url[unavailable]['published_at'])
+        self.assertIsNone(by_url[deferred]['published_at'])
+        self.assertEqual(by_url[deferred]['publisher_reported_publication'], '2026-11-08T08:00:00+00:00')
+        self.assertEqual([row['status'] for row in report['public_tiktok_reviews']],
+                         ['fresh_needs_venue_review', 'outside_fresh_window', 'public_post_unavailable'])
+        self.assertEqual((report['provider_requests'], report['published']), (0, 0))
+
+    def test_profile_only_source_does_not_take_a_website_scan_slot(self):
+        venue = 'https://venue.example/'
+        site = 'https://publisher.example/'
+        profile = 'https://www.tiktok.com/@venue'
+        sources = [
+            {'id': 'a-venue', 'publisher_id': 'venue', 'url': venue, 'review_evidence': venue,
+             'cities': ['hanoi'], 'categories': [], 'profiles_only': True,
+             'accounts': [{'platform': 'tiktok', 'url': profile}]},
+            {'id': 'b-publisher', 'publisher_id': 'publisher', 'url': site,
+             'cities': ['hanoi'], 'categories': [], 'accounts': []},
+        ]
+        requested = []
+
+        class Client:
+            def get(self, url, hosts):
+                requested.append(url)
+                return BeautifulSoup(f'<a href="{profile}">TikTok</a>', 'html.parser')
+
+        client = Client()
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps(sources)
+            report = discover('hanoi', client, NOW, limit=1)
+            identities = list(reviewed_tiktok_profiles('hanoi', client))
+        self.assertEqual(requested, [site, venue])
+        self.assertEqual([page['source'] for page in report['pages']], ['b-publisher'])
+        self.assertEqual([identity['url'] for identity in identities], [profile])
 
     def test_website_detail_budget_skips_calendar_files_and_locale_switches(self):
         life = 'https://lifeofdanang.com'
@@ -71,3 +162,62 @@ class Timely(unittest.TestCase):
                                      sources[1]['url'], nightlife + '/en/nightlife-show-115-15.html'])
         post, = result['posts']
         self.assertEqual(post['url'], 'https://www.instagram.com/reel/example')
+
+    def test_social_discovery_reuses_publisher_tls_fallback_in_browser_mode(self):
+        root = 'https://hanoigrapevine.com/vi/'
+        detail = 'https://hanoigrapevine.com/vi/2026/11/di-xem-trien-lam'
+        source = {'id': 'hanoigrapevine', 'publisher_id': 'grapevine',
+                  'cities': ['hanoi'], 'categories': [], 'url': root}
+        pages = {
+            root: '<a href="' + detail + '">Event</a>',
+            detail: '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/reel/example/"></blockquote>',
+        }
+        requested = []
+
+        class Client:
+            browser_enabled = True
+
+            def get(self, url, hosts, render=False):
+                requested.append((url, render))
+                if not render:
+                    raise FetchError('tls_handshake_failed')
+                return BeautifulSoup(pages[url], 'html.parser')
+
+        with patch('trending.discover.DIRECTORY') as directory:
+            directory.read_text.return_value = json.dumps([source])
+            result = discover('hanoi', Client(), NOW)
+        self.assertEqual(requested, [(root, False), (root, True), (detail, False), (detail, True)])
+        self.assertEqual([p['status'] for p in result['pages']], ['complete', 'complete'])
+        post, = result['posts']
+        self.assertEqual(post['url'], 'https://www.instagram.com/reel/example')
+        self.assertIsNone(post['published_at'])
+        self.assertEqual(result['provider_requests'], 0)
+class DottedSocialDateTests(unittest.TestCase):
+    def test_dotted_without_full_year_cannot_fall_back_to_weekday(self):
+        published = '2026-11-23T03:00:04+00:00'
+        for date in ('29.11', '6.12', '06.12.26'):
+            with self.subTest(date=date):
+                self.assertEqual(
+                    social_sessions(f'Chủ Nhật, {date} | 10:00 – 11:30', published),
+                    ([], 'missing_event_year'),
+                )
+
+    def test_full_dotted_date_preserves_the_original_session_day(self):
+        sessions, reason = social_sessions(
+            'Chủ Nhật, 𝟎𝟔.𝟏𝟐.𝟐𝟎𝟐𝟔 | 14:00 – 15:30', '2026-11-23T03:00:04+00:00')
+        self.assertIsNone(reason)
+        self.assertEqual([(slot.starts_at, slot.ends_at) for slot in sessions], [
+            ('2026-12-06T14:00:00+07:00', '2026-12-06T15:30:00+07:00'),
+        ])
+
+    def test_foundation_date_is_not_an_anniversary_session(self):
+        published = '2026-11-22T14:17:10+00:00'
+        slots, reason = social_sessions(
+            '1900 x Hennessy Night | Friday 27.11.2026\nĐược thành lập vào ngày 29/11/2019.',
+            published,
+        )
+        self.assertIsNone(reason)
+        self.assertEqual([s.starts_at for s in slots], ['2026-11-27T00:00:00+07:00'])
+        self.assertEqual(social_sessions('Show 29/11/2019', published), ([], 'past_recap'))
+        self.assertEqual(
+            social_sessions('Show 29/11/2019 và 27/11/2026', published), ([], 'ambiguous_schedule'))

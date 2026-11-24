@@ -6,11 +6,69 @@ import argparse
 from datetime import datetime, timedelta, timezone
 import json
 import re
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from bs4 import BeautifulSoup
-from .http import PublicClient, FetchError
+from .http import PublicClient, FetchError, fetch_failure_reason
 from .model import canonical, parse_time
 from .providers import post_platform
+
+TIKTOK_MAIN_HOSTS = {'tiktok.com', 'www.tiktok.com'}
+TIKTOK_SHORT_HOSTS = {'vm.tiktok.com', 'vt.tiktok.com'}
+MAX_SHARE_LINKS = 3
+FLIGHT_ROW_ID = re.compile(rb'[0-9a-f]+:')
+FLIGHT_ROW_LENGTH = re.compile(rb'[0-9a-f]{1,16},')
+FLIGHT_LENGTH_TAGS = b'TAOoUSsLlGgMmV'
+
+
+def tiktok_share_url(url):
+    if not isinstance(url, str):
+        return None
+    try:
+        parts = urlsplit(canonical(url))
+    except ValueError:
+        return None
+    if any(value.lower() == 'tiktokshop' for value in parse_qs(parts.query).get('page', [])):
+        return None
+    if parts.hostname in TIKTOK_SHORT_HOSTS:
+        path = r'/[A-Za-z0-9_-]{1,64}'
+    elif parts.hostname in TIKTOK_MAIN_HOSTS:
+        path = r'/t/[A-Za-z0-9_-]{1,64}'
+    else:
+        return None
+    if re.fullmatch(path, parts.path):
+        return f'https://{parts.hostname}{parts.path}/'
+    return None
+
+
+class TikTokShareResolver:
+    def __init__(self, client):
+        self.client = client
+        self.results = {}
+
+    def resolve(self, url):
+        share = tiktok_share_url(url)
+        if not share:
+            return None
+        if share in self.results:
+            return self.results[share].get('post_url')
+        if len(self.results) >= MAX_SHARE_LINKS:
+            return None
+        try:
+            target = share
+            for _ in range(2):
+                target = self.client.get(target, TIKTOK_MAIN_HOSTS | TIKTOK_SHORT_HOSTS, redirect_only=True)
+                post = original_post_url(target)
+                if post and post_platform(post) == 'tiktok':
+                    self.results[share] = {'post_url': post, 'status': 'original_post_found'}
+                    return post
+                target = tiktok_share_url(target)
+                if not target or target == share:
+                    break
+            status = 'no_original_post'
+        except (FetchError, ValueError) as error:
+            status = fetch_failure_reason(error)
+        self.results[share] = {'status': status}
+        return None
 
 
 def original_post_url(url):
@@ -45,7 +103,14 @@ def remember_lead(leads, row):
     if not previous:
         leads[identity] = row
         return
-    chosen = row if row['published_at'] and not previous['published_at'] else previous
+    published = parse_time(row['published_at'])
+    previous_published = parse_time(previous['published_at'])
+    corroborated_profile = (row.get('publication_evidence') == 'verified_profile_embed'
+                            and previous.get('publication_evidence') != 'verified_profile_embed'
+                            and published == previous_published)
+    # When the dates agree, retain the source whose post attribution was
+    # checked. The original website link remains in the page discovery report.
+    chosen = row if published and (not previous_published or corroborated_profile) else previous
     if row['platform'] == 'instagram':
         reel = next((r['url'] for r in (previous, row) if '/reel/' in urlsplit(r['url']).path), None)
         if reel:
@@ -53,13 +118,54 @@ def remember_lead(leads, row):
     leads[identity] = chosen
 
 
-def extract_posts(html, source_url, now, limit=30):
+def inline_records(soup):
+    flight_prefix = 'self.__next_f.push('
+    chunks = []
+    for script in soup.find_all('script'):
+        content = (script.string or '').strip().removesuffix(';')
+        streamed = content.startswith(flight_prefix) and content.endswith(')')
+        try:
+            record = json.loads(content[len(flight_prefix):-1] if streamed else content)
+        except (ValueError, RecursionError):
+            continue
+        if not streamed:
+            yield record
+        elif (isinstance(record, list) and len(record) == 2
+              and record[0] == 1 and isinstance(record[1], str)):
+            chunks.append(record[1])
+
+    # These literal chunks can split a row. Text frames use a UTF-8 byte
+    # length instead of a newline and can contain text that resembles a row.
+    stream = ''.join(chunks).encode('utf-8', errors='surrogatepass')
+    offset = 0
+    while offset < len(stream):
+        header = FLIGHT_ROW_ID.match(stream, offset)
+        if header and header.end() < len(stream) and stream[header.end()] in FLIGHT_LENGTH_TAGS:
+            length = FLIGHT_ROW_LENGTH.match(stream, header.end() + 1)
+            if not length:
+                return
+            offset = length.end() + int(length.group()[:-1], 16)
+            if offset > len(stream):
+                return
+            continue
+        newline = stream.find(b'\n', offset)
+        end = len(stream) if newline == -1 else newline
+        payload = stream[header.end():end] if header else b''
+        offset = end + 1
+        if payload.startswith((b'{', b'[')):
+            try:
+                yield json.loads(payload)
+            except (ValueError, RecursionError):
+                continue
+
+
+def extract_posts(html, source_url, now, limit=30, resolve_share=None):
     source_url = canonical(source_url)
     found = {}
     excluded = set()
 
     def add(url, text='', timestamp=None):
-        url = original_post_url(url)
+        url = original_post_url(url) or (resolve_share(url) if resolve_share else None)
         if not url:
             return
         identity = lead_identity(url)
@@ -89,11 +195,8 @@ def extract_posts(html, source_url, now, limit=30):
                 walk(value, depth+1)
 
     soup = BeautifulSoup(html, 'html.parser')
-    for script in soup.find_all('script'):
-        try:
-            walk(json.loads(script.string or ''))
-        except (ValueError, RecursionError):
-            continue
+    for record in inline_records(soup):
+        walk(record)
     for anchor in soup.select('a[href]'):
         add(anchor['href'], anchor.get_text(' ', strip=True))
     for block in soup.select('blockquote.instagram-media[data-instgrm-permalink]'):
@@ -121,14 +224,16 @@ def main():
         parser.error('maximum six pages per run')
     now = datetime.now(timezone.utc)
     client = PublicClient()
+    resolver = TikTokShareResolver(client)
     report = {'provider_requests': 0, 'published': 0, 'pages': []}
     for url in args.url:
         try:
             soup = client.get(url, {urlsplit(canonical(url)).hostname})
             report['pages'].append({'url': url, 'status': 'complete',
-                                   'posts': extract_posts(str(soup), url, now)})
+                                   'posts': extract_posts(str(soup), url, now, resolve_share=resolver.resolve)})
         except (FetchError, ValueError) as exc:
             report['pages'].append({'status': 'failed', 'reason': str(exc)})
+    report['tiktok_share_links'] = resolver.results
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 2 if any(p['status'] == 'failed' for p in report['pages']) else 0
 
