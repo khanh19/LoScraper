@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 from bs4 import BeautifulSoup
 
-from trending.discover import review_instagram_leads
+from trending.discover import discover, review_instagram_leads
 from trending.http import FetchError
 from trending.instagram_public import instagram_profile, review, review_profile
 
@@ -48,6 +48,76 @@ def media(code='Abc123', hour=2):
 
 
 class InstagramPublicTests(unittest.TestCase):
+    def test_publisher_lead_keeps_original_engagement_and_day_without_guessing_time(self):
+        client = Mock()
+        client.get.return_value = post_page(
+            '1,234 likes, 0 comments - sample.account on November 21, 2026: Workshop.',
+        )
+        source = {'id': 'fixture', 'publisher_id': 'fixture', 'cities': ['hanoi'],
+                  'categories': ['culture'], 'url': 'https://publisher.example/'}
+        timestamp = '2026-11-23T00:00:00+07:00'
+        linked_post = {'url': POST, 'platform': 'instagram', 'text': 'Workshop',
+                       'published_at': timestamp, 'discovered_on': source['url'],
+                       'requires_provider_validation': True}
+        directory = Mock()
+        directory.read_text.return_value = json.dumps([source])
+        with (patch('trending.discover.DIRECTORY', directory),
+              patch('trending.discover.extract_posts', return_value=[linked_post]),
+              patch('trending.discover.reviewed_profiles', return_value=iter([]))):
+            report = discover('hanoi', client, NOW)
+            review_instagram_leads(report, client, NOW)
+        post = report['posts'][0]
+        self.assertIsNone(post['published_at'])
+        self.assertEqual(post['publisher_reported_publication'], timestamp)
+        self.assertEqual(post['publication_day'], '2026-11-21')
+        self.assertEqual(post['publication_evidence'], 'verified_original_post_preview')
+        self.assertEqual(post['original_post_status'], 'recent_day_needs_venue_review')
+        self.assertEqual(post['engagement_snapshot'], {
+            'source': 'verified_original_post_preview', 'account': 'sample.account',
+            'evaluated_at': NOW.isoformat(), 'likes': 1234, 'comments': 0,
+        })
+        self.assertEqual(post['discovered_on'], source['url'])
+        self.assertTrue(post['requires_provider_validation'])
+        self.assertEqual(report['published'], 0)
+
+    def test_outside_window_lead_has_no_recent_preview_evidence(self):
+        client = Mock()
+        client.get.return_value = post_page(
+            '100 likes, 2 comments - sample.account on November 13, 2026: Workshop.',
+        )
+        report = {'city': 'hanoi', 'posts': [{'url': POST, 'platform': 'instagram', 'published_at': None}]}
+        with patch('trending.discover.reviewed_profiles', return_value=iter([])):
+            review_instagram_leads(report, client, NOW)
+        post = report['posts'][0]
+        self.assertEqual(post['original_post_status'], 'outside_review_window')
+        self.assertNotIn('engagement_snapshot', post)
+        self.assertNotIn('publication_day', post)
+
+    def test_dedup_keeps_original_engagement_and_requires_matching_account_for_exact_time(self):
+        profile = {'url': PROFILE, 'embed_url': PROFILE + 'embed/', 'publisher_id': 'sample',
+                   'posts': [{'url': POST, 'status': 'fresh_needs_venue_review',
+                              'published_at': '2026-11-22T18:00:00+00:00', 'caption': 'Workshop',
+                              'account': 'sample.account', 'likes': 48}]}
+        for owner, attribution in (('sample.account', 'confirmed_profile_account'),
+                                   ('different', 'different_original_account')):
+            with self.subTest(owner=owner):
+                client = Mock()
+                client.get.return_value = post_page(
+                    f'50 likes, 1 comment - {owner} on November 22, 2026: Workshop.',
+                )
+                report = {'city': 'hanoi', 'posts': [{'url': POST, 'platform': 'instagram', 'published_at': None}]}
+                with (patch('trending.discover.reviewed_profiles', return_value=iter([profile])),
+                      patch('trending.instagram_public.review_profile', return_value=profile)):
+                    review_instagram_leads(report, client, NOW)
+                self.assertEqual(len(report['posts']), 1)
+                post = report['posts'][0]
+                self.assertEqual(post['publication_day'], '2026-11-22')
+                self.assertEqual(post['engagement_snapshot']['likes'], 50)
+                self.assertEqual(post['engagement_snapshot']['account'], owner)
+                self.assertEqual(report['public_instagram_attribution_reviews'][0]['attribution'], attribution)
+                expected_time = profile['posts'][0]['published_at'] if owner == 'sample.account' else None
+                self.assertEqual(post['published_at'], expected_time)
+
     def test_collaboration_needs_same_original_account_and_a_consistent_day(self):
         shared = [{
             'url': POST + str(i), 'status': 'coauthored_or_unknown_attribution',

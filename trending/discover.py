@@ -15,6 +15,7 @@ from .intent import queries
 
 DIRECTORY=Path(__file__).with_name('source_directory.json')
 MAX_INSTAGRAM_PROFILES_PER_CITY = 4
+MAX_ORIGINAL_INSTAGRAM_LEAD_READS = 3
 MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS = 3
 MAX_PUBLIC_TIKTOK_LEAD_READS = 3
 
@@ -146,6 +147,12 @@ def discover(city,client,now,counts=None,limit=6):
         except (FetchError, ValueError) as error:
             pages.append({'source': slug, 'url': seed['url'], 'status': 'failed', 'reason': fetch_failure_reason(error)})
     leads, tiktok_reviews = review_tiktok_leads(posts.values(), client, now)
+    # A website may report when it embedded a post. Use the original Instagram
+    # evidence to verify that post's own publication time.
+    for lead in leads:
+        if lead['platform'] == 'instagram' and lead['published_at']:
+            lead['publisher_reported_publication'] = lead['published_at']
+            lead['published_at'] = None
     return {'city':city,'pages':pages,'posts':leads[:30],
             'tiktok_share_links':resolver.results,
             'public_tiktok_reviews':tiktok_reviews,
@@ -156,7 +163,9 @@ def review_instagram_leads(report, client, now):
     from .instagram_public import instagram_profile, original_attribution, review, review_profile
 
     urls = (post['url'] for post in report['posts'] if post['platform'] == 'instagram')
-    original_reviews = report['public_instagram_reviews'] = [review(url, client, now) for url in islice(urls, 3)]
+    original_reviews = report['public_instagram_reviews'] = [
+        review(url, client, now) for url in islice(urls, MAX_ORIGINAL_INSTAGRAM_LEAD_READS)
+    ]
     originals = {lead_identity(post['url']): post for post in original_reviews}
     profiles = reviewed_profiles(report['city'], client, 'instagram', instagram_profile)
     profile_reports = report['public_instagram_profile_reviews'] = [
@@ -166,14 +175,24 @@ def review_instagram_leads(report, client, now):
     remaining = MAX_ADDITIONAL_INSTAGRAM_ATTRIBUTION_READS
     leads = {}
     for lead in report['posts']:
+        original = originals.get(lead_identity(lead['url']))
+        if original:
+            lead = {**lead, 'original_post_status': original['status']}
+            if original['status'] == 'recent_day_needs_venue_review':
+                lead.update(
+                    publication_day=original['publication_day'],
+                    publication_evidence='verified_original_post_preview',
+                    engagement_snapshot=instagram_engagement(original, 'verified_original_post_preview', now),
+                )
         remember_lead(leads, lead)
     for profile in profile_reports:
         for post in profile['posts']:
             extra_evidence = {}
             metrics_source = 'verified_profile_embed'
             metrics = post
+            identity = lead_identity(post['url'])
+            original = originals.get(identity)
             if post['status'] == 'coauthored_or_unknown_attribution':
-                identity = lead_identity(post['url'])
                 if identity not in originals and remaining:
                     originals[identity] = review(post['url'], client, now)
                     remaining -= 1
@@ -188,12 +207,20 @@ def review_instagram_leads(report, client, now):
                 metrics = original
             elif post['status'] != 'fresh_needs_venue_review':
                 continue
-            counts = {key: metrics[key] for key in ('likes', 'comments') if key in metrics}
-            if counts:
-                extra_evidence['engagement_snapshot'] = {
-                    **counts, 'source': metrics_source, 'account': metrics['account'],
-                    'evaluated_at': now.isoformat(),
-                }
+            elif original and original['status'] == 'recent_day_needs_venue_review':
+                attribution = original_attribution({**post, 'profile_account': post['account']}, original)
+                attribution_reviews.append({**original, 'url': post['url'],
+                                            'profile_account': post['account'], 'attribution': attribution})
+                if attribution != 'confirmed_profile_account':
+                    continue
+                metrics_source = 'verified_original_post_preview'
+                metrics = original
+            if original:
+                extra_evidence['original_post_status'] = original['status']
+                if original['status'] == 'recent_day_needs_venue_review':
+                    extra_evidence['publication_day'] = original['publication_day']
+            if snapshot := instagram_engagement(metrics, metrics_source, now):
+                extra_evidence['engagement_snapshot'] = snapshot
             remember_lead(leads, {
                 'url': post['url'], 'platform': 'instagram', 'city_hint': report['city'],
                 'published_at': post['published_at'], 'text': post['caption'],
@@ -201,7 +228,16 @@ def review_instagram_leads(report, client, now):
                 'publication_evidence': 'verified_profile_embed', 'requires_provider_validation': True,
                 **extra_evidence,
             })
-    report['posts'] = sorted(leads.values(), key=lambda row: (row['published_at'] or '', row['url']), reverse=True)[:30]
+    report['posts'] = sorted(leads.values(), key=lambda row: (
+        row['published_at'] or row.get('publication_day', ''), row['url'],
+    ), reverse=True)[:30]
+
+
+def instagram_engagement(post, source, now):
+    counts = {key: post[key] for key in ('likes', 'comments') if key in post}
+    if not counts:
+        return None
+    return {**counts, 'source': source, 'account': post['account'], 'evaluated_at': now.isoformat()}
 
 
 def main():

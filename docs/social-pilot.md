@@ -559,6 +559,31 @@ remain unresolved. The date has day precision and is kept separate from an
 exact timestamp or event date. Review considers today and the previous six
 Vietnam calendar days. These commands write no feed records and use no credits.
 
+#### Keep original Instagram evidence with the lead
+
+Discovery keeps a publisher-reported timestamp as a hint. A matching original
+post preview adds its calendar day, account and available likes and comments to
+the lead. When the original preview and a verified profile embed agree on the
+account and their dates are within one calendar day, the merged lead keeps the
+embed's exact timestamp and the original preview's engagement snapshot. This
+tolerance allows for the preview's unspecified time zone. An observed mismatch
+leaves the original as a day-only review lead. Counts are a snapshot and do not
+establish popularity on their own.
+
+On 24 November Vietnam time, the free scan visited 11 Hà Nội, 14 TP.HCM and 15
+Đà Nẵng publisher pages. Five publisher-linked Instagram previews and four
+additional profile-linked previews retained their original day and counts in
+the consolidated results. No original TikTok leads surfaced in this scan.
+
+| City | Review example | Decision |
+| --- | --- | --- |
+| Hà Nội | [Yoga Lab's post](https://www.instagram.com/p/DgEXUf7hYR5/) showed 6 likes and 0 comments. | The [organizer's events page](https://www.yogalabhanoi.com/vi/events) confirms the workshop for 29 November, 10:00–11:30. Corroborated for review. |
+| TP.HCM | [Saigon Outcast's reopening post](https://www.instagram.com/p/DgG5NUnAVuG/) showed 9 likes and 0 comments. | The post gives 188/1 Nguyễn Văn Hưởng. [Earlier venue material](https://www.saigonoutcast.com/) lists 182 Nguyễn Văn Hưởng. Hold until the reopening address is independently confirmed. |
+| Đà Nẵng | [REALITY's Buildathon post](https://www.instagram.com/p/DgEl9LqI6AH/) was recovered from its linked public profile. | The [organizer's listing](https://app.realitydn.com/events/a1c345c5-5552-411a-a8b5-015f872adc4e) confirms 26 November, 11:00–13:00, at 86 Mai Thúc Lân. Corroborated for review. |
+
+No metered provider requests or feed writes were made. The separate publication
+review remains in place.
+
 On 23 November Vietnam time, the HCMC publisher scan discovered two original
 posts. Saigon Outcast's 18 November reel showed 23 likes and one comment, but
 its line-dancing event ended on 22 November. The 16 November post fell outside
