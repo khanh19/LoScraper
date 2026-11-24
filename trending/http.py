@@ -192,7 +192,7 @@ class PublicClient:
         try:
             page.goto(bootstrap, wait_until='domcontentloaded', timeout=10000)
             deadline = time.monotonic() + 12
-            selector = f'a[href*="/@{handle}/video/"]'
+            selector = f'a[href*="/@{handle}/video/"], a[href*="/@{handle}/photo/"]'
             while time.monotonic() < deadline:
                 for frame in page.frames:
                     if urlsplit(frame.url).hostname == host and frame.locator(selector).count():

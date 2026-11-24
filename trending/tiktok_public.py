@@ -40,7 +40,7 @@ def player_matches(url, video_id):
     return player.hostname == HOST and player.path == '/player/v1/' + video_id
 
 
-def page_post_time(page, profile, kind, post_id):
+def page_post_data(page, profile, kind, post_id):
     # TikTok's public HTML can omit its canonical tag and JSON-LD while still
     # declaring the original post, author and creation time in page data.
     script = page.select_one('script#__UNIVERSAL_DATA_FOR_REHYDRATION__[type="application/json"]')
@@ -58,24 +58,24 @@ def page_post_time(page, profile, kind, post_id):
             return None
         stamp = str(item['createTime'])
         if stamp.isascii() and stamp.isdecimal() and len(stamp) <= 11:
-            return datetime.fromtimestamp(int(stamp), timezone.utc)
+            return datetime.fromtimestamp(int(stamp), timezone.utc), item
     except (KeyError, TypeError, ValueError, OverflowError, OSError, RecursionError):
         return None
     return None
 
 
-def publication_time(page, url):
+def post_evidence(page, url):
     canonical_link = page.select_one('link[rel="canonical"][href]')
     identities = [identity for identity in (
         meta(page, 'og:url'), canonical_link['href'] if canonical_link else '',
     ) if identity]
     if any(original_post_url(identity) != url for identity in identities):
-        return None
+        return None, {}
 
     profile, kind, post_id = url.rsplit('/', 2)
-    page_date = page_post_time(page, profile, kind, post_id)
+    page_date, item = page_post_data(page, profile, kind, post_id) or (None, {})
     if not identities:
-        return page_date
+        return page_date, item
     dates = {page_date} if page_date is not None else set()
     entry_type, fields = ('VideoObject', ('uploadDate', 'datePublished')) if kind == 'video' else (
         'SocialMediaPosting', ('datePublished',),
@@ -101,18 +101,36 @@ def publication_time(page, url):
                 continue
             if published.tzinfo is not None:
                 dates.add(published.astimezone(timezone.utc))
-    return next(iter(dates)) if len(dates) == 1 else None
+    return (next(iter(dates)), item) if len(dates) == 1 else (None, {})
+
+
+def publication_time(page, url):
+    return post_evidence(page, url)[0]
 
 
 def review_post(url, client, now):
     try:
-        published = publication_time(client.get(url, {HOST}), url)
+        published, item = post_evidence(client.get(url, {HOST}), url)
     except (FetchError, ValueError) as error:
         return {'url': url, 'status': 'public_post_unavailable', 'reason': fetch_failure_reason(error)}
     status = ('publication_time_unverified' if published is None else
               'fresh_needs_venue_review' if now - timedelta(days=7) <= published <= now else
               'outside_fresh_window')
-    return {'url': url, 'status': status, 'published_at': published.isoformat() if published else None}
+    report = {'url': url, 'status': status, 'published_at': published.isoformat() if published else None}
+    stats = item.get('stats')
+    if status == 'fresh_needs_venue_review' and isinstance(stats, dict):
+        counts = {}
+        for key, name in (('playCount', 'views'), ('diggCount', 'likes'),
+                          ('commentCount', 'comments'), ('shareCount', 'shares')):
+            count = stats.get(key)
+            if type(count) is int and count >= 0:
+                counts[name] = count
+        if counts:
+            report['engagement_snapshot'] = {
+                **counts, 'source': 'verified_original_tiktok_post',
+                'account': item['author']['uniqueId'], 'evaluated_at': now.isoformat(),
+            }
+    return report
 
 
 def direct_post_review(url, client, now):
@@ -155,24 +173,30 @@ def owned_post_urls(pages, profile_url, now):
 def review_profile(profile, client, now, browser=False):
     url = profile['url']
     report = {**profile, 'posts': []}
-    stage = 'profile_oembed'
+    html = ''
     try:
         endpoint = f'https://{HOST}/oembed?' + urlencode({'url': url})
         embed = client.get(endpoint, {HOST}, json_response=True)
-        author = embed.get('author_url') if isinstance(embed, dict) else None
-        if canonical_tiktok_profile(author) != url:
+        if not isinstance(embed, dict) or canonical_tiktok_profile(embed.get('author_url')) != url:
             return {**report, 'status': 'profile_identity_unverified'}
-        html = embed.get('html')
-        if not isinstance(html, str):
+        if not isinstance(embed.get('html'), str):
             return {**report, 'status': 'profile_embed_unavailable'}
-        # The supported embed often returns just the profile link. Never run embed scripts.
-        stage = 'profile_document'
-        profile_page = client.get(url, {HOST})
+        html = embed['html']
     except (FetchError, ValueError) as error:
-        return {**report, 'status': 'public_profile_unavailable', 'stage': stage,
-                'reason': fetch_failure_reason(error)}
+        reason = fetch_failure_reason(error)
+        if reason != 'http_400':
+            return {**report, 'status': 'public_profile_unavailable', 'stage': 'profile_oembed',
+                    'reason': reason}
+        # The organizer's website confirmed this account. An oEmbed format
+        # rejection can still leave the ordinary public profile available.
+        report['profile_oembed'] = reason
 
     markup = BeautifulSoup(html, 'html.parser')
+    try:
+        profile_page = client.get(url, {HOST})
+    except (FetchError, ValueError) as error:
+        return {**report, 'status': 'public_profile_unavailable', 'stage': 'profile_document',
+                'reason': fetch_failure_reason(error)}
     post_urls = owned_post_urls([markup, profile_page], url, now)
     if not post_urls and browser:
         try:

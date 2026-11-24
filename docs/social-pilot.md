@@ -390,10 +390,18 @@ profiles linked by 1900 Le Théâtre, Visit HCMC, and DANAGO. [Direct HTTP check
 If the creator page opens with no original links, the browser audit can also
 render TikTok's public creator widget. The oEmbed author, cited profile, and
 creator handle must match. The widget runs in a fresh page that allows only
-its HTTPS frame and scripts. It blocks media requests and extracts only
-same-account video permalinks. Each permalink still needs its own publication
+its HTTPS frame and scripts. It blocks media requests and accepts same-account
+video or photo permalinks. Each permalink still needs its own publication
 timestamp. The report records the widget result as `creator_embed`.
 [TikTok creator widget](https://developers.tiktok.com/docs/en/embed-creator-profiles/)
+
+An oEmbed HTTP 400 is recorded separately. For an account linked from the
+reviewed organizer website, the audit can still check the account's public
+profile for original post links. Access, throttling, and TLS errors stop that
+audit. Fresh original posts can also carry a timestamped snapshot of the
+visible counts in their own public page data. The post ID, media type and
+author must match. A single snapshot does not establish an engagement trend
+or verify the event and venue.
 
 On 23 November, the local HTTPS diagnostic identified the certificate
 presented for TikTok as Virginia Tech's DNS-block certificate. The curl and

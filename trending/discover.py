@@ -88,6 +88,8 @@ def review_tiktok_leads(posts, client, now):
             if review['status'] == 'fresh_needs_venue_review':
                 lead['published_at'] = review['published_at']
                 lead['publication_evidence'] = 'verified_original_tiktok_post'
+                if 'engagement_snapshot' in review:
+                    lead['engagement_snapshot'] = review['engagement_snapshot']
         leads.append(lead)
     return leads, reviews
 

@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import unittest
 from unittest.mock import Mock, patch
 
 from bs4 import BeautifulSoup
 
+from trending.discover import review_tiktok_leads
 from trending.http import FetchError
 from trending.tiktok_public import audit, direct_post_review, post_permalink, publication_time, review_profile
 
@@ -55,6 +56,26 @@ class TikTokPublicAuditTests(unittest.TestCase):
         self.assertEqual(result, {'url': POST, 'status': 'fresh_needs_venue_review',
                                   'published_at': '2026-11-22T12:00:00+00:00'})
         client.get.assert_called_once_with(POST, {'www.tiktok.com'})
+
+    def test_matching_fresh_original_keeps_engagement_on_the_lead(self):
+        published = NOW - timedelta(hours=8)
+        item = {'id': '123', 'author': {'uniqueId': 'organizer'}, 'video': {'id': '123'},
+                'createTime': int(published.timestamp()),
+                'stats': {'playCount': 1102, 'diggCount': 31, 'commentCount': 0, 'shareCount': True}}
+        post = {'platform': 'tiktok', 'url': POST, 'published_at': None}
+        client = Mock()
+        client.get.return_value = detail_page(item)
+        leads, reviews = review_tiktok_leads([post], client, NOW)
+        self.assertEqual(leads[0]['published_at'], published.isoformat())
+        self.assertEqual(leads[0]['engagement_snapshot'], {
+            'source': 'verified_original_tiktok_post', 'account': 'organizer',
+            'evaluated_at': NOW.isoformat(), 'views': 1102, 'likes': 31, 'comments': 0,
+        })
+        self.assertEqual(leads[0]['engagement_snapshot'], reviews[0]['engagement_snapshot'])
+        client.get.return_value = detail_page({**item, 'id': '124'})
+        no_match, reviews = review_tiktok_leads([post], client, NOW)
+        self.assertEqual(reviews[0]['status'], 'publication_time_unverified')
+        self.assertNotIn('engagement_snapshot', no_match[0])
 
     def test_photo_date_requires_explicit_original_post_evidence(self):
         entry = {'@type': 'SocialMediaPosting', 'url': PHOTO, 'datePublished': '2026-11-22T12:00:00Z'}
@@ -164,6 +185,31 @@ class TikTokPublicAuditTests(unittest.TestCase):
         self.assertEqual(result['metered_provider_requests'], 0)
         self.assertEqual(result['published'], 0)
         self.assertEqual(len(result['profiles'][0]['city_hints']), 2)
+
+    def test_creator_oembed_400_does_not_discard_owned_public_photo_link(self):
+        client = Mock()
+        client.get.side_effect = [
+            FetchError('http_400'),
+            BeautifulSoup(f'<a href="{PHOTO}">Photo</a>', 'html.parser'),
+            post_page(PHOTO, {'@type': 'SocialMediaPosting', 'url': PHOTO, 'datePublished': '2026-11-22T08:00:00Z'}),
+        ]
+        result = review_profile({'url': PROFILE}, client, NOW, browser=True)
+        self.assertEqual(result['profile_oembed'], 'http_400')
+        self.assertEqual(result['posts'][0]['url'], PHOTO)
+        self.assertEqual(result['posts'][0]['status'], 'fresh_needs_venue_review')
+        self.assertEqual(client.get.call_count, 3)
+        client.render_tiktok_creator.assert_not_called()
+
+    def test_creator_oembed_access_or_throttle_errors_stop_the_audit(self):
+        for reason in ('http_401', 'http_403', 'http_429'):
+            with self.subTest(reason=reason):
+                client = Mock()
+                client.get.side_effect = FetchError(reason)
+                result = review_profile({'url': PROFILE}, client, NOW, browser=True)
+                self.assertEqual(result['reason'], reason)
+                self.assertEqual(client.get.call_count, 1)
+                self.assertEqual(result['posts'], [])
+                client.render_tiktok_creator.assert_not_called()
 
     def test_browser_is_only_used_when_direct_profile_has_no_original_links(self):
         client = Mock()
